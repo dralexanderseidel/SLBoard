@@ -64,8 +64,9 @@ export async function GET(req: NextRequest) {
 
     if (searchQuery.trim()) {
       const pattern = `%${searchQuery.trim()}%`;
+      // Volltextsuche: Metadaten + inhaltsbasiert (summary, legal_reference)
       query = query.or(
-        `title.ilike.${pattern},document_type_code.ilike.${pattern},gremium.ilike.${pattern}`
+        `title.ilike.${pattern},document_type_code.ilike.${pattern},gremium.ilike.${pattern},summary.ilike.${pattern},legal_reference.ilike.${pattern}`
       );
     }
 

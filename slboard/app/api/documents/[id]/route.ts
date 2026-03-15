@@ -121,6 +121,12 @@ export async function PATCH(
       return NextResponse.json({ error: 'Keine gültigen Felder zum Aktualisieren.' }, { status: 400 });
     }
 
+    const { data: oldDoc } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('id', documentId)
+      .single();
+
     const { error: updateError } = await supabase
       .from('documents')
       .update(updates)
@@ -128,6 +134,23 @@ export async function PATCH(
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
+    }
+
+    const oldValues = oldDoc as Record<string, unknown> | null;
+    const changedKeys = Object.keys(updates);
+    const oldSlice = oldValues && changedKeys.length > 0
+      ? Object.fromEntries(changedKeys.filter((k) => k in (oldValues ?? {})).map((k) => [k, oldValues![k]]))
+      : null;
+    const { error: auditErr } = await supabase.from('audit_log').insert({
+      user_email: user.email,
+      action: 'document.update',
+      entity_type: 'document',
+      entity_id: documentId,
+      old_values: oldSlice,
+      new_values: updates,
+    });
+    if (auditErr) {
+      // audit_log Tabelle optional (Migration ggf. noch nicht ausgeführt)
     }
 
     return NextResponse.json({ success: true });

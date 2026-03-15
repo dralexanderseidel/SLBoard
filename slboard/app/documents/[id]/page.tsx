@@ -63,6 +63,9 @@ export default function DocumentDetailPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [workflowLoading, setWorkflowLoading] = useState(false);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
+  const [allVersions, setAllVersions] = useState<Array<{ id: string; version_number: string; created_at: string; comment: string | null; mime_type: string | null; is_current: boolean }>>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [auditLog, setAuditLog] = useState<Array<{ user_email: string; action: string; old_values: Record<string, unknown> | null; new_values: Record<string, unknown> | null; created_at: string }>>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -110,6 +113,24 @@ export default function DocumentDetailPage() {
             }
           }
         }
+
+        // Versionen-Historie laden
+        try {
+          const verRes = await fetch(`/api/documents/${params.id}/versions`);
+          const verJson = (await verRes.json()) as { data?: Array<{ id: string; version_number: string; created_at: string; comment: string | null; mime_type: string | null; is_current: boolean }> };
+          if (verRes.ok && verJson.data) setAllVersions(verJson.data);
+        } catch {
+          setAllVersions([]);
+        }
+        setSelectedVersionId(typed.current_version_id ?? null);
+
+        try {
+          const auditRes = await fetch(`/api/documents/${params.id}/audit`);
+          const auditJson = (await auditRes.json()) as { data?: typeof auditLog };
+          if (auditRes.ok && auditJson.data) setAuditLog(auditJson.data);
+        } catch {
+          setAuditLog([]);
+        }
       }
 
       setLoading(false);
@@ -117,6 +138,33 @@ export default function DocumentDetailPage() {
 
     void load();
   }, [params?.id, reloadKey]);
+
+  // Bei Wechsel der ausgewählten Version: Datei-URL laden
+  useEffect(() => {
+    if (!params?.id || !selectedVersionId) return;
+    const chosen = allVersions.find((v) => v.id === selectedVersionId);
+    if (!chosen) return;
+
+    let cancelled = false;
+    (async () => {
+      const res = await fetch(`/api/documents/${params.id}/file?versionId=${encodeURIComponent(selectedVersionId)}`);
+      const data = (await res.json()) as { signedUrl?: string; error?: string };
+      if (cancelled) return;
+      if (res.ok && data.signedUrl) {
+        setPreviewUrl(data.signedUrl);
+        setVersion({
+          id: chosen.id,
+          version_number: chosen.version_number,
+          created_at: chosen.created_at,
+          file_uri: '',
+          mime_type: chosen.mime_type ?? 'application/pdf',
+        });
+      } else {
+        setPreviewUrl(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [params?.id, selectedVersionId, allVersions]);
 
   const handleWorkflowStep = async (newStatus: string) => {
     if (!params?.id) return;
@@ -313,7 +361,7 @@ export default function DocumentDetailPage() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
+    <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
       <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
         <header className="flex items-center justify-between gap-4 border-b border-zinc-200 pb-3 dark:border-zinc-800">
           <div>
@@ -368,6 +416,32 @@ export default function DocumentDetailPage() {
                 <p className="mb-2 text-[11px] text-zinc-500 dark:text-zinc-400">
                   Version {version.version_number}
                 </p>
+              )}
+
+              {allVersions.length > 0 && (
+                <div className="mb-3 rounded border border-zinc-200 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/50">
+                  <h3 className="mb-1.5 text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">Versionen</h3>
+                  <ul className="space-y-0.5">
+                    {allVersions.map((v) => (
+                      <li key={v.id}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedVersionId(v.id)}
+                          className={`w-full rounded px-2 py-1 text-left text-[11px] transition ${
+                            selectedVersionId === v.id
+                              ? 'bg-blue-100 font-medium text-blue-800 dark:bg-blue-900/50 dark:text-blue-200'
+                              : 'text-zinc-600 hover:bg-zinc-200 dark:text-zinc-300 dark:hover:bg-zinc-700'
+                          }`}
+                        >
+                          {v.version_number}
+                          {v.is_current && ' (aktuell)'}
+                          {' · '}
+                          {new Date(v.created_at).toLocaleDateString('de-DE')}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
 
               {previewUrl && version?.mime_type === 'application/pdf' && (
@@ -439,6 +513,39 @@ export default function DocumentDetailPage() {
                   .
                 </p>
               </div>
+
+              <div className="mt-3 rounded border border-zinc-200 bg-white p-3 text-xs shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
+                <h3 className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
+                  KI-Kurz­zusammenfassung
+                </h3>
+                <button
+                  type="button"
+                  onClick={handleSummarize}
+                  disabled={summaryLoading}
+                  className="mb-2 inline-flex items-center justify-center rounded bg-blue-600 px-3 py-1.5 text-[11px] font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {summaryLoading ? 'KI fasst zusammen…' : 'Zusammenfassung erzeugen'}
+                </button>
+                {summaryError && <p className="text-[11px] text-red-500">{summaryError}</p>}
+                {summary && !summaryError && (
+                  <p className="mt-1 whitespace-pre-wrap text-zinc-700 dark:text-zinc-200">
+                    {summary}
+                  </p>
+                )}
+                {!summary && !summaryLoading && !summaryError && (
+                  <p className="text-zinc-600 dark:text-zinc-300">
+                    Noch keine Zusammenfassung vorhanden. Klicken Sie auf „Zusammenfassung
+                    erzeugen“, um eine KI-basierte Kurzfassung zu erhalten.
+                  </p>
+                )}
+              </div>
+
+              <Link
+                href={`/drafts?sourceId=${doc.id}&subject=${encodeURIComponent(doc.title)}`}
+                className="mt-3 inline-flex items-center justify-center rounded border border-dashed border-zinc-400 px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm transition hover:border-zinc-500 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-900"
+              >
+                Entwurf erstellen
+              </Link>
             </div>
 
             {/* Rechte Spalte: Details + Bearbeiten + Neue Version */}
@@ -567,13 +674,15 @@ export default function DocumentDetailPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-0.5 block text-zinc-500">Rechtsbezug</label>
+                    <label className="mb-0.5 block text-zinc-500">
+                      Rechtsbezug <span className="font-normal text-zinc-400">(wird mit „Speichern“ übernommen)</span>
+                    </label>
                     <textarea
                       value={(editForm.legal_reference as string) ?? ''}
                       onChange={(e) => setEditForm((f) => ({ ...f, legal_reference: e.target.value || null }))}
-                      rows={4}
+                      rows={5}
                       className="w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-950"
-                      placeholder="optional"
+                      placeholder="z. B. Gesetze, Vorschriften, Beschlüsse – optional"
                     />
                   </div>
                 </div>
@@ -617,12 +726,12 @@ export default function DocumentDetailPage() {
                     <dt className="text-zinc-500">Gremium</dt>
                     <dd>{doc.gremium ?? '—'}</dd>
                   </div>
-                  <div className="flex justify-between gap-3">
+                  <div className="flex flex-col gap-0.5">
                     <dt className="text-zinc-500">Rechtsbezug</dt>
-                    <dd className="min-w-0">
-                      {doc.legal_reference
+                    <dd className="min-w-0 whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">
+                      {doc.legal_reference?.trim()
                         ? (() => {
-                            const lines = doc.legal_reference.split('\n');
+                            const lines = doc.legal_reference!.split('\n');
                             const show = lines.slice(0, 3).join('\n');
                             return lines.length > 3 ? `${show}\n[…]` : show;
                           })()
@@ -678,6 +787,36 @@ export default function DocumentDetailPage() {
                 </form>
               </div>
 
+              {auditLog.length > 0 && (
+                <div className="mt-4 border-t border-zinc-200 pt-3 text-xs dark:border-zinc-800">
+                  <h3 className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
+                    Änderungsverlauf
+                  </h3>
+                  <ul className="space-y-2">
+                    {auditLog.map((entry, i) => (
+                      <li key={i} className="rounded border border-zinc-200 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/50">
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                          {new Date(entry.created_at).toLocaleString('de-DE')}
+                          {' · '}
+                          {entry.user_email}
+                        </p>
+                        <p className="mt-0.5 font-medium text-zinc-800 dark:text-zinc-200">
+                          {entry.action === 'document.update' && 'Metadaten/Status geändert'}
+                          {entry.action === 'version.upload' && (entry.new_values as { version_number?: string })?.version_number
+                            ? `Version ${(entry.new_values as { version_number: string }).version_number} hochgeladen`
+                            : 'Neue Version hochgeladen'}
+                        </p>
+                        {entry.action === 'document.update' && entry.new_values && Object.keys(entry.new_values).length > 0 && (
+                          <p className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                            Geändert: {Object.keys(entry.new_values).join(', ')}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <div className="mt-4 border-t border-zinc-200 pt-3 text-xs dark:border-zinc-800">
                 <h3 className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
                   Dokument löschen
@@ -691,39 +830,6 @@ export default function DocumentDetailPage() {
                 </button>
                 {deleteError && <p className="text-[11px] text-red-500">{deleteError}</p>}
               </div>
-
-              <div className="mt-4 border-t border-zinc-200 pt-3 text-xs dark:border-zinc-800">
-                <h3 className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
-                  KI-Kurz­zusammenfassung
-                </h3>
-                <button
-                  type="button"
-                  onClick={handleSummarize}
-                  disabled={summaryLoading}
-                  className="mb-2 w-full rounded bg-blue-600 px-3 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
-                >
-                  {summaryLoading ? 'KI fasst zusammen…' : 'Zusammenfassung erzeugen'}
-                </button>
-                {summaryError && <p className="text-[11px] text-red-500">{summaryError}</p>}
-                {summary && !summaryError && (
-                  <p className="mt-1 whitespace-pre-wrap text-zinc-600 dark:text-zinc-300">
-                    {summary}
-                  </p>
-                )}
-                {!summary && !summaryLoading && !summaryError && (
-                  <p className="text-zinc-600 dark:text-zinc-300">
-                    Noch keine Zusammenfassung vorhanden. Klicken Sie auf „Zusammenfassung
-                    erzeugen“, um eine KI-basierte Kurzfassung zu erhalten.
-                  </p>
-                )}
-              </div>
-
-              <Link
-                href={`/drafts?sourceId=${doc.id}&subject=${encodeURIComponent(doc.title)}`}
-                className="mt-4 flex w-full items-center justify-center rounded border border-dashed border-zinc-400 px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm transition hover:border-zinc-500 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-900"
-              >
-                Entwurf erstellen
-              </Link>
             </aside>
           </section>
         )}

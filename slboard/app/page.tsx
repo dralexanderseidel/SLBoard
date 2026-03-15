@@ -16,13 +16,30 @@ type QuerySource = {
   snippet: string;
 };
 
+type RecentlyPublished = {
+  documentId: string;
+  title: string;
+  publishedAt: string;
+};
+
+type SuggestedDoc = {
+  id: string;
+  title: string;
+  snippet: string;
+  score: number;
+};
+
 export default function Home() {
   const [question, setQuestion] = useState('');
   const [recentQueries, setRecentQueries] = useState<RecentQuery[]>([]);
+  const [recentlyPublished, setRecentlyPublished] = useState<RecentlyPublished[]>([]);
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryAnswer, setQueryAnswer] = useState<string | null>(null);
   const [querySources, setQuerySources] = useState<QuerySource[]>([]);
   const [queryError, setQueryError] = useState<string | null>(null);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  const [suggestedDocuments, setSuggestedDocuments] = useState<SuggestedDoc[]>([]);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
 
   useEffect(() => {
     const loadRecent = async () => {
@@ -38,7 +55,53 @@ export default function Home() {
     void loadRecent();
   }, []);
 
-  const handleAsk = async () => {
+  useEffect(() => {
+    const loadRecentlyPublished = async () => {
+      try {
+        const res = await fetch('/api/notifications/recently-published');
+        const json = (await res.json()) as { data?: RecentlyPublished[] };
+        if (res.ok && json.data) setRecentlyPublished(json.data);
+      } catch {
+        setRecentlyPublished([]);
+      }
+    };
+
+    void loadRecentlyPublished();
+  }, []);
+
+  const handleSuggestDocuments = async () => {
+    const trimmed = question.trim();
+    if (!trimmed) return;
+    setQueryError(null);
+    setQueryAnswer(null);
+    setQuerySources([]);
+    setSuggestedDocuments([]);
+    setSuggestLoading(true);
+    try {
+      const res = await fetch('/api/ai/suggest-documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Suche fehlgeschlagen.');
+      const list = data.suggestedDocuments ?? [];
+      setSuggestedDocuments(list);
+      setSelectedDocumentIds(list.map((d: SuggestedDoc) => d.id));
+    } catch (err: unknown) {
+      setQueryError(err instanceof Error ? err.message : 'Suche fehlgeschlagen.');
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
+  const toggleDocumentSelection = (id: string) => {
+    setSelectedDocumentIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const handleAskWithSelected = async () => {
     const trimmed = question.trim();
     if (!trimmed) return;
     setQueryError(null);
@@ -49,7 +112,10 @@ export default function Home() {
       const res = await fetch('/api/ai/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmed }),
+        body: JSON.stringify({
+          question: trimmed,
+          documentIds: selectedDocumentIds.length > 0 ? selectedDocumentIds : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'KI-Anfrage fehlgeschlagen.');
@@ -67,7 +133,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
+    <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
       <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10">
         <header className="flex flex-col gap-2 border-b border-zinc-200 pb-4 dark:border-zinc-800">
           <h1 className="text-2xl font-semibold">Schulische Dokumentenverwaltung</h1>
@@ -87,20 +153,79 @@ export default function Home() {
               <input
                 type="text"
                 value={question}
-                onChange={(e) => setQuestion(e.target.value)}
+                onChange={(e) => {
+                  setQuestion(e.target.value);
+                  if (suggestedDocuments.length > 0) setSuggestedDocuments([]);
+                }}
                 placeholder="z. B. Handynutzung in Pausen, Medienwoche, Leistungsbewertung Oberstufe…"
                 className="w-full bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-50 dark:placeholder:text-zinc-500"
               />
             </div>
             <button
               type="button"
-              onClick={handleAsk}
-              className="h-10 rounded bg-blue-600 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
-              disabled={!question.trim() || queryLoading}
+              onClick={handleSuggestDocuments}
+              className="h-10 rounded bg-zinc-200 px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-300 disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-600"
+              disabled={!question.trim() || suggestLoading}
             >
-              {queryLoading ? 'KI sucht…' : 'KI fragen'}
+              {suggestLoading ? 'Suche…' : 'Relevante Dokumente finden'}
             </button>
           </div>
+          <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+            <button
+              type="button"
+              onClick={handleAskWithSelected}
+              disabled={!question.trim() || queryLoading}
+              className="underline-offset-2 hover:underline"
+            >
+              Ohne Auswahl direkt beantworten
+            </button>
+          </p>
+
+          {suggestedDocuments.length > 0 && (
+            <div className="mt-4 rounded border border-zinc-200 bg-zinc-50 p-4 text-sm dark:border-zinc-700 dark:bg-zinc-950">
+              <h3 className="mb-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                Relevante Dokumente auswählen
+              </h3>
+              <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
+                Wählen Sie die Dokumente, auf deren Basis die KI antworten soll. Dann auf
+                „Frage beantworten“ klicken.
+              </p>
+              <ul className="space-y-2">
+                {suggestedDocuments.map((d) => (
+                  <li key={d.id} className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      id={`doc-${d.id}`}
+                      checked={selectedDocumentIds.includes(d.id)}
+                      onChange={() => toggleDocumentSelection(d.id)}
+                      className="mt-1"
+                    />
+                    <label htmlFor={`doc-${d.id}`} className="flex flex-1 flex-col">
+                      <Link
+                        href={`/documents/${d.id}`}
+                        className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                      >
+                        {d.title}
+                      </Link>
+                      {d.snippet && d.snippet !== '—' && (
+                        <span className="mt-0.5 text-[11px] text-zinc-500 line-clamp-2 dark:text-zinc-400">
+                          {d.snippet}
+                        </span>
+                      )}
+                    </label>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={handleAskWithSelected}
+                disabled={queryLoading || selectedDocumentIds.length === 0}
+                className="mt-3 rounded bg-blue-600 px-4 py-2 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
+              >
+                {queryLoading ? 'KI antwortet…' : 'Frage mit ausgewählten Dokumenten beantworten'}
+              </button>
+            </div>
+          )}
 
           {queryError && (
             <p className="mt-3 text-sm text-red-600 dark:text-red-400">{queryError}</p>
@@ -157,6 +282,33 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Neu veröffentlicht – Hinweis für Gremien */}
+        {recentlyPublished.length > 0 && (
+          <section className="mt-2 rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              Neu veröffentlicht
+            </h2>
+            <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
+              Diese Dokumente wurden kürzlich veröffentlicht – Hinweis für Gremien.
+            </p>
+            <ul className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
+              {recentlyPublished.map((item) => (
+                <li key={item.documentId} className="flex items-center justify-between py-2">
+                  <Link
+                    href={`/documents/${item.documentId}`}
+                    className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                  >
+                    {item.title}
+                  </Link>
+                  <span className="whitespace-nowrap pl-3 text-[11px] text-zinc-500">
+                    {new Date(item.publishedAt).toLocaleDateString('de-DE')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {/* Aktuelle Anfragen */}
         <section className="mt-2 rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <h2 className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
@@ -178,6 +330,7 @@ export default function Home() {
                       setQueryAnswer(null);
                       setQuerySources([]);
                       setQueryError(null);
+                      setSuggestedDocuments([]);
                     }}
                     className="text-left text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
                   >

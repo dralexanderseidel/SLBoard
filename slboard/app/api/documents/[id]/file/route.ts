@@ -56,6 +56,8 @@ export async function GET(
     }
 
     const { id: documentId } = await params;
+    const { searchParams } = new URL(req.url);
+    const versionId = searchParams.get('versionId');
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
@@ -63,8 +65,8 @@ export async function GET(
       .eq('id', documentId)
       .single();
 
-    if (docError || !doc?.current_version_id) {
-      return NextResponse.json({ error: 'Dokument oder Version nicht gefunden.' }, { status: 404 });
+    if (docError || !doc) {
+      return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
     }
 
     const mayAccess = await userMayAccessDocument(
@@ -79,10 +81,17 @@ export async function GET(
       );
     }
 
+    // Bestimmte Version (versionId) oder aktuelle Version
+    const versionToUse = versionId && versionId.trim() ? versionId.trim() : (doc.current_version_id as string);
+    if (!versionToUse) {
+      return NextResponse.json({ error: 'Dokument oder Version nicht gefunden.' }, { status: 404 });
+    }
+
     const { data: ver, error: verError } = await supabase
       .from('document_versions')
       .select('file_uri')
-      .eq('id', doc.current_version_id)
+      .eq('id', versionToUse)
+      .eq('document_id', documentId)
       .single();
 
     if (verError || !ver?.file_uri) {

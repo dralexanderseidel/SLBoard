@@ -81,10 +81,13 @@ function DraftAssistantContent() {
     );
   };
 
+  const [savedDocumentId, setSavedDocumentId] = useState<string | null>(null);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setMessage(null);
     setError(null);
+    setSavedDocumentId(null);
 
     if (!subject.trim() || !body.trim()) {
       setError('Bitte geben Sie mindestens Betreff und Entwurfstext ein.');
@@ -94,28 +97,24 @@ function DraftAssistantContent() {
     setSaving(true);
 
     try {
-      const today = new Date().toISOString().slice(0, 10);
-
-      // Wir speichern den Entwurf als Dokument vom Typ ELTERNBRIEF, Status ENTWURF.
-      // Der eigentliche Entwurfstext wird vorerst im Feld legal_reference abgelegt (Prototyp).
-      const { error: insertError } = await supabase.from('documents').insert({
-        title: subject,
-        document_type_code: 'ELTERNBRIEF',
-        created_at: today,
-        created_by_id: '00000000-0000-0000-0000-000000000001',
-        responsible_person_id: '00000000-0000-0000-0000-000000000001',
-        responsible_unit: 'Schulleitung',
-        protection_class_id: 2,
-        status: 'ENTWURF',
-        gremium: null,
-        legal_reference: `Entwurf für: ${audience}\nKontext: ${context}\n\nText:\n${body}`,
+      const res = await fetch('/api/drafts/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: subject.trim(),
+          audience: audience.trim() || 'Eltern der Klassen 5–8',
+          context: context.trim(),
+          body: body.trim(),
+        }),
       });
+      const data = (await res.json()) as { documentId?: string; message?: string; error?: string };
 
-      if (insertError) {
-        throw insertError;
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Fehler beim Speichern.');
       }
 
-      setMessage('Entwurf wurde als Dokument gespeichert (Status: Entwurf).');
+      setMessage(data.message ?? 'Entwurf wurde als Dokument mit erster Version gespeichert.');
+      if (data.documentId) setSavedDocumentId(data.documentId);
       setSubject('');
       setAudience('Eltern der Klassen 5–8');
       setContext('');
@@ -161,7 +160,7 @@ function DraftAssistantContent() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
+    <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
       <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
         <header className="flex items-center justify-between gap-4 border-b border-zinc-200 pb-3 dark:border-zinc-800">
           <div>
@@ -248,6 +247,16 @@ function DraftAssistantContent() {
 
             {error && <p className="text-xs text-red-600">{error}</p>}
             {message && <p className="text-xs text-green-600">{message}</p>}
+            {savedDocumentId && (
+              <p className="mt-1 text-xs">
+                <Link
+                  href={`/documents/${savedDocumentId}`}
+                  className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                >
+                  Dokument öffnen →
+                </Link>
+              </p>
+            )}
 
             <div className="pt-2">
               <button
@@ -325,7 +334,7 @@ function DraftAssistantContent() {
 export default function DraftAssistantPage() {
   return (
     <Suspense fallback={
-      <main className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-black dark:text-zinc-50">
+      <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
         <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
           <p className="text-sm text-zinc-600 dark:text-zinc-400">Lade Entwurfsassistent…</p>
         </div>

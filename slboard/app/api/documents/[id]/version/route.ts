@@ -190,6 +190,17 @@ export async function POST(
       );
     }
 
+    const { error: auditErr } = await supabase.from('audit_log').insert({
+      user_email: user.email,
+      action: 'version.upload',
+      entity_type: 'document',
+      entity_id: documentId,
+      new_values: { version_id: verData.id, version_number: newVersion, comment },
+    });
+    if (auditErr) {
+      // audit_log optional
+    }
+
     return NextResponse.json({
       success: true,
       versionId: verData.id,
