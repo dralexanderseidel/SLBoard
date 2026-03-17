@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
+import { getDocumentText } from '../../../../../lib/documentText';
+import { buildSearchIndex } from '../../../../../lib/indexing';
 
 const ROLES_SEE_ALL = ['SCHULLEITUNG', 'SEKRETARIAT'];
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
@@ -188,6 +190,32 @@ export async function POST(
         { error: 'Aktuelle Version konnte nicht gesetzt werden.' },
         { status: 500 }
       );
+    }
+
+    // Phase A: Index aktualisieren (neue Datei → neuer Text)
+    try {
+      const { data: docMeta } = await supabase
+        .from('documents')
+        .select('title, document_type_code, gremium, responsible_unit, legal_reference')
+        .eq('id', documentId)
+        .single();
+
+      const extractedText = await getDocumentText(documentId);
+      const { keywords, searchText } = buildSearchIndex({
+        title: (docMeta?.title as string) ?? '',
+        documentType: (docMeta?.document_type_code as string) ?? null,
+        gremium: (docMeta?.gremium as string) ?? null,
+        responsibleUnit: (docMeta?.responsible_unit as string) ?? null,
+        summary: null,
+        legalReference: (docMeta?.legal_reference as string) ?? null,
+        extractedText,
+      });
+      await supabase
+        .from('documents')
+        .update({ search_text: searchText, keywords, indexed_at: new Date().toISOString() })
+        .eq('id', documentId);
+    } catch {
+      // Best-effort
     }
 
     const { error: auditErr } = await supabase.from('audit_log').insert({

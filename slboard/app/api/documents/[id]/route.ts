@@ -212,6 +212,19 @@ export async function DELETE(
       await supabase.storage.from('documents').remove(filePaths);
     }
 
+    // Audit-Logs zuerst entfernen (FK-Constraint in manchen Schemas: audit_logs.document_id -> documents.id)
+    // Best-effort, damit Löschung nicht daran scheitert, wenn Tabelle/Spalten abweichen.
+    try {
+      await supabase.from('audit_logs').delete().eq('document_id', documentId);
+    } catch {
+      // ignore
+    }
+    try {
+      await supabase.from('audit_log').delete().eq('entity_type', 'document').eq('entity_id', documentId);
+    } catch {
+      // ignore
+    }
+
     await supabase.from('document_versions').delete().eq('document_id', documentId);
     const { error: deleteDocError } = await supabase
       .from('documents')

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 
 type DocumentListItem = {
@@ -18,6 +18,11 @@ export default function DocumentsPage() {
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteResult, setBulkDeleteResult] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const loadSeqRef = useRef(0);
   const [typeFilter, setTypeFilter] = useState<string>(''); // z.B. ELTERNBRIEF, KONZEPT ...
   const [statusFilter, setStatusFilter] = useState<string>(''); // ENTWURF, FREIGEGEBEN, VEROEFFENTLICHT
   const [protectionFilter, setProtectionFilter] = useState<string>(''); // "1", "2" oder leer
@@ -26,6 +31,8 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     const load = async () => {
+      const seq = ++loadSeqRef.current;
+      const controller = new AbortController();
       setLoading(true);
       setError(null);
 
@@ -36,21 +43,93 @@ export default function DocumentsPage() {
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
 
       const url = `/api/documents${params.toString() ? `?${params.toString()}` : ''}`;
-      const res = await fetch(url);
+      let res: Response;
+      try {
+        res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+      } catch (e) {
+        // Abgebrochen oder Netzwerkfehler
+        if (controller.signal.aborted) return;
+        throw e;
+      }
       const json = (await res.json()) as { data?: DocumentListItem[]; error?: string };
+
+      // Stale response ignorieren
+      if (seq !== loadSeqRef.current) return;
 
       if (!res.ok) {
         setError(json.error ?? 'Fehler beim Laden.');
         setDocs([]);
       } else {
         setDocs(json.data ?? []);
+        setSelectedIds([]); // Selektion zurücksetzen bei Reload
       }
 
       setLoading(false);
+      return () => controller.abort();
     };
 
     void load();
-  }, [typeFilter, statusFilter, protectionFilter, searchQuery]);
+  }, [typeFilter, statusFilter, protectionFilter, searchQuery, reloadKey]);
+
+  const allVisibleIds = docs.map((d) => d.id);
+  const allSelected = allVisibleIds.length > 0 && selectedIds.length === allVisibleIds.length;
+
+  const toggleSelectAll = () => {
+    setBulkDeleteResult(null);
+    setSelectedIds((prev) => (prev.length === allVisibleIds.length ? [] : [...allVisibleIds]));
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setBulkDeleteResult(null);
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const confirmText =
+      selectedIds.length === 1
+        ? (() => {
+            const id = selectedIds[0];
+            const title = docs.find((d) => d.id === id)?.title ?? id;
+            return `Dokument endgültig löschen?\n\n${title}\n\nDieser Vorgang kann nicht rückgängig gemacht werden.`;
+          })()
+        : `Ausgewählte Dokumente wirklich löschen?\n\nAnzahl: ${selectedIds.length}\nDieser Vorgang kann nicht rückgängig gemacht werden.`;
+    const ok = window.confirm(confirmText);
+    if (!ok) return;
+
+    setBulkDeleting(true);
+    setBulkDeleteResult(null);
+    try {
+      // In-flight list reloads sollen nach dem Delete nicht "zurückspringen"
+      loadSeqRef.current += 1;
+      const results = await Promise.allSettled(
+        selectedIds.map(async (id) => {
+          const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
+          const data = (await res.json()) as { error?: string };
+          if (!res.ok) throw new Error(data.error ?? 'Fehler beim Löschen.');
+          return true;
+        })
+      );
+
+      const okCount = results.filter((r) => r.status === 'fulfilled').length;
+      const failCount = results.length - okCount;
+      setBulkDeleteResult(
+        failCount === 0
+          ? `${okCount}/${results.length} Dokument(e) gelöscht.`
+          : `${okCount}/${results.length} gelöscht, ${failCount} fehlgeschlagen.`
+      );
+
+      // UI aktualisieren (ohne vollständigen Reload)
+      setDocs((prev) => prev.filter((d) => !selectedIds.includes(d.id)));
+      setSelectedIds([]);
+      // Danach einmal serverseitig nachladen, um den finalen Zustand zu bestätigen
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setBulkDeleteResult(e instanceof Error ? e.message : 'Bulk-Löschen fehlgeschlagen.');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -161,6 +240,28 @@ export default function DocumentsPage() {
           </button>
         </section>
 
+        {/* Bulk-Aktionen */}
+        {!loading && !error && docs.length > 0 && (
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center gap-3">
+              <span className="text-zinc-600 dark:text-zinc-300">
+                Ausgewählt: <span className="font-semibold">{selectedIds.length}</span>
+              </span>
+              {bulkDeleteResult && (
+                <span className="text-zinc-600 dark:text-zinc-300">{bulkDeleteResult}</span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleBulkDelete()}
+              disabled={selectedIds.length === 0 || bulkDeleting}
+              className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
+            >
+              {bulkDeleting ? 'Lösche…' : 'Ausgewählte löschen'}
+            </button>
+          </section>
+        )}
+
         {loading && <p className="text-sm text-zinc-600 dark:text-zinc-400">Lade Dokumente…</p>}
         {error && (
           <p className="text-sm text-red-600">
@@ -179,6 +280,14 @@ export default function DocumentsPage() {
             <table className="min-w-full border-collapse">
               <thead className="bg-zinc-100 text-xs font-medium uppercase tracking-wide text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                 <tr>
+                  <th className="px-3 py-2 text-left">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      aria-label="Alle auswählen"
+                    />
+                  </th>
                   <th className="px-3 py-2 text-left">Titel</th>
                   <th className="px-3 py-2 text-left">Typ</th>
                   <th className="px-3 py-2 text-left">Status</th>
@@ -194,6 +303,14 @@ export default function DocumentsPage() {
                     key={doc.id}
                     className="border-t border-zinc-200 odd:bg-white even:bg-zinc-50 dark:border-zinc-800 dark:odd:bg-zinc-900 dark:even:bg-zinc-950"
                   >
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(doc.id)}
+                        onChange={() => toggleSelectOne(doc.id)}
+                        aria-label={`Dokument auswählen: ${doc.title}`}
+                      />
+                    </td>
                     <td className="px-3 py-2">
                       <Link
                         href={`/documents/${doc.id}`}

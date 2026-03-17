@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
+import { getDocumentText } from '../../../lib/documentText';
+import { buildSearchIndex } from '../../../lib/indexing';
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const ALLOWED_MIME_TYPES = [
@@ -174,6 +176,26 @@ export async function POST(req: NextRequest) {
         { error: updateDocError.message ?? 'current_version_id konnte nicht gesetzt werden.' },
         { status: 500 }
       );
+    }
+
+    // 5) Phase A: Dokument indexieren (search_text + keywords)
+    try {
+      const extractedText = await getDocumentText(documentId);
+      const { keywords, searchText } = buildSearchIndex({
+        title,
+        documentType: type,
+        gremium,
+        responsibleUnit,
+        summary: null,
+        legalReference: null,
+        extractedText,
+      });
+      await supabase
+        .from('documents')
+        .update({ search_text: searchText, keywords, indexed_at: new Date().toISOString() })
+        .eq('id', documentId);
+    } catch {
+      // Indexing ist Best-Effort; Upload soll nicht scheitern, wenn Extraktion/Indexing fehlschlägt
     }
 
     return NextResponse.json({

@@ -5,15 +5,19 @@ import Link from 'next/link';
 
 type Status = 'ENTWURF' | 'FREIGEGEBEN';
 
+type UploadItem = {
+  file: File;
+  title: string;
+};
+
 export default function UploadPage() {
-  const [title, setTitle] = useState('');
   const [type, setType] = useState('ELTERNBRIEF');
   const [date, setDate] = useState('');
   const [status, setStatus] = useState<Status>('ENTWURF');
   const [protectionClass, setProtectionClass] = useState('1');
   const [gremium, setGremium] = useState('');
   const [responsibleUnit, setResponsibleUnit] = useState('Schulleitung');
-  const [file, setFile] = useState<File | null>(null);
+  const [items, setItems] = useState<UploadItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,8 +27,8 @@ export default function UploadPage() {
     setMessage(null);
     setError(null);
 
-    if (!file) {
-      setError('Bitte wählen Sie eine Datei aus.');
+    if (items.length === 0) {
+      setError('Bitte wählen Sie mindestens eine Datei aus.');
       return;
     }
 
@@ -36,32 +40,39 @@ export default function UploadPage() {
     setSubmitting(true);
 
     try {
-      const formData = new FormData();
-      formData.set('file', file);
-      formData.set('title', title);
-      formData.set('type', type);
-      formData.set('date', date);
-      formData.set('status', status);
-      formData.set('protectionClass', protectionClass);
-      formData.set('gremium', gremium);
-      formData.set('responsibleUnit', responsibleUnit);
+      const results = await Promise.all(
+        items.map(async (it) => {
+          const formData = new FormData();
+          formData.set('file', it.file);
+          formData.set('title', it.title);
+          formData.set('type', type);
+          formData.set('date', date);
+          formData.set('status', status);
+          formData.set('protectionClass', protectionClass);
+          formData.set('gremium', gremium);
+          formData.set('responsibleUnit', responsibleUnit);
 
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
+          const res = await fetch('/api/upload', { method: 'POST', body: formData });
+          const data = (await res.json()) as { success?: boolean; error?: string; message?: string };
+          return { ok: res.ok, error: data.error, message: data.message, title: it.title };
+        })
+      );
 
-      const data = (await res.json()) as { success?: boolean; error?: string; message?: string };
-
-      if (!res.ok) {
-        throw new Error(data.error ?? 'Unbekannter Fehler beim Hochladen.');
+      const okCount = results.filter((r) => r.ok).length;
+      const fail = results.filter((r) => !r.ok);
+      if (fail.length > 0) {
+        setError(
+          `Upload teilweise fehlgeschlagen: ${okCount}/${results.length} erfolgreich. ` +
+            `Fehler: ${fail.slice(0, 3).map((f) => `${f.title}: ${f.error ?? 'unbekannt'}`).join(' | ')}` +
+            (fail.length > 3 ? ' …' : '')
+        );
+      } else {
+        setMessage(`${okCount}/${results.length} Dokument(e) erfolgreich hochgeladen.`);
       }
 
-      setMessage(data.message ?? 'Dokument wurde erfolgreich hochgeladen.');
-      setTitle('');
       setDate('');
       setGremium('');
-      setFile(null);
+      setItems([]);
       const fileInput = document.getElementById('file') as HTMLInputElement | null;
       if (fileInput) fileInput.value = '';
     } catch (err: any) {
@@ -90,18 +101,6 @@ export default function UploadPage() {
         </header>
 
         <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
-              Titel *
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-            />
-          </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="flex flex-col gap-1">
@@ -190,31 +189,77 @@ export default function UploadPage() {
             />
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
-              Datei (PDF/Word) *
-            </label>
-            <input
-              id="file"
-              type="file"
-              accept=".pdf,.doc,.docx,.odt"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="text-xs text-zinc-700 file:mr-2 file:rounded file:border-none file:bg-zinc-200 file:px-2 file:py-1 file:text-xs file:font-medium file:text-zinc-800 hover:file:bg-zinc-300 dark:text-zinc-200 dark:file:bg-zinc-700 dark:file:text-zinc-100 dark:hover:file:bg-zinc-600"
-            />
-          </div>
-
-          {error && <p className="text-xs text-red-600">{error}</p>}
-          {message && <p className="text-xs text-green-600">{message}</p>}
-
           <div className="pt-2">
             <button
               type="submit"
               disabled={submitting}
               className="h-9 rounded bg-blue-600 px-4 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
             >
-              {submitting ? 'Wird hochgeladen…' : 'Dokument hochladen'}
+              {submitting ? 'Wird hochgeladen…' : `Dokumente hochladen${items.length ? ` (${items.length})` : ''}`}
             </button>
           </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+              Dateien (PDF/Word) *
+            </label>
+            <input
+              id="file"
+              type="file"
+              accept=".pdf,.doc,.docx,.odt"
+              multiple
+              onChange={(e) => {
+                const list = Array.from(e.target.files ?? []);
+                const mapped: UploadItem[] = list.map((f) => ({
+                  file: f,
+                  title: (f.name ?? '').replace(/\.[^/.]+$/, ''),
+                }));
+                setItems(mapped);
+              }}
+              className="text-xs text-zinc-700 file:mr-2 file:rounded file:border-none file:bg-zinc-200 file:px-2 file:py-1 file:text-xs file:font-medium file:text-zinc-800 hover:file:bg-zinc-300 dark:text-zinc-200 dark:file:bg-zinc-700 dark:file:text-zinc-100 dark:hover:file:bg-zinc-600"
+            />
+            {items.length > 0 && (
+              <div className="mt-2 rounded border border-zinc-200 bg-zinc-50 p-2 text-[11px] text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200">
+                <p className="mb-2 font-medium">
+                  Ausgewählte Dateien (Titel wird aus Dateinamen übernommen)
+                </p>
+                <ul className="space-y-2">
+                  {items.map((it, idx) => (
+                    <li
+                      key={`${it.file.name}-${it.file.size}`}
+                      className="rounded border border-zinc-200 bg-white p-2 dark:border-zinc-800 dark:bg-zinc-900"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 truncate font-medium">{it.file.name}</span>
+                        <span className="whitespace-nowrap text-[11px] text-zinc-500 dark:text-zinc-400">
+                          {(it.file.size / 1024 / 1024).toFixed(1)} MB
+                        </span>
+                      </div>
+                      <div className="mt-2 grid gap-1">
+                        <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                          Titel
+                        </label>
+                        <input
+                          type="text"
+                          value={it.title}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setItems((prev) =>
+                              prev.map((p, i) => (i === idx ? { ...p, title: v } : p))
+                            );
+                          }}
+                          className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {error && <p className="text-xs text-red-600">{error}</p>}
+          {message && <p className="text-xs text-green-600">{message}</p>}
         </form>
       </div>
     </main>

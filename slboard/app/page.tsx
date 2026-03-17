@@ -259,90 +259,156 @@ export default function Home() {
               )}
             </div>
           )}
-
-          <div className="mt-4 flex flex-wrap gap-3">
-            <Link
-              href={`/documents${question.trim() ? `?query=${encodeURIComponent(question.trim())}` : ''}`}
-              className="inline-flex items-center gap-2 rounded bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-800 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
-            >
-              In Dokumenten suchen
-            </Link>
-            <Link
-              href="/upload"
-              className="inline-flex items-center gap-2 rounded bg-zinc-100 px-3 py-2 text-xs font-medium text-zinc-800 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
-            >
-              Dokument hochladen
-            </Link>
-            <Link
-              href="/drafts"
-              className="inline-flex items-center gap-2 rounded border border-dashed border-zinc-300 px-3 py-2 text-xs font-medium text-zinc-700 transition hover:border-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:border-zinc-500 dark:hover:bg-zinc-800"
-            >
-              Neuen Entwurf erstellen
-            </Link>
-          </div>
         </section>
 
-        {/* Neu veröffentlicht – Hinweis für Gremien */}
-        {recentlyPublished.length > 0 && (
-          <section className="mt-2 rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-              Neu veröffentlicht
-            </h2>
-            <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
-              Diese Dokumente wurden kürzlich veröffentlicht – Hinweis für Gremien.
-            </p>
-            <ul className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
-              {recentlyPublished.map((item) => (
-                <li key={item.documentId} className="flex items-center justify-between py-2">
-                  <Link
-                    href={`/documents/${item.documentId}`}
-                    className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
-                  >
-                    {item.title}
-                  </Link>
-                  <span className="whitespace-nowrap pl-3 text-[11px] text-zinc-500">
-                    {new Date(item.publishedAt).toLocaleDateString('de-DE')}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        {/* Navigation */}
+        <section className="grid gap-3 md:grid-cols-3">
+          <Link
+            href="/documents"
+            className="group flex min-h-[150px] flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-blue-700"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  Dokumente verwalten
+                </h2>
+                <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
+                  Liste, Filter, Detailansichten und Versionen.
+                </p>
+              </div>
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100 transition group-hover:bg-blue-100 dark:bg-blue-950/40 dark:text-blue-200 dark:ring-blue-900/50">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 6h16M4 12h16M4 18h10" strokeLinecap="round" />
+                </svg>
+              </span>
+            </div>
+            <span className="mt-auto inline-flex w-full items-center justify-center rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
+              Zu unseren Dokumenten
+            </span>
+          </Link>
 
-        {/* Aktuelle Anfragen */}
-        <section className="mt-2 rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-            Aktuelle Anfragen
-          </h2>
-          {recentQueries.length === 0 ? (
-            <p className="text-xs text-zinc-600 dark:text-zinc-400">
-              Noch keine gespeicherten Anfragen. Die letzten Fragen an die KI werden hier später
-              angezeigt.
-            </p>
+          <Link
+            href="/upload"
+            className="group flex min-h-[150px] flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-emerald-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-700"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  Dokument hochladen
+                </h2>
+                <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
+                  PDF oder Word in die Dokumentbasis aufnehmen.
+                </p>
+              </div>
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100 transition group-hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-200 dark:ring-emerald-900/50">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                </svg>
+              </span>
+            </div>
+            <span className="mt-auto inline-flex w-full items-center justify-center rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
+              Neues Dokument hochladen
+            </span>
+          </Link>
+
+          <Link
+            href="/drafts"
+            className="group flex min-h-[150px] flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-violet-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-violet-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-violet-700"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  Entwurfsassistent
+                </h2>
+                <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
+                  KI-gestützt Entwürfe erstellen und als Dokument speichern.
+                </p>
+              </div>
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-700 ring-1 ring-violet-100 transition group-hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-200 dark:ring-violet-900/50">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 19h16M7 17l10-10 2 2-10 10H7v-2z" strokeLinecap="round" />
+                </svg>
+              </span>
+            </div>
+            <span className="mt-auto inline-flex w-full items-center justify-center rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
+              Neuen Entwurf erstellen
+            </span>
+          </Link>
+        </section>
+
+        {/* Neu veröffentlicht + Aktuelle Anfragen (2 Spalten) */}
+        <section className="grid gap-4 md:grid-cols-2">
+          {/* Neu veröffentlicht – Hinweis für Gremien */}
+          {recentlyPublished.length > 0 ? (
+            <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                Neu veröffentlicht
+              </h2>
+              <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
+                Diese Dokumente wurden kürzlich veröffentlicht – Hinweis für Gremien.
+              </p>
+              <ul className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
+                {recentlyPublished.map((item) => (
+                  <li key={item.documentId} className="flex items-center justify-between py-2">
+                    <Link
+                      href={`/documents/${item.documentId}`}
+                      className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                    >
+                      {item.title}
+                    </Link>
+                    <span className="whitespace-nowrap pl-3 text-[11px] text-zinc-500">
+                      {new Date(item.publishedAt).toLocaleDateString('de-DE')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : (
-            <ul className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
-              {recentQueries.map((q) => (
-                <li key={q.id} className="flex items-center justify-between py-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQuestion(q.question);
-                      setQueryAnswer(null);
-                      setQuerySources([]);
-                      setQueryError(null);
-                      setSuggestedDocuments([]);
-                    }}
-                    className="text-left text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
-                  >
-                    {q.question}
-                  </button>
-                  <span className="whitespace-nowrap pl-3 text-[11px] text-zinc-500">
-                    {new Date(q.created_at).toLocaleDateString('de-DE')}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                Neu veröffentlicht
+              </h2>
+              <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                Derzeit keine neuen Veröffentlichungen.
+              </p>
+            </div>
           )}
+
+          {/* Aktuelle Anfragen */}
+          <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <h2 className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              Aktuelle Anfragen
+            </h2>
+            {recentQueries.length === 0 ? (
+              <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                Noch keine gespeicherten Anfragen. Die letzten Fragen an die KI werden hier später
+                angezeigt.
+              </p>
+            ) : (
+              <ul className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
+                {recentQueries.map((q) => (
+                  <li key={q.id} className="flex items-center justify-between py-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuestion(q.question);
+                        setQueryAnswer(null);
+                        setQuerySources([]);
+                        setQueryError(null);
+                        setSuggestedDocuments([]);
+                      }}
+                      className="text-left text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                    >
+                      {q.question}
+                    </button>
+                    <span className="whitespace-nowrap pl-3 text-[11px] text-zinc-500">
+                      {new Date(q.created_at).toLocaleDateString('de-DE')}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
       </div>
     </main>

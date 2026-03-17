@@ -56,6 +56,8 @@ export type DocRow = {
   responsible_unit: string | null;
   gremium: string | null;
   summary: string | null;
+  search_text?: string | null;
+  keywords?: string[] | null;
 };
 
 export function scoreRelevance(doc: DocRow, keywords: string[]): number {
@@ -64,7 +66,9 @@ export function scoreRelevance(doc: DocRow, keywords: string[]): number {
   const unit = (doc.responsible_unit ?? '').toLowerCase();
   const gremium = (doc.gremium ?? '').toLowerCase();
   const summary = (doc.summary ?? '').toLowerCase();
-  const combined = `${title} ${legalRef} ${unit} ${gremium} ${summary}`;
+  const searchText = (doc.search_text ?? '').toLowerCase();
+  const kw = (doc.keywords ?? []).join(' ').toLowerCase();
+  const combined = `${title} ${searchText} ${kw} ${summary} ${legalRef} ${unit} ${gremium}`;
   return keywords.filter((k) => combined.includes(k.toLowerCase())).length;
 }
 
@@ -82,11 +86,13 @@ export async function getSuggestedDocuments(question: string): Promise<DocRow[]>
     const orParts: string[] = [];
     const cols = [
       'title',
+      'search_text',
+      'summary',
       'legal_reference',
+      'keywords',
       'responsible_unit',
       'document_type_code',
       'gremium',
-      'summary',
     ];
     for (const kw of keywords) {
       const pattern = `%${kw}%`;
@@ -97,7 +103,7 @@ export async function getSuggestedDocuments(question: string): Promise<DocRow[]>
     const { data: relevant } = await supabase
       .from('documents')
       .select(
-        'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary',
+        'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
       )
       .in('status', ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT'])
       .or(orParts.join(','))
@@ -114,7 +120,7 @@ export async function getSuggestedDocuments(question: string): Promise<DocRow[]>
     const { data: fallback } = await supabase
       .from('documents')
       .select(
-        'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary',
+        'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
       )
       .in('status', ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT'])
       .order('created_at', { ascending: false })
@@ -135,7 +141,7 @@ export async function getDocumentsByIds(ids: string[]): Promise<DocRow[]> {
   const { data } = await supabase
     .from('documents')
     .select(
-      'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary',
+      'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
     )
     .in('id', ids)
     .in('status', ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT']);

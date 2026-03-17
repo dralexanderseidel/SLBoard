@@ -36,6 +36,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [reindexLoading, setReindexLoading] = useState(false);
+  const [reindexProgress, setReindexProgress] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<AppUser>>({});
   const [showCreate, setShowCreate] = useState(false);
@@ -73,6 +75,44 @@ export default function AdminPage() {
   useEffect(() => {
     void loadUsers();
   }, []);
+
+  const handleReindexDocuments = async () => {
+    const ok = window.confirm(
+      'Dokumente neu indizieren?\n\nDies extrahiert Text aus Dateien und setzt search_text/keywords.\nJe nach Anzahl und Dateigröße kann das etwas dauern.'
+    );
+    if (!ok) return;
+    setReindexLoading(true);
+    setReindexProgress('Starte…');
+    setError(null);
+    setMessage(null);
+    try {
+      let offset = 0;
+      let totalOk = 0;
+      let totalFailed = 0;
+      const limit = 10;
+      for (let i = 0; i < 200; i++) {
+        setReindexProgress(`Bearbeite Batch ab Offset ${offset}…`);
+        const res = await fetch('/api/admin/reindex', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ offset, limit }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'Reindex fehlgeschlagen.');
+        totalOk += data.ok ?? 0;
+        totalFailed += data.failed ?? 0;
+        offset = data.nextOffset ?? (offset + limit);
+        setReindexProgress(`Fortschritt: ${totalOk} ok, ${totalFailed} Fehler…`);
+        if (data.done) break;
+      }
+      setMessage(`Reindex abgeschlossen. OK: ${totalOk}, Fehler: ${totalFailed}.`);
+      setReindexProgress(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Reindex fehlgeschlagen.');
+    } finally {
+      setReindexLoading(false);
+    }
+  };
 
   const handleEdit = (u: AppUser) => {
     setEditingId(u.id);
@@ -178,6 +218,15 @@ export default function AdminPage() {
           <div className="flex items-center gap-3">
             <button
               type="button"
+              onClick={() => void handleReindexDocuments()}
+              disabled={reindexLoading}
+              className="rounded border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
+              title="search_text/keywords für bestehende Dokumente neu erzeugen"
+            >
+              {reindexLoading ? 'Reindex läuft…' : 'Dokumente reindizieren'}
+            </button>
+            <button
+              type="button"
               onClick={() => setShowCreate(!showCreate)}
               className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
             >
@@ -191,6 +240,12 @@ export default function AdminPage() {
             </Link>
           </div>
         </header>
+
+        {reindexProgress && (
+          <p className="rounded border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200">
+            {reindexProgress}
+          </p>
+        )}
 
         {error && (
           <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
