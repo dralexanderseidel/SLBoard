@@ -1,31 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
-
-const ROLES_SEE_ALL = ['SCHULLEITUNG', 'SEKRETARIAT'];
-
-async function getUserOrgUnitAndRoles(
-  authEmail: string,
-  supabase: ReturnType<typeof supabaseServer>
-): Promise<{ orgUnit: string | null; maySeeAll: boolean }> {
-  try {
-    if (!supabase) return { orgUnit: null, maySeeAll: true };
-    const { data: appUser } = await supabase
-      .from('app_users')
-      .select('id, org_unit')
-      .eq('email', authEmail)
-      .single();
-    if (!appUser) return { orgUnit: null, maySeeAll: true };
-    const { data: roles } = await supabase
-      .from('user_roles')
-      .select('role_code')
-      .eq('user_id', appUser.id);
-    const hasSeeAll = (roles ?? []).some((r) => ROLES_SEE_ALL.includes(r.role_code));
-    return { orgUnit: appUser.org_unit ?? null, maySeeAll };
-  } catch {
-    return { orgUnit: null, maySeeAll: false };
-  }
-}
+import { canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
 
 /**
  * GET: Kürzlich veröffentlichte Dokumente (Hinweis für Gremien).
@@ -44,7 +20,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
     }
 
-    const { orgUnit, maySeeAll } = await getUserOrgUnitAndRoles(user.email, supabase);
+    const access = await getUserAccessContext(user.email, supabase);
 
     const { data: auditEntries, error: auditError } = await supabase
       .from('audit_log')
@@ -72,15 +48,11 @@ export async function GET() {
       return NextResponse.json({ data: [] });
     }
 
-    let query = supabase
+    const query = supabase
       .from('documents')
-      .select('id, title, responsible_unit')
+      .select('id, title, responsible_unit, protection_class_id')
       .in('id', documentIds)
       .eq('status', 'VEROEFFENTLICHT');
-
-    if (!maySeeAll && orgUnit) {
-      query = query.eq('responsible_unit', orgUnit);
-    }
 
     const { data: docs, error: docsError } = await query;
 
@@ -94,6 +66,9 @@ export async function GET() {
       if (!byId.has(id)) byId.set(id, e.created_at as string);
     }
     const result = docs
+      .filter((d) =>
+        canReadDocument(access, d.protection_class_id as number, d.responsible_unit as string | null)
+      )
       .map((d) => ({
         documentId: d.id,
         title: d.title,

@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     const { title, type, createdAt, text, documentId }: SummarizePayload = await req.json();
 
     let basisText = text ?? '';
+    const MAX_SUMMARY_CHARS = 12000;
 
     // Bei Dokument mit Datei: zuerst Text aus PDF/Word extrahieren, Metadaten nur als Fallback
     if (documentId) {
@@ -23,6 +24,11 @@ export async function POST(req: NextRequest) {
       if (extractedText && extractedText.length > 50) {
         basisText = extractedText;
       }
+    }
+
+    // Token-/Context-Schutz: sehr lange Dokumente dürfen das LLM nicht sprengen.
+    if (basisText.length > MAX_SUMMARY_CHARS) {
+      basisText = basisText.slice(0, MAX_SUMMARY_CHARS) + '…';
     }
 
     if (!title && !basisText) {
@@ -65,7 +71,10 @@ ${fullContent}
     if (documentId) {
       const supabase = supabaseServer();
       if (supabase) {
-        await supabase.from('documents').update({ summary: summaryText }).eq('id', documentId);
+        await supabase
+          .from('documents')
+          .update({ summary: summaryText, summary_updated_at: new Date().toISOString() })
+          .eq('id', documentId);
       }
     }
 

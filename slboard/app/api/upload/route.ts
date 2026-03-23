@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Ungültiger Dateiname.' }, { status: 400 });
     }
 
-    const protectionId = Math.max(1, Math.min(2, parseInt(protectionClass, 10) || 1));
+    const protectionId = Math.max(1, Math.min(3, parseInt(protectionClass, 10) || 1));
     const createdById = '00000000-0000-0000-0000-000000000001'; // Platzhalter; später aus Session
 
     // 1) Dokument anlegen

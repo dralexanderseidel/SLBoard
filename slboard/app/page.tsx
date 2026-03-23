@@ -22,6 +22,13 @@ type RecentlyPublished = {
   publishedAt: string;
 };
 
+type ReviewOverdue = {
+  documentId: string;
+  title: string;
+  reviewDate: string;
+  responsibleUnit: string | null;
+};
+
 type SuggestedDoc = {
   id: string;
   title: string;
@@ -33,6 +40,11 @@ export default function Home() {
   const [question, setQuestion] = useState('');
   const [recentQueries, setRecentQueries] = useState<RecentQuery[]>([]);
   const [recentlyPublished, setRecentlyPublished] = useState<RecentlyPublished[]>([]);
+  const [reviewOverdue, setReviewOverdue] = useState<ReviewOverdue[]>([]);
+  const [publishedLoading, setPublishedLoading] = useState(true);
+  const [reviewOverdueLoading, setReviewOverdueLoading] = useState(true);
+  const [publishedLoadError, setPublishedLoadError] = useState<string | null>(null);
+  const [reviewOverdueLoadError, setReviewOverdueLoadError] = useState<string | null>(null);
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryAnswer, setQueryAnswer] = useState<string | null>(null);
   const [querySources, setQuerySources] = useState<QuerySource[]>([]);
@@ -40,6 +52,30 @@ export default function Home() {
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [suggestedDocuments, setSuggestedDocuments] = useState<SuggestedDoc[]>([]);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+
+  const daysDiffFromToday = (isoDateOrTs: string) => {
+    const d = new Date(isoDateOrTs);
+    const today = new Date();
+    const d0 = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    return Math.floor((d0 - t0) / (24 * 60 * 60 * 1000));
+  };
+
+  const relativeDayLabel = (isoDateOrTs: string) => {
+    const diff = daysDiffFromToday(isoDateOrTs);
+    if (diff === 0) return 'Heute';
+    if (diff === -1) return 'Gestern';
+    if (diff === 1) return 'Morgen';
+    return null;
+  };
+
+  const overdueBadge = (reviewDate: string) => {
+    const diff = daysDiffFromToday(`${reviewDate}T00:00:00`);
+    const overdueDays = Math.max(0, -diff);
+    if (overdueDays === 0) return 'Heute fällig';
+    if (overdueDays === 1) return '1 Tag überfällig';
+    return `${overdueDays} Tage überfällig`;
+  };
 
   useEffect(() => {
     const loadRecent = async () => {
@@ -57,16 +93,48 @@ export default function Home() {
 
   useEffect(() => {
     const loadRecentlyPublished = async () => {
+      setPublishedLoading(true);
+      setPublishedLoadError(null);
       try {
         const res = await fetch('/api/notifications/recently-published');
         const json = (await res.json()) as { data?: RecentlyPublished[] };
-        if (res.ok && json.data) setRecentlyPublished(json.data);
+        if (res.ok && json.data) {
+          setRecentlyPublished(json.data);
+        } else {
+          setPublishedLoadError('Neu veröffentlicht konnte nicht geladen werden.');
+        }
       } catch {
         setRecentlyPublished([]);
+        setPublishedLoadError('Neu veröffentlicht konnte nicht geladen werden.');
+      } finally {
+        setPublishedLoading(false);
       }
     };
 
     void loadRecentlyPublished();
+  }, []);
+
+  useEffect(() => {
+    const loadReviewOverdue = async () => {
+      setReviewOverdueLoading(true);
+      setReviewOverdueLoadError(null);
+      try {
+        const res = await fetch('/api/notifications/review-overdue');
+        const json = (await res.json()) as { data?: ReviewOverdue[] };
+        if (res.ok && json.data) {
+          setReviewOverdue(json.data);
+        } else {
+          setReviewOverdueLoadError('Review-Hinweise konnten nicht geladen werden.');
+        }
+      } catch {
+        setReviewOverdue([]);
+        setReviewOverdueLoadError('Review-Hinweise konnten nicht geladen werden.');
+      } finally {
+        setReviewOverdueLoading(false);
+      }
+    };
+
+    void loadReviewOverdue();
   }, []);
 
   const handleSuggestDocuments = async () => {
@@ -99,6 +167,18 @@ export default function Home() {
     setSelectedDocumentIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
+  };
+
+  const selectAllSuggestedDocuments = () => {
+    setSelectedDocumentIds(suggestedDocuments.map((d) => d.id));
+  };
+
+  const clearSuggestedDocumentsSelection = () => {
+    setSelectedDocumentIds([]);
+  };
+
+  const restoreSuggestedDefaultSelection = () => {
+    setSelectedDocumentIds(suggestedDocuments.map((d) => d.id));
   };
 
   const handleAskWithSelected = async () => {
@@ -148,6 +228,27 @@ export default function Home() {
           <h2 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
             Was gilt bei uns zu diesem Thema?
           </h2>
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 ${
+                suggestedDocuments.length > 0
+                  ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200'
+                  : 'border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+              }`}
+            >
+              1) Dokumente finden
+            </span>
+            <span className="text-zinc-400">→</span>
+            <span
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 ${
+                queryLoading || queryAnswer
+                  ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200'
+                  : 'border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+              }`}
+            >
+              2) Antwort erzeugen
+            </span>
+          </div>
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
             <div className="flex flex-1 items-center gap-2 rounded border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
               <input
@@ -156,6 +257,12 @@ export default function Home() {
                 onChange={(e) => {
                   setQuestion(e.target.value);
                   if (suggestedDocuments.length > 0) setSuggestedDocuments([]);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleSuggestDocuments();
+                  }
                 }}
                 placeholder="z. B. Handynutzung in Pausen, Medienwoche, Leistungsbewertung Oberstufe…"
                 className="w-full bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-50 dark:placeholder:text-zinc-500"
@@ -216,6 +323,32 @@ export default function Home() {
                   </li>
                 ))}
               </ul>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                  Ausgewählt: {selectedDocumentIds.length}/{suggestedDocuments.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={selectAllSuggestedDocuments}
+                  className="rounded border border-zinc-300 bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  Alle
+                </button>
+                <button
+                  type="button"
+                  onClick={clearSuggestedDocumentsSelection}
+                  className="rounded border border-zinc-300 bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  Keine
+                </button>
+                <button
+                  type="button"
+                  onClick={restoreSuggestedDefaultSelection}
+                  className="rounded border border-zinc-300 bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  Vorauswahl
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={handleAskWithSelected}
@@ -243,15 +376,23 @@ export default function Home() {
                   <h4 className="mb-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
                     Verwendete Dokumente
                   </h4>
-                  <ul className="space-y-1">
+                  <ul className="space-y-2">
                     {querySources.map((s) => (
-                      <li key={s.documentId}>
+                      <li
+                        key={s.documentId}
+                        className="rounded border border-zinc-200 bg-white/70 px-2 py-1 dark:border-zinc-800 dark:bg-zinc-900/40"
+                      >
                         <Link
                           href={`/documents/${s.documentId}`}
                           className="text-xs text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
                         >
                           {s.title}
                         </Link>
+                        {s.snippet && (
+                          <p className="mt-0.5 line-clamp-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                            {s.snippet}
+                          </p>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -294,7 +435,7 @@ export default function Home() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                  Dokument hochladen
+                  Dokumente hochladen
                 </h2>
                 <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
                   PDF oder Word in die Dokumentbasis aufnehmen.
@@ -307,7 +448,7 @@ export default function Home() {
               </span>
             </div>
             <span className="mt-auto inline-flex w-full items-center justify-center rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
-              Neues Dokument hochladen
+              Dokumente hochladen
             </span>
           </Link>
 
@@ -338,41 +479,129 @@ export default function Home() {
 
         {/* Neu veröffentlicht + Aktuelle Anfragen (2 Spalten) */}
         <section className="grid gap-4 md:grid-cols-2">
-          {/* Neu veröffentlicht – Hinweis für Gremien */}
-          {recentlyPublished.length > 0 ? (
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-              <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                Neu veröffentlicht
-              </h2>
-              <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
-                Diese Dokumente wurden kürzlich veröffentlicht – Hinweis für Gremien.
-              </p>
-              <ul className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
-                {recentlyPublished.map((item) => (
-                  <li key={item.documentId} className="flex items-center justify-between py-2">
-                    <Link
-                      href={`/documents/${item.documentId}`}
-                      className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
-                    >
-                      {item.title}
-                    </Link>
-                    <span className="whitespace-nowrap pl-3 text-[11px] text-zinc-500">
-                      {new Date(item.publishedAt).toLocaleDateString('de-DE')}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-              <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                Neu veröffentlicht
-              </h2>
-              <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                Derzeit keine neuen Veröffentlichungen.
-              </p>
-            </div>
-          )}
+          <div className="flex flex-col gap-4">
+            {/* Neu veröffentlicht – Hinweis für Gremien */}
+            {publishedLoading ? (
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <h2 className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  Neu veröffentlicht
+                </h2>
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, idx) => (
+                    <div key={idx} className="h-4 w-full animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+                  ))}
+                </div>
+              </div>
+            ) : recentlyPublished.length > 0 ? (
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  Neu veröffentlicht
+                </h2>
+                {publishedLoadError && (
+                  <p className="mb-2 text-[11px] text-red-600 dark:text-red-400">{publishedLoadError}</p>
+                )}
+                <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
+                  Diese Dokumente wurden kürzlich veröffentlicht – Hinweis für Gremien.
+                </p>
+                <ul className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
+                  {recentlyPublished.map((item) => (
+                    <li key={item.documentId} className="flex items-center justify-between py-2">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/documents/${item.documentId}`}
+                          className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                        >
+                          {item.title}
+                        </Link>
+                      </div>
+                      <div className="flex items-center gap-2 pl-3">
+                        {relativeDayLabel(item.publishedAt) && (
+                          <span className="inline-flex items-center rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
+                            {relativeDayLabel(item.publishedAt)}
+                          </span>
+                        )}
+                        <span className="whitespace-nowrap text-[11px] text-zinc-500">
+                          {new Date(item.publishedAt).toLocaleDateString('de-DE')}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  Neu veröffentlicht
+                </h2>
+                {publishedLoadError && (
+                  <p className="mb-2 text-[11px] text-red-600 dark:text-red-400">{publishedLoadError}</p>
+                )}
+                <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                  Derzeit keine neuen Veröffentlichungen.
+                </p>
+              </div>
+            )}
+
+            {/* Review überfällig */}
+            {reviewOverdueLoading ? (
+              <div className="rounded-lg border border-rose-200 bg-white p-4 text-sm shadow-sm dark:border-rose-900/40 dark:bg-zinc-900">
+                <h2 className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  Review überfällig
+                </h2>
+                <div className="space-y-2">
+                  {Array.from({ length: 3 }).map((_, idx) => (
+                    <div key={idx} className="h-4 w-full animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+                  ))}
+                </div>
+              </div>
+            ) : reviewOverdue.length > 0 ? (
+              <div className="rounded-lg border border-rose-200 bg-white p-4 text-sm shadow-sm dark:border-rose-900/40 dark:bg-zinc-900">
+                <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  Review überfällig
+                </h2>
+                {reviewOverdueLoadError && (
+                  <p className="mb-2 text-[11px] text-red-600 dark:text-red-400">{reviewOverdueLoadError}</p>
+                )}
+                <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
+                  Diese veröffentlichten Dokumente sollten zeitnah überprüft werden.
+                </p>
+                <ul className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
+                  {reviewOverdue.map((item) => (
+                    <li key={item.documentId} className="flex items-center justify-between py-2">
+                      <div className="min-w-0">
+                        <Link
+                          href={`/documents/${item.documentId}`}
+                          className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                        >
+                          {item.title}
+                        </Link>
+                      </div>
+                      <div className="flex items-center gap-2 pl-3">
+                        <span className="inline-flex items-center rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-medium text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
+                          {overdueBadge(item.reviewDate)}
+                        </span>
+                        <span className="whitespace-nowrap text-[11px] text-zinc-500">
+                          {new Date(`${item.reviewDate}T00:00:00`).toLocaleDateString('de-DE')}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  Review überfällig
+                </h2>
+                {reviewOverdueLoadError && (
+                  <p className="mb-2 text-[11px] text-red-600 dark:text-red-400">{reviewOverdueLoadError}</p>
+                )}
+                <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                  Kein Review ist aktuell überfällig.
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Aktuelle Anfragen */}
           <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

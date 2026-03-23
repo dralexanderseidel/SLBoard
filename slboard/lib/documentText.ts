@@ -66,8 +66,14 @@ export async function getDocumentText(documentId: string): Promise<string | null
 
     if (!verError && ver?.file_uri) {
       const mimeType = ver.mime_type ?? 'application/octet-stream';
-      const isPdf = mimeType === 'application/pdf';
-      const isWord = isWordDocument(mimeType);
+      const fileUri = String(ver.file_uri ?? '').toLowerCase();
+      // Robustheit: falls DB mime_type unvollständig ist, erkennen wir nach Dateiendung.
+      const isPdf = mimeType === 'application/pdf' || fileUri.endsWith('.pdf');
+      const isWord =
+        isWordDocument(mimeType) ||
+        fileUri.endsWith('.docx') ||
+        fileUri.endsWith('.doc') ||
+        fileUri.endsWith('.odt');
 
       if (isPdf || isWord) {
         const { data: fileData, error: downloadError } = await supabase.storage

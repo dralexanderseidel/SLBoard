@@ -3,8 +3,7 @@ import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { getDocumentText } from '../../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../../lib/indexing';
-
-const ROLES_SEE_ALL = ['SCHULLEITUNG', 'SEKRETARIAT'];
+import { canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -21,31 +20,6 @@ const MIME_TO_EXT: Record<string, string> = {
 
 function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
-}
-
-async function userMayEditDocument(
-  authEmail: string,
-  docResponsibleUnit: string,
-  supabase: ReturnType<typeof supabaseServer>
-): Promise<boolean> {
-  try {
-    if (!supabase) return false;
-    const { data: appUser } = await supabase
-      .from('app_users')
-      .select('id, org_unit')
-      .eq('email', authEmail)
-      .single();
-    if (!appUser) return true;
-    const { data: roles } = await supabase
-      .from('user_roles')
-      .select('role_code')
-      .eq('user_id', appUser.id);
-    const hasSeeAll = (roles ?? []).some((r) => ROLES_SEE_ALL.includes(r.role_code));
-    if (hasSeeAll) return true;
-    return appUser.org_unit === docResponsibleUnit;
-  } catch {
-    return false;
-  }
 }
 
 function nextVersionNumber(existing: string[]): string {
@@ -76,10 +50,11 @@ export async function POST(
     }
 
     const { id: documentId } = await params;
+    const access = await getUserAccessContext(user.email, supabase);
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, responsible_unit, current_version_id')
+      .select('id, responsible_unit, current_version_id, protection_class_id')
       .eq('id', documentId)
       .single();
 
@@ -87,7 +62,18 @@ export async function POST(
       return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
     }
 
-    const mayEdit = await userMayEditDocument(user.email, doc.responsible_unit ?? '', supabase);
+    const mayEditByOrg =
+      !access.hasAppUser ||
+      access.isSchulleitung ||
+      access.isSekretariat ||
+      (!!access.orgUnit && access.orgUnit === (doc.responsible_unit ?? null));
+    const mayEdit =
+      mayEditByOrg &&
+      canReadDocument(
+        access,
+        (doc as { protection_class_id?: number | null }).protection_class_id,
+        doc.responsible_unit ?? null
+      );
     if (!mayEdit) {
       return NextResponse.json({ error: 'Keine Berechtigung, dieses Dokument zu bearbeiten.' }, { status: 403 });
     }
@@ -182,7 +168,7 @@ export async function POST(
 
     const { error: updateError } = await supabase
       .from('documents')
-      .update({ current_version_id: verData.id, summary: null })
+      .update({ current_version_id: verData.id, summary: null, summary_updated_at: null })
       .eq('id', documentId);
 
     if (updateError) {

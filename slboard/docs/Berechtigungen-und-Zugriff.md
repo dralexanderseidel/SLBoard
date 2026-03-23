@@ -2,8 +2,32 @@
 
 ## Übersicht
 
-- **Dokumentenliste** und **Dateizugriff** (Storage) werden nach **Organisationseinheit** und **Rolle** gefiltert.
-- Schulleitung und Sekretariat sehen **alle** Dokumente; alle anderen Nutzer nur Dokumente ihrer **eigenen Organisationseinheit**.
+- Zugriff erfolgt über **Schutzklasse (`protection_class_id`)** und **Rolle**.
+- Zusätzlich bleibt `responsible_unit` für Bearbeitungs- und Organisationsbezug relevant.
+
+### Schutzklassenmodell
+
+| Schutzklasse | Bedeutung | Wer darf lesen |
+|---|---|---|
+| **1** | Öffentlich | alle angemeldeten Lehrkräfte/Nutzer |
+| **2** | Verwaltung intern | nur **SEKRETARIAT** + **SCHULLEITUNG** |
+| **3** | Streng vertraulich | nur **SCHULLEITUNG** |
+
+### Technische Voraussetzung (Lookup-Tabelle)
+
+`documents.protection_class_id` ist per Foreign Key mit `public.protection_classes(id)` verknüpft.  
+Damit Schutzklasse **3** gespeichert werden kann, muss in `protection_classes` ein Eintrag mit `id = 3` vorhanden sein.
+
+Beispiel (idempotent):
+
+```sql
+insert into public.protection_classes (id, name, description)
+values (3, 'Nur Schulleitung', 'Zugriff nur für Schulleitung (SL).')
+on conflict (id) do update
+set
+  name = excluded.name,
+  description = excluded.description;
+```
 
 ## Tabellen anlegen (SQL)
 
@@ -48,14 +72,17 @@ Jeder angemeldete Nutzer, der in der App erscheinen soll, braucht einen Eintrag.
 
 ### `user_roles`
 
-Rollen pro Nutzer. Nur Nutzer mit **SCHULLEITUNG** oder **SEKRETARIAT** sehen alle Dokumente.
+Rollen pro Nutzer.
 
 | Spalte    | Typ  | Beschreibung        |
 |-----------|------|---------------------|
 | `user_id` | uuid | FK auf `app_users.id` |
 | `role_code` | text | z. B. `SCHULLEITUNG`, `SEKRETARIAT`, `LEHRKRAFT` |
 
-**Für den Zugriffsfilter relevant:** Nur `SCHULLEITUNG` und `SEKRETARIAT` bewirken „sieht alle Dokumente“. Alle anderen (oder ohne Eintrag) sehen nur Dokumente, bei denen `documents.responsible_unit` = `app_users.org_unit` ist.
+**Für den Zugriffsfilter relevant:**
+- `SCHULLEITUNG` sieht Schutzklasse 1/2/3
+- `SEKRETARIAT` sieht Schutzklasse 1/2
+- andere Rollen sehen Schutzklasse 1
 
 ## Organisationseinheiten (org_unit / responsible_unit)
 
@@ -69,7 +96,8 @@ Die Werte müssen **identisch** sein, damit die Filterung greift. In der App wer
 - Steuergruppe  
 - Lehrkräfte  
 
-Beim Anlegen von **Dokumenten** wird `responsible_unit` gesetzt; beim Anlegen/Bearbeiten von **Nutzer:innen** in der Admin-Oberfläche wird `org_unit` gesetzt. Nur wenn diese Werte exakt übereinstimmen, sieht ein Nutzer das Dokument in der Liste (sofern er nicht Schulleitung/Sekretariat ist).
+Beim Anlegen von **Dokumenten** wird `responsible_unit` gesetzt; beim Anlegen/Bearbeiten von **Nutzer:innen** in der Admin-Oberfläche wird `org_unit` gesetzt.  
+`responsible_unit` wird weiterhin für Organisationszuordnung und Bearbeitungslogik genutzt.
 
 ## Wo Nutzer und Rollen pflegen?
 
@@ -82,12 +110,13 @@ Beim Anlegen von **Dokumenten** wird `responsible_unit` gesetzt; beim Anlegen/Be
 1. **Eintrag in `app_users`?**  
    Für die eingeloggte E-Mail muss ein Zeile in `app_users` existieren (E-Mail exakt gleich).
 
-2. **Passende `org_unit`?**  
-   Dokumente haben ein Feld `responsible_unit`. Sie sehen nur Dokumente, bei denen  
-   `responsible_unit` = Ihre `org_unit` ist – außer Sie haben die Rolle **SCHULLEITUNG** oder **SEKRETARIAT**.
+2. **Passende Rolle für Schutzklasse?**  
+   - Schutzklasse 1: alle  
+   - Schutzklasse 2: nur **SEKRETARIAT** oder **SCHULLEITUNG**  
+   - Schutzklasse 3: nur **SCHULLEITUNG**
 
 3. **Rollen zuweisen:**  
-   Unter `/admin` bei dem Nutzer die Rolle(n) setzen. „Sieht alle Dokumente“ nur bei **SCHULLEITUNG** oder **SEKRETARIAT**.
+   Unter `/admin` bei dem Nutzer die Rolle(n) setzen.
 
 ## Audit-Log (Änderungsverlauf)
 

@@ -70,8 +70,13 @@ Gemeinsamer Header mit NOMOS-Logo, Links (Dashboard, Dokumente, Entwurfsassisten
 
 ## 5. Berechtigungen und Zugriffsfilter
 
-- **Dokumentenliste (GET /api/documents):** Nutzer mit Rolle **SCHULLEITUNG** oder **SEKRETARIAT** sehen alle Dokumente; alle anderen nur Dokumente, deren `responsible_unit` der eigenen `org_unit` (aus `app_users`) entspricht.
-- **Dokumentdetail, Datei, Versionen, Audit:** Gleiche Logik (userMayAccessDocument / userMayEditDocument): Zugriff nur, wenn Nutzer zur `responsible_unit` des Dokuments gehört oder „sieht alle“-Rolle hat.
+- **Schutzklassenmodell (`protection_class_id`):**
+  - **1:** Öffentlich (alle angemeldeten Lehrkräfte/Nutzer)
+  - **2:** Nur Verwaltung/Sekretariat + Schulleitung
+  - **3:** Nur Schulleitung
+- **Dokumentenliste (GET /api/documents):** serverseitige Filterung nach Schutzklasse/Rolle.
+- **Dokumentdetail, Datei, Versionen, Audit:** Zugriff ebenfalls nach Schutzklasse/Rolle.
+- **Bearbeiten/Löschen/Neue Version:** zusätzlich organisationsbezogen (`responsible_unit` / `org_unit`) und rollenbasiert.
 - **Admin:** Nur Nutzer mit Rolle **SCHULLEITUNG** oder **ADMIN** (`lib/adminAuth.ts`).
 - **Storage:** Policies nutzen `app_users` und `user_roles`, um Lesezugriff auf Dateien nur für berechtigte Nutzer zu erlauben.
 

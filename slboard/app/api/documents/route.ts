@@ -1,36 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
-
-const ROLES_SEE_ALL = ['SCHULLEITUNG', 'SEKRETARIAT'];
-
-async function getUserOrgUnitAndRoles(
-  authEmail: string,
-  supabase: ReturnType<typeof supabaseServer>
-): Promise<{ orgUnit: string | null; maySeeAll: boolean }> {
-  try {
-    if (!supabase) return { orgUnit: null, maySeeAll: true };
-    const { data: appUser } = await supabase
-      .from('app_users')
-      .select('id, org_unit')
-      .eq('email', authEmail)
-      .single();
-    if (!appUser) return { orgUnit: null, maySeeAll: true };
-    const { data: roles } = await supabase
-      .from('user_roles')
-      .select('role_code')
-      .eq('user_id', appUser.id);
-    const hasSeeAll = (roles ?? []).some((r) => ROLES_SEE_ALL.includes(r.role_code));
-    return { orgUnit: appUser.org_unit ?? null, maySeeAll: hasSeeAll };
-  } catch {
-    return { orgUnit: null, maySeeAll: false };
-  }
-}
+import { canReadDocument, getUserAccessContext } from '../../../lib/documentAccess';
 
 /**
- * GET: Dokumentenliste mit Berechtigungsfilter.
- * Schulleitung/Sekretariat sehen alle; sonst nur Dokumente der eigenen Organisationseinheit.
+ * GET: Dokumentenliste mit Berechtigungs- und Schutzklassenfilter.
  * Query-Parameter: type, status, protectionClass, search
+ * - status kann als einzelne Statuskennung oder als kommaseparierte Liste kommen
  */
 export async function GET(req: NextRequest) {
   try {
@@ -45,28 +21,31 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
     }
 
-    const { orgUnit, maySeeAll } = await getUserOrgUnitAndRoles(user.email, supabase);
+    const access = await getUserAccessContext(user.email, supabase);
 
     const { searchParams } = new URL(req.url);
     const typeFilter = searchParams.get('type') ?? '';
-    const statusFilter = searchParams.get('status') ?? '';
+    const statusFilterRaw = searchParams.get('status') ?? '';
     const protectionFilter = searchParams.get('protectionClass') ?? '';
     const searchQuery = searchParams.get('search') ?? '';
 
     let query = supabase
       .from('documents')
-      .select('id, title, document_type_code, created_at, status, protection_class_id, gremium, responsible_unit')
+      .select('id, title, document_type_code, created_at, status, protection_class_id, gremium, responsible_unit, summary')
       .order('created_at', { ascending: false });
-
-    if (!maySeeAll && orgUnit) {
-      query = query.eq('responsible_unit', orgUnit);
-    }
 
     if (searchQuery.trim()) {
       const pattern = `%${searchQuery.trim()}%`;
-      // Volltextsuche: Metadaten + inhaltsbasiert (summary, legal_reference)
+      // Volltextsuche: Metadaten + inhaltsbasiert (summary, legal_reference, search_text)
       query = query.or(
-        `title.ilike.${pattern},document_type_code.ilike.${pattern},gremium.ilike.${pattern},summary.ilike.${pattern},legal_reference.ilike.${pattern}`
+        [
+          `title.ilike.${pattern}`,
+          `document_type_code.ilike.${pattern}`,
+          `gremium.ilike.${pattern}`,
+          `summary.ilike.${pattern}`,
+          `legal_reference.ilike.${pattern}`,
+          `search_text.ilike.${pattern}`,
+        ].join(',')
       );
     }
 
@@ -74,8 +53,19 @@ export async function GET(req: NextRequest) {
       query = query.eq('document_type_code', typeFilter);
     }
 
-    if (statusFilter) {
-      query = query.eq('status', statusFilter);
+    if (statusFilterRaw) {
+      const ALLOWED_STATUSES = ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT'] as const;
+      const statusList = statusFilterRaw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .filter((s): s is (typeof ALLOWED_STATUSES)[number] => (ALLOWED_STATUSES as readonly string[]).includes(s));
+
+      if (statusList.length === 1) {
+        query = query.eq('status', statusList[0]);
+      } else if (statusList.length > 1) {
+        query = query.in('status', statusList);
+      }
     }
 
     if (protectionFilter) {
@@ -91,7 +81,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ data: data ?? [] });
+    const filtered = (data ?? []).filter((d) =>
+      canReadDocument(access, d.protection_class_id as number, d.responsible_unit as string | null)
+    );
+
+    return NextResponse.json({ data: filtered });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return NextResponse.json({ error: message }, { status: 500 });

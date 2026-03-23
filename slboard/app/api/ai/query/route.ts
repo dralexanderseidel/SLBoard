@@ -5,11 +5,21 @@ import { callLlm, isLlmConfigured } from '../../../../lib/llmClient';
 import {
   getSuggestedDocuments,
   getDocumentsByIds,
+  extractKeywords,
   MAX_DOCS,
   type DocRow,
 } from '../../../../lib/aiSearch';
+import {
+  buildPromptSnippetFromChunks,
+  pickTopChunksForQuestion,
+} from '../../../../lib/chunkingOnTheFly';
 
-const MAX_TEXT_PER_DOC = 3000;
+// MVP-Parameter für "Chunking on-the-fly".
+// Ziel: lange Dokumente nicht nur am Anfang zu verwenden, sondern relevante Passagen über Chunks.
+const MAX_TEXT_PER_DOC = 4500;
+const CHUNK_CHARS = 2500;
+const CHUNK_OVERLAP_CHARS = 300;
+const MAX_CHUNKS_PER_DOC = 3;
 
 export async function POST(req: NextRequest) {
   try {
@@ -49,6 +59,7 @@ export async function POST(req: NextRequest) {
     }
 
     const sourceTexts: { id: string; title: string; snippet: string }[] = [];
+    const keywords = extractKeywords(trimmed);
 
     for (const doc of docList) {
       const summaryText = (doc.summary ?? '').trim();
@@ -57,9 +68,16 @@ export async function POST(req: NextRequest) {
         text = await getDocumentText(doc.id);
       }
       if (!text) text = (doc.legal_reference as string)?.trim() ?? '';
-      if (text && text.length > 30) {
-        const snippet = text.slice(0, MAX_TEXT_PER_DOC) + (text.length > MAX_TEXT_PER_DOC ? '…' : '');
-        sourceTexts.push({ id: doc.id, title: doc.title, snippet });
+      if (text && text.trim().length > 30) {
+        const selectedChunks = pickTopChunksForQuestion(text, keywords, {
+          chunkChars: CHUNK_CHARS,
+          overlapChars: CHUNK_OVERLAP_CHARS,
+          maxChunks: MAX_CHUNKS_PER_DOC,
+        });
+        const snippet = buildPromptSnippetFromChunks(selectedChunks, MAX_TEXT_PER_DOC);
+        if (snippet.length > 30) {
+          sourceTexts.push({ id: doc.id, title: doc.title, snippet });
+        }
       }
     }
 

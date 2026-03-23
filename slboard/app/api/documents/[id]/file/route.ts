@@ -1,33 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
-
-const ROLES_SEE_ALL = ['SCHULLEITUNG', 'SEKRETARIAT'];
-
-async function userMayAccessDocument(
-  authEmail: string,
-  docResponsibleUnit: string,
-  supabaseAdmin: ReturnType<typeof supabaseServer>
-): Promise<boolean> {
-  try {
-    if (!supabaseAdmin) return false;
-    const { data: appUser } = await supabaseAdmin
-      .from('app_users')
-      .select('id, org_unit')
-      .eq('email', authEmail)
-      .single();
-    if (!appUser) return true; // Kein app_user → Demo-Modus, Zugriff erlauben
-    const { data: roles } = await supabaseAdmin
-      .from('user_roles')
-      .select('role_code')
-      .eq('user_id', appUser.id);
-    const hasSeeAll = (roles ?? []).some((r) => ROLES_SEE_ALL.includes(r.role_code));
-    if (hasSeeAll) return true;
-    return appUser.org_unit === docResponsibleUnit;
-  } catch {
-    return false;
-  }
-}
+import { canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
 
 /**
  * Erzeugt eine temporäre Signed URL für die Datei eines Dokuments.
@@ -56,12 +30,13 @@ export async function GET(
     }
 
     const { id: documentId } = await params;
+    const access = await getUserAccessContext(user.email, supabase);
     const { searchParams } = new URL(req.url);
     const versionId = searchParams.get('versionId');
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, current_version_id, responsible_unit')
+      .select('id, current_version_id, responsible_unit, protection_class_id')
       .eq('id', documentId)
       .single();
 
@@ -69,10 +44,10 @@ export async function GET(
       return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
     }
 
-    const mayAccess = await userMayAccessDocument(
-      user.email,
-      doc.responsible_unit ?? '',
-      supabase,
+    const mayAccess = canReadDocument(
+      access,
+      (doc as { protection_class_id?: number | null }).protection_class_id,
+      doc.responsible_unit ?? null
     );
     if (!mayAccess) {
       return NextResponse.json(

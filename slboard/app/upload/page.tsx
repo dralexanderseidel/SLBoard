@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 
-type Status = 'ENTWURF' | 'FREIGEGEBEN';
+type Status = 'ENTWURF' | 'FREIGEGEBEN' | 'VEROEFFENTLICHT';
 
 type UploadItem = {
   file: File;
@@ -11,8 +11,16 @@ type UploadItem = {
 };
 
 export default function UploadPage() {
-  const [type, setType] = useState('ELTERNBRIEF');
-  const [date, setDate] = useState('');
+  const getTodayISODateLocal = () => {
+    // HTML <input type="date"> erwartet YYYY-MM-DD in *lokaler* Zeit.
+    const d = new Date();
+    const tzOffsetMinutes = d.getTimezoneOffset();
+    const localDate = new Date(d.getTime() - tzOffsetMinutes * 60 * 1000);
+    return localDate.toISOString().slice(0, 10);
+  };
+
+  const [type, setType] = useState('PROTOKOLL');
+  const [date, setDate] = useState(() => getTodayISODateLocal());
   const [status, setStatus] = useState<Status>('ENTWURF');
   const [protectionClass, setProtectionClass] = useState('1');
   const [gremium, setGremium] = useState('');
@@ -89,7 +97,7 @@ export default function UploadPage() {
           <div>
             <h1 className="text-xl font-semibold">Dokument hochladen</h1>
             <p className="text-xs text-zinc-600 dark:text-zinc-400">
-              Neues Dokument mit Metadaten anlegen und im Supabase-Speicher ablegen.
+              Neues Dokument mit Metadaten anlegen und in der Dokumentenbasis ablegen.
             </p>
           </div>
           <Link
@@ -112,9 +120,12 @@ export default function UploadPage() {
                 onChange={(e) => setType(e.target.value)}
                 className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
               >
-                <option value="ELTERNBRIEF">Elternbrief</option>
-                <option value="KONZEPT">Konzept</option>
                 <option value="PROTOKOLL">Protokoll</option>
+                <option value="BESCHLUSS">Beschluss</option>
+                <option value="KONZEPT">Konzept</option>
+                <option value="CURRICULUM">Curriculum</option>
+                <option value="VEREINBARUNG">Vereinbarung</option>
+                <option value="ELTERNBRIEF">Elternbrief</option>
                 <option value="RUNDSCHREIBEN">Rundschreiben</option>
               </select>
             </div>
@@ -145,6 +156,7 @@ export default function UploadPage() {
               >
                 <option value="ENTWURF">Entwurf</option>
                 <option value="FREIGEGEBEN">Freigegeben</option>
+                <option value="VEROEFFENTLICHT">Veröffentlicht</option>
               </select>
             </div>
 
@@ -158,7 +170,8 @@ export default function UploadPage() {
                 className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
               >
                 <option value="1">1 – Öffentlich / unkritisch</option>
-                <option value="2">2 – Intern</option>
+                <option value="2">2 – Verwaltung/Sekretariat + Schulleitung</option>
+                <option value="3">3 – Nur Schulleitung</option>
               </select>
             </div>
 

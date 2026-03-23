@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
+import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { getDocumentText } from '../../../../../lib/documentText';
 
 /**
- * GET: Alle Versionen eines Dokuments (für Versionen-Historie).
+ * Diagnostics: Liefert nur Länge/Existenz von extrahierbarem Dokumenttext.
+ * Kein Text selbst, um keine Inhalte versehentlich zu leaken.
  */
 export async function GET(
   _req: NextRequest,
@@ -12,7 +14,10 @@ export async function GET(
 ) {
   try {
     const client = await createServerSupabaseClient();
-    const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
+    const {
+      data: { user },
+    } = (await client?.auth.getUser()) ?? { data: { user: null } };
+
     if (!user?.email) {
       return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
     }
@@ -23,11 +28,12 @@ export async function GET(
     }
 
     const { id: documentId } = await params;
+
     const access = await getUserAccessContext(user.email, supabase);
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, responsible_unit, current_version_id, protection_class_id')
+      .select('id, protection_class_id, responsible_unit')
       .eq('id', documentId)
       .single();
 
@@ -40,32 +46,18 @@ export async function GET(
       (doc as { protection_class_id?: number | null }).protection_class_id,
       doc.responsible_unit ?? null
     );
+
     if (!mayAccess) {
       return NextResponse.json({ error: 'Keine Berechtigung für dieses Dokument.' }, { status: 403 });
     }
 
-    const { data: versions, error: verError } = await supabase
-      .from('document_versions')
-      .select('id, version_number, created_at, comment, mime_type')
-      .eq('document_id', documentId)
-      .order('created_at', { ascending: false });
+    const extractedText = await getDocumentText(documentId);
+    const textLength = extractedText?.length ?? 0;
 
-    if (verError) {
-      return NextResponse.json({ error: verError.message }, { status: 500 });
-    }
-
-    return NextResponse.json({
-      data: (versions ?? []).map((v) => ({
-        id: v.id,
-        version_number: v.version_number,
-        created_at: v.created_at,
-        comment: v.comment ?? null,
-        mime_type: v.mime_type ?? null,
-        is_current: v.id === doc.current_version_id,
-      })),
-    });
+    return NextResponse.json({ documentId, textLength, hasText: textLength > 0 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
+
