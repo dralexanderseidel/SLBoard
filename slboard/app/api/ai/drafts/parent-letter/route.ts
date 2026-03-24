@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
+import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { getDocumentText } from '../../../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../../../lib/llmClient';
+import { getUserAccessContext } from '../../../../../lib/documentAccess';
 
 type Payload = {
   topic?: string;
@@ -12,6 +14,12 @@ type Payload = {
 
 export async function POST(req: NextRequest) {
   try {
+    const client = await createServerSupabaseClient();
+    const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
+    if (!user?.email) {
+      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+    }
+
     const { topic, targetAudience, purpose, sourceIds }: Payload = await req.json();
 
     if (!topic?.trim()) {
@@ -36,24 +44,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const access = await getUserAccessContext(user.email, supabase);
+
     let docsToUse: { id: string; title: string }[] = [];
 
     if (sourceIds && sourceIds.length > 0) {
-      const { data } = await supabase
+      let selectedDocsQuery = supabase
         .from('documents')
         .select('id, title')
         .in('id', sourceIds);
+      if (access.schoolNumber) selectedDocsQuery = selectedDocsQuery.eq('school_number', access.schoolNumber);
+      const { data } = await selectedDocsQuery;
       docsToUse = (data ?? []).map((d) => ({ id: d.id, title: d.title }));
     }
 
     if (docsToUse.length === 0) {
-      const { data } = await supabase
+      let fallbackDocsQuery = supabase
         .from('documents')
         .select('id, title')
         .eq('document_type_code', 'ELTERNBRIEF')
         .in('status', ['FREIGEGEBEN', 'VEROEFFENTLICHT'])
         .order('created_at', { ascending: false })
         .limit(5);
+      if (access.schoolNumber) fallbackDocsQuery = fallbackDocsQuery.eq('school_number', access.schoolNumber);
+      const { data } = await fallbackDocsQuery;
       docsToUse = (data ?? []).map((d) => ({ id: d.id, title: d.title }));
     }
 

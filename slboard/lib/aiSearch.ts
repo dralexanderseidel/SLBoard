@@ -75,7 +75,7 @@ export function scoreRelevance(doc: DocRow, keywords: string[]): number {
 /**
  * Sucht Dokumente nach Frage (Keywords), sortiert nach Relevanz. Kein LLM.
  */
-export async function getSuggestedDocuments(question: string): Promise<DocRow[]> {
+export async function getSuggestedDocuments(question: string, schoolNumber?: string | null): Promise<DocRow[]> {
   const supabase = supabaseServer();
   if (!supabase) return [];
 
@@ -100,7 +100,7 @@ export async function getSuggestedDocuments(question: string): Promise<DocRow[]>
         orParts.push(`${col}.ilike.${pattern}`);
       }
     }
-    const { data: relevant } = await supabase
+    let relevantQuery = supabase
       .from('documents')
       .select(
         'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
@@ -109,6 +109,8 @@ export async function getSuggestedDocuments(question: string): Promise<DocRow[]>
       .or(orParts.join(','))
       .order('created_at', { ascending: false })
       .limit(SEARCH_POOL);
+    if (schoolNumber) relevantQuery = relevantQuery.eq('school_number', schoolNumber);
+    const { data: relevant } = await relevantQuery;
     const typed = (relevant ?? []) as DocRow[];
     if (typed.length > 0) {
       typed.sort((a, b) => scoreRelevance(b, keywords) - scoreRelevance(a, keywords));
@@ -117,7 +119,7 @@ export async function getSuggestedDocuments(question: string): Promise<DocRow[]>
   }
 
   if (docList.length === 0) {
-    const { data: fallback } = await supabase
+    let fallbackQuery = supabase
       .from('documents')
       .select(
         'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
@@ -125,6 +127,8 @@ export async function getSuggestedDocuments(question: string): Promise<DocRow[]>
       .in('status', ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT'])
       .order('created_at', { ascending: false })
       .limit(MAX_DOCS);
+    if (schoolNumber) fallbackQuery = fallbackQuery.eq('school_number', schoolNumber);
+    const { data: fallback } = await fallbackQuery;
     docList = (fallback ?? []) as DocRow[];
   }
 
@@ -134,17 +138,19 @@ export async function getSuggestedDocuments(question: string): Promise<DocRow[]>
 /**
  * Lädt Dokumente anhand von IDs (für KI-Anfrage mit fest gewählter Liste).
  */
-export async function getDocumentsByIds(ids: string[]): Promise<DocRow[]> {
+export async function getDocumentsByIds(ids: string[], schoolNumber?: string | null): Promise<DocRow[]> {
   const supabase = supabaseServer();
   if (!supabase || ids.length === 0) return [];
 
-  const { data } = await supabase
+  let byIdsQuery = supabase
     .from('documents')
     .select(
       'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
     )
     .in('id', ids)
     .in('status', ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT']);
+  if (schoolNumber) byIdsQuery = byIdsQuery.eq('school_number', schoolNumber);
+  const { data } = await byIdsQuery;
 
   const order = new Map(ids.map((id, i) => [id, i]));
   const list = (data ?? []) as DocRow[];

@@ -3,6 +3,7 @@ import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { getDocumentText } from '../../../lib/documentText';
 import { buildSearchIndex } from '../../../lib/indexing';
+import { getUserAccessContext } from '../../../lib/documentAccess';
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const ALLOWED_MIME_TYPES = [
@@ -92,11 +93,14 @@ export async function POST(req: NextRequest) {
 
     const protectionId = Math.max(1, Math.min(3, parseInt(protectionClass, 10) || 1));
     const createdById = '00000000-0000-0000-0000-000000000001'; // Platzhalter; später aus Session
+    const access = await getUserAccessContext(user.email, supabase);
+    const schoolNumber = access.schoolNumber ?? '000000';
 
     // 1) Dokument anlegen
     const { data: docData, error: docError } = await supabase
       .from('documents')
       .insert({
+        school_number: schoolNumber,
         title,
         document_type_code: type,
         created_at: date,
@@ -119,7 +123,7 @@ export async function POST(req: NextRequest) {
 
     const documentId = docData.id as string;
     const fileId = crypto.randomUUID();
-    const filePath = `${documentId}/${fileId}${ext}`;
+    const filePath = `${schoolNumber}/${documentId}/${fileId}${ext}`;
 
     // 2) Datei in Storage hochladen
     const buffer = await file.arrayBuffer();
@@ -132,7 +136,7 @@ export async function POST(req: NextRequest) {
       });
 
     if (storageError) {
-      await supabase.from('documents').delete().eq('id', documentId);
+      await supabase.from('documents').delete().eq('id', documentId).eq('school_number', schoolNumber);
       return NextResponse.json(
         { error: `Speicher-Fehler: ${storageError.message}` },
         { status: 500 }
@@ -143,6 +147,7 @@ export async function POST(req: NextRequest) {
     const { data: verData, error: verError } = await supabase
       .from('document_versions')
       .insert({
+        school_number: schoolNumber,
         document_id: documentId,
         version_number: '1.0',
         created_by_id: createdById,
@@ -156,7 +161,7 @@ export async function POST(req: NextRequest) {
 
     if (verError || !verData) {
       await supabase.storage.from('documents').remove([filePath]);
-      await supabase.from('documents').delete().eq('id', documentId);
+      await supabase.from('documents').delete().eq('id', documentId).eq('school_number', schoolNumber);
       return NextResponse.json(
         { error: verError?.message ?? 'Dokumentversion konnte nicht angelegt werden.' },
         { status: 500 }
@@ -169,7 +174,8 @@ export async function POST(req: NextRequest) {
     const { error: updateDocError } = await supabase
       .from('documents')
       .update({ current_version_id: versionId })
-      .eq('id', documentId);
+      .eq('id', documentId)
+      .eq('school_number', schoolNumber);
 
     if (updateDocError) {
       return NextResponse.json(
@@ -193,7 +199,8 @@ export async function POST(req: NextRequest) {
       await supabase
         .from('documents')
         .update({ search_text: searchText, keywords, indexed_at: new Date().toISOString() })
-        .eq('id', documentId);
+        .eq('id', documentId)
+        .eq('school_number', schoolNumber);
     } catch {
       // Indexing ist Best-Effort; Upload soll nicht scheitern, wenn Extraktion/Indexing fehlschlägt
     }

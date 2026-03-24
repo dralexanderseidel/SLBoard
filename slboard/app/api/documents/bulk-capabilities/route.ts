@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
-import { canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
 
 type BulkCapabilitiesPayload = {
   ids?: string[];
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 
     const { data: docs, error } = await supabase
       .from('documents')
-      .select('id, responsible_unit, protection_class_id')
+      .select('id, responsible_unit, protection_class_id, school_number')
       .in('id', safeIds);
 
     if (error) {
@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
     const blockedIds: string[] = [];
 
     for (const d of docs ?? []) {
+      const inSchool = canAccessSchool(access, d.school_number as string | null);
       const readable = canReadDocument(
         access,
         d.protection_class_id as number,
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
         access.isSchulleitung ||
         access.isSekretariat ||
         (!!access.orgUnit && access.orgUnit === ((d.responsible_unit as string | null) ?? null));
-      const editable = readable && mayEditByOrg;
+      const editable = inSchool && readable && mayEditByOrg;
       if (editable) editableIds.push(d.id as string);
       else blockedIds.push(d.id as string);
     }

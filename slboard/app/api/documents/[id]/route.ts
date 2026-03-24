@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
-import { canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
 
 /** Erlaubte Workflow-Übergänge: Entwurf → Freigegeben → Veröffentlicht */
 const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -34,7 +34,7 @@ export async function PATCH(
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, responsible_unit, status, protection_class_id')
+      .select('id, responsible_unit, status, protection_class_id, school_number')
       .eq('id', documentId)
       .single();
 
@@ -42,12 +42,14 @@ export async function PATCH(
       return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
     }
 
+    const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
+    const mayAccessSchool = canAccessSchool(access, docSchool);
     const mayEditByOrg =
       !access.hasAppUser ||
       access.isSchulleitung ||
       access.isSekretariat ||
       (!!access.orgUnit && access.orgUnit === (doc.responsible_unit ?? null));
-    const mayAccess = mayEditByOrg && canReadDocument(
+    const mayAccess = mayAccessSchool && mayEditByOrg && canReadDocument(
       access,
       (doc as { protection_class_id?: number | null }).protection_class_id,
       doc.responsible_unit ?? null
@@ -116,16 +118,13 @@ export async function PATCH(
       return NextResponse.json({ error: 'Keine gültigen Felder zum Aktualisieren.' }, { status: 400 });
     }
 
-    const { data: oldDoc } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('id', documentId)
-      .single();
+    let oldDocQuery = supabase.from('documents').select('*').eq('id', documentId);
+    if (docSchool) oldDocQuery = oldDocQuery.eq('school_number', docSchool);
+    const { data: oldDoc } = await oldDocQuery.single();
 
-    const { error: updateError } = await supabase
-      .from('documents')
-      .update(updates)
-      .eq('id', documentId);
+    let updateQuery = supabase.from('documents').update(updates).eq('id', documentId);
+    if (docSchool) updateQuery = updateQuery.eq('school_number', docSchool);
+    const { error: updateError } = await updateQuery;
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 });
@@ -141,6 +140,7 @@ export async function PATCH(
       action: 'document.update',
       entity_type: 'document',
       entity_id: documentId,
+      school_number: docSchool,
       old_values: oldSlice,
       new_values: updates,
     });
@@ -179,7 +179,7 @@ export async function DELETE(
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, responsible_unit, protection_class_id')
+      .select('id, responsible_unit, protection_class_id, school_number')
       .eq('id', documentId)
       .single();
 
@@ -187,12 +187,14 @@ export async function DELETE(
       return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
     }
 
+    const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
+    const mayAccessSchool = canAccessSchool(access, docSchool);
     const mayEditByOrg =
       !access.hasAppUser ||
       access.isSchulleitung ||
       access.isSekretariat ||
       (!!access.orgUnit && access.orgUnit === (doc.responsible_unit ?? null));
-    const mayAccess = mayEditByOrg && canReadDocument(
+    const mayAccess = mayAccessSchool && mayEditByOrg && canReadDocument(
       access,
       (doc as { protection_class_id?: number | null }).protection_class_id,
       doc.responsible_unit ?? null
@@ -204,10 +206,12 @@ export async function DELETE(
       );
     }
 
-    const { data: versions } = await supabase
+    let versionsQuery = supabase
       .from('document_versions')
       .select('id, file_uri')
       .eq('document_id', documentId);
+    if (docSchool) versionsQuery = versionsQuery.eq('school_number', docSchool);
+    const { data: versions } = await versionsQuery;
 
     const filePaths = (versions ?? [])
       .map((v) => v.file_uri as string)
@@ -220,21 +224,31 @@ export async function DELETE(
     // Audit-Logs zuerst entfernen (FK-Constraint in manchen Schemas: audit_logs.document_id -> documents.id)
     // Best-effort, damit Löschung nicht daran scheitert, wenn Tabelle/Spalten abweichen.
     try {
-      await supabase.from('audit_logs').delete().eq('document_id', documentId);
+      let delAuditLegacy = supabase.from('audit_logs').delete().eq('document_id', documentId);
+      if (docSchool) delAuditLegacy = delAuditLegacy.eq('school_number', docSchool);
+      await delAuditLegacy;
     } catch {
       // ignore
     }
     try {
-      await supabase.from('audit_log').delete().eq('entity_type', 'document').eq('entity_id', documentId);
+      let delAudit = supabase
+        .from('audit_log')
+        .delete()
+        .eq('entity_type', 'document')
+        .eq('entity_id', documentId);
+      if (docSchool) delAudit = delAudit.eq('school_number', docSchool);
+      await delAudit;
     } catch {
       // ignore
     }
 
-    await supabase.from('document_versions').delete().eq('document_id', documentId);
-    const { error: deleteDocError } = await supabase
-      .from('documents')
-      .delete()
-      .eq('id', documentId);
+    let delVersions = supabase.from('document_versions').delete().eq('document_id', documentId);
+    if (docSchool) delVersions = delVersions.eq('school_number', docSchool);
+    await delVersions;
+
+    let delDoc = supabase.from('documents').delete().eq('id', documentId);
+    if (docSchool) delDoc = delDoc.eq('school_number', docSchool);
+    const { error: deleteDocError } = await delDoc;
 
     if (deleteDocError) {
       return NextResponse.json(

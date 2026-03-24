@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
+import { supabaseServer } from '../../../../lib/supabaseServer';
+import { getUserAccessContext } from '../../../../lib/documentAccess';
 import {
   getSuggestedDocuments,
   scoreRelevance,
@@ -15,6 +18,18 @@ const SNIPPET_MAX = 200;
  */
 export async function POST(req: NextRequest) {
   try {
+    const client = await createServerSupabaseClient();
+    const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
+    if (!user?.email) {
+      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+    }
+
+    const supabase = supabaseServer();
+    if (!supabase) {
+      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+    }
+    const access = await getUserAccessContext(user.email, supabase);
+
     const { question } = (await req.json()) as { question?: string };
     const trimmed = typeof question === 'string' ? question.trim() : '';
 
@@ -26,7 +41,7 @@ export async function POST(req: NextRequest) {
     }
 
     const keywords = extractKeywords(trimmed);
-    const docList = await getSuggestedDocuments(trimmed);
+    const docList = await getSuggestedDocuments(trimmed, access.schoolNumber);
 
     const suggestedDocuments = docList.map((doc: DocRow) => {
       const score = scoreRelevance(doc, keywords);

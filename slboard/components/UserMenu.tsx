@@ -43,7 +43,7 @@ export function UserMenu() {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-300">
+      <div className="ml-6 flex shrink-0 items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-300">
         Lädt…
       </div>
     );
@@ -51,7 +51,7 @@ export function UserMenu() {
 
   if (!user) {
     return (
-      <div className="flex items-center gap-2 text-[11px] text-zinc-600 dark:text-zinc-300">
+      <div className="ml-6 flex shrink-0 items-center gap-2 text-[11px] text-zinc-600 dark:text-zinc-300">
         <span className="hidden sm:inline">Nicht angemeldet</span>
         <Link
           href="/login"
@@ -67,7 +67,7 @@ export function UserMenu() {
     user.email?.trim().charAt(0).toUpperCase() ?? '?';
 
   return (
-    <div className="flex items-center gap-2 text-[11px] text-zinc-700 dark:text-zinc-200">
+    <div className="ml-6 flex shrink-0 items-center gap-2 text-[11px] text-zinc-700 dark:text-zinc-200">
       <span className="hidden sm:inline max-w-[160px] truncate">
         {user.email}
       </span>

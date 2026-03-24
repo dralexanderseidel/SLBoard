@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
-import { canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
 
 /**
  * Erzeugt eine temporäre Signed URL für die Datei eines Dokuments.
@@ -36,7 +36,7 @@ export async function GET(
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, current_version_id, responsible_unit, protection_class_id')
+      .select('id, current_version_id, responsible_unit, protection_class_id, school_number')
       .eq('id', documentId)
       .single();
 
@@ -44,12 +44,14 @@ export async function GET(
       return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
     }
 
+    const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
+    const mayAccessSchool = canAccessSchool(access, docSchool);
     const mayAccess = canReadDocument(
       access,
       (doc as { protection_class_id?: number | null }).protection_class_id,
       doc.responsible_unit ?? null
     );
-    if (!mayAccess) {
+    if (!mayAccessSchool || !mayAccess) {
       return NextResponse.json(
         { error: 'Keine Berechtigung für dieses Dokument.' },
         { status: 403 }
@@ -62,12 +64,13 @@ export async function GET(
       return NextResponse.json({ error: 'Dokument oder Version nicht gefunden.' }, { status: 404 });
     }
 
-    const { data: ver, error: verError } = await supabase
+    let versionQuery = supabase
       .from('document_versions')
       .select('file_uri')
       .eq('id', versionToUse)
-      .eq('document_id', documentId)
-      .single();
+      .eq('document_id', documentId);
+    if (docSchool) versionQuery = versionQuery.eq('school_number', docSchool);
+    const { data: ver, error: verError } = await versionQuery.single();
 
     if (verError || !ver?.file_uri) {
       return NextResponse.json({ error: 'Datei-Pfad nicht gefunden.' }, { status: 404 });

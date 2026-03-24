@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { UserMenu } from '../components/UserMenu';
+import { SchoolContextBadge } from '../components/SchoolContextBadge';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -68,6 +69,7 @@ export default function RootLayout({
                 >
                   Admin
                 </Link>
+                <SchoolContextBadge />
               </nav>
 
               <UserMenu />

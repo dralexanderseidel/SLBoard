@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../../lib/supabaseServerClient';
 import { isAdmin } from '../../../../../../lib/adminAuth';
+import { canAccessSchool, getUserAccessContext } from '../../../../../../lib/documentAccess';
 
 export async function PATCH(
   req: NextRequest,
@@ -23,9 +24,21 @@ export async function PATCH(
       return NextResponse.json({ error: 'Keine Admin-Berechtigung.' }, { status: 403 });
     }
 
+    const access = await getUserAccessContext(user.email, supabase);
+
     const { id: userId } = await params;
     const body = await req.json();
     const roles = Array.isArray(body.roles) ? body.roles.filter((r: unknown) => typeof r === 'string') : [];
+
+    const { data: target } = await supabase
+      .from('app_users')
+      .select('id, school_number')
+      .eq('id', userId)
+      .single();
+    const targetSchool = (target as { school_number?: string | null } | null)?.school_number ?? null;
+    if (!canAccessSchool(access, targetSchool)) {
+      return NextResponse.json({ error: 'Keine Berechtigung für diesen Nutzer.' }, { status: 403 });
+    }
 
     await supabase.from('user_roles').delete().eq('user_id', userId);
 

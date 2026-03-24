@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentText } from '../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
 import { supabaseServer } from '../../../lib/supabaseServer';
+import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
+import { canAccessSchool, getUserAccessContext } from '../../../lib/documentAccess';
+
+export const runtime = 'nodejs';
 
 type SummarizeBatchPayload = {
   documentIds: string[];
@@ -11,6 +15,12 @@ const systemPrompt = 'Du bist ein deutscher Assistent für schulische Verwaltung
 
 export async function POST(req: NextRequest) {
   try {
+    const client = await createServerSupabaseClient();
+    const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
+    if (!user?.email) {
+      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+    }
+
     const { documentIds }: SummarizeBatchPayload = await req.json();
 
     if (!Array.isArray(documentIds) || documentIds.length === 0) {
@@ -22,6 +32,8 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = supabaseServer();
+    const access = await getUserAccessContext(user.email, supabase);
+
     if (!supabase) {
       return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
     }
@@ -37,11 +49,15 @@ export async function POST(req: NextRequest) {
       try {
         const { data: doc, error: docError } = await supabase
           .from('documents')
-          .select('id, title, document_type_code, created_at')
+          .select('id, title, document_type_code, created_at, school_number')
           .eq('id', documentId)
           .single();
 
         if (docError || !doc) throw new Error('Dokument nicht gefunden.');
+        const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
+        if (!canAccessSchool(access, docSchool)) {
+          throw new Error('Keine Berechtigung für dieses Dokument.');
+        }
 
         const extractedText = await getDocumentText(documentId);
         let basisText = extractedText && extractedText.length > 50 ? extractedText : '';
@@ -74,10 +90,12 @@ ${fullContent}
         const summary = await callLlm(systemPrompt, userPrompt);
         const summaryText = summary || 'Keine Zusammenfassung vom LLM zurückgegeben.';
 
-        await supabase
+        let updateQuery = supabase
           .from('documents')
           .update({ summary: summaryText, summary_updated_at: new Date().toISOString() })
           .eq('id', documentId);
+        if (docSchool) updateQuery = updateQuery.eq('school_number', docSchool);
+        await updateQuery;
 
         okCount += 1;
         results.push({ documentId, ok: true });

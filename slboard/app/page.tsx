@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 
 type RecentQuery = {
-  id: number;
+  id: number | string;
   question: string;
   created_at: string;
+  answer_text?: string | null;
+  sources?: unknown;
 };
 
 type QuerySource = {
@@ -36,6 +38,23 @@ type SuggestedDoc = {
   score: number;
 };
 
+function normalizeQuerySources(raw: unknown): QuerySource[] {
+  if (!Array.isArray(raw)) return [];
+  const out: QuerySource[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const documentId = typeof o.documentId === 'string' ? o.documentId : '';
+    if (!documentId) continue;
+    out.push({
+      documentId,
+      title: typeof o.title === 'string' ? o.title : '',
+      snippet: typeof o.snippet === 'string' ? o.snippet : '',
+    });
+  }
+  return out;
+}
+
 export default function Home() {
   const [question, setQuestion] = useState('');
   const [recentQueries, setRecentQueries] = useState<RecentQuery[]>([]);
@@ -52,6 +71,20 @@ export default function Home() {
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [suggestedDocuments, setSuggestedDocuments] = useState<SuggestedDoc[]>([]);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const dashboardAiGenRef = useRef(0);
+
+  useEffect(() => {
+    if (!question.trim()) {
+      dashboardAiGenRef.current += 1;
+      setQueryAnswer(null);
+      setQuerySources([]);
+      setQueryError(null);
+      setQueryLoading(false);
+      setSuggestLoading(false);
+      setSuggestedDocuments([]);
+      setSelectedDocumentIds([]);
+    }
+  }, [question]);
 
   const daysDiffFromToday = (isoDateOrTs: string) => {
     const d = new Date(isoDateOrTs);
@@ -77,19 +110,19 @@ export default function Home() {
     return `${overdueDays} Tage überfällig`;
   };
 
-  useEffect(() => {
-    const loadRecent = async () => {
-      const { data } = await supabase
-        .from('ai_queries')
-        .select('id, question, created_at')
-        .order('created_at', { ascending: false })
-        .limit(5);
+  const refreshRecentQueries = useCallback(async () => {
+    const { data } = await supabase
+      .from('ai_queries')
+      .select('id, question, created_at, answer_text, sources')
+      .order('created_at', { ascending: false })
+      .limit(5);
 
-      setRecentQueries(data ?? []);
-    };
-
-    void loadRecent();
+    setRecentQueries((data ?? []) as RecentQuery[]);
   }, []);
+
+  useEffect(() => {
+    void refreshRecentQueries();
+  }, [refreshRecentQueries]);
 
   useEffect(() => {
     const loadRecentlyPublished = async () => {
@@ -140,6 +173,7 @@ export default function Home() {
   const handleSuggestDocuments = async () => {
     const trimmed = question.trim();
     if (!trimmed) return;
+    const requestGen = ++dashboardAiGenRef.current;
     setQueryError(null);
     setQueryAnswer(null);
     setQuerySources([]);
@@ -153,13 +187,17 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Suche fehlgeschlagen.');
+      if (requestGen !== dashboardAiGenRef.current) return;
       const list = data.suggestedDocuments ?? [];
       setSuggestedDocuments(list);
       setSelectedDocumentIds(list.map((d: SuggestedDoc) => d.id));
     } catch (err: unknown) {
+      if (requestGen !== dashboardAiGenRef.current) return;
       setQueryError(err instanceof Error ? err.message : 'Suche fehlgeschlagen.');
     } finally {
-      setSuggestLoading(false);
+      if (requestGen === dashboardAiGenRef.current) {
+        setSuggestLoading(false);
+      }
     }
   };
 
@@ -184,6 +222,7 @@ export default function Home() {
   const handleAskWithSelected = async () => {
     const trimmed = question.trim();
     if (!trimmed) return;
+    const requestGen = ++dashboardAiGenRef.current;
     setQueryError(null);
     setQueryAnswer(null);
     setQuerySources([]);
@@ -199,16 +238,17 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'KI-Anfrage fehlgeschlagen.');
+      if (requestGen !== dashboardAiGenRef.current) return;
       setQueryAnswer(data.answer);
       setQuerySources(data.sources ?? []);
-      setRecentQueries((prev) => [
-        { id: Date.now(), question: trimmed, created_at: new Date().toISOString() },
-        ...prev.filter((q) => q.question !== trimmed).slice(0, 4),
-      ]);
+      await refreshRecentQueries();
     } catch (err: unknown) {
+      if (requestGen !== dashboardAiGenRef.current) return;
       setQueryError(err instanceof Error ? err.message : 'Fehler bei der KI-Anfrage.');
     } finally {
-      setQueryLoading(false);
+      if (requestGen === dashboardAiGenRef.current) {
+        setQueryLoading(false);
+      }
     }
   };
 
@@ -610,8 +650,8 @@ export default function Home() {
             </h2>
             {recentQueries.length === 0 ? (
               <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                Noch keine gespeicherten Anfragen. Die letzten Fragen an die KI werden hier später
-                angezeigt.
+                Noch keine gespeicherten Anfragen. Frage und KI-Antwort werden pro Schule in der
+                Datenbank gespeichert und können hier wieder geöffnet werden.
               </p>
             ) : (
               <ul className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
@@ -620,11 +660,21 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => {
+                        dashboardAiGenRef.current += 1;
                         setQuestion(q.question);
-                        setQueryAnswer(null);
-                        setQuerySources([]);
                         setQueryError(null);
+                        setQueryLoading(false);
+                        setSuggestLoading(false);
                         setSuggestedDocuments([]);
+                        setSelectedDocumentIds([]);
+                        const storedAnswer = (q.answer_text ?? '').trim();
+                        if (storedAnswer) {
+                          setQueryAnswer(q.answer_text ?? null);
+                          setQuerySources(normalizeQuerySources(q.sources));
+                        } else {
+                          setQueryAnswer(null);
+                          setQuerySources([]);
+                        }
                       }}
                       className="text-left text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
                     >

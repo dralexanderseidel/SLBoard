@@ -3,7 +3,7 @@ import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { getDocumentText } from '../../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../../lib/indexing';
-import { canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -54,7 +54,7 @@ export async function POST(
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, responsible_unit, current_version_id, protection_class_id')
+      .select('id, responsible_unit, current_version_id, protection_class_id, school_number')
       .eq('id', documentId)
       .single();
 
@@ -62,12 +62,15 @@ export async function POST(
       return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
     }
 
+    const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
+    const mayAccessSchool = canAccessSchool(access, docSchool);
     const mayEditByOrg =
       !access.hasAppUser ||
       access.isSchulleitung ||
       access.isSekretariat ||
       (!!access.orgUnit && access.orgUnit === (doc.responsible_unit ?? null));
     const mayEdit =
+      mayAccessSchool &&
       mayEditByOrg &&
       canReadDocument(
         access,
@@ -116,15 +119,18 @@ export async function POST(
     }
 
     // Bestehende Versionsnummern holen
-    const { data: existingVers } = await supabase
+    let existingVersionsQuery = supabase
       .from('document_versions')
       .select('version_number')
       .eq('document_id', documentId);
+    if (docSchool) existingVersionsQuery = existingVersionsQuery.eq('school_number', docSchool);
+    const { data: existingVers } = await existingVersionsQuery;
     const versionNumbers = (existingVers ?? []).map((v) => v.version_number as string);
     const newVersion = nextVersionNumber(versionNumbers);
 
     const fileId = crypto.randomUUID();
-    const filePath = `${documentId}/${fileId}${ext}`;
+    const schoolPrefix = docSchool ?? '000000';
+    const filePath = `${schoolPrefix}/${documentId}/${fileId}${ext}`;
 
     const buffer = await file.arrayBuffer();
     const { error: storageError } = await supabase.storage
@@ -147,6 +153,7 @@ export async function POST(
     const { data: verData, error: verError } = await supabase
       .from('document_versions')
       .insert({
+        school_number: docSchool,
         document_id: documentId,
         version_number: newVersion,
         created_by_id: createdById,
@@ -166,10 +173,12 @@ export async function POST(
       );
     }
 
-    const { error: updateError } = await supabase
+    let updateDocQuery = supabase
       .from('documents')
       .update({ current_version_id: verData.id, summary: null, summary_updated_at: null })
       .eq('id', documentId);
+    if (docSchool) updateDocQuery = updateDocQuery.eq('school_number', docSchool);
+    const { error: updateError } = await updateDocQuery;
 
     if (updateError) {
       return NextResponse.json(
@@ -180,11 +189,12 @@ export async function POST(
 
     // Phase A: Index aktualisieren (neue Datei → neuer Text)
     try {
-      const { data: docMeta } = await supabase
+      let docMetaQuery = supabase
         .from('documents')
         .select('title, document_type_code, gremium, responsible_unit, legal_reference')
-        .eq('id', documentId)
-        .single();
+        .eq('id', documentId);
+      if (docSchool) docMetaQuery = docMetaQuery.eq('school_number', docSchool);
+      const { data: docMeta } = await docMetaQuery.single();
 
       const extractedText = await getDocumentText(documentId);
       const { keywords, searchText } = buildSearchIndex({
@@ -196,10 +206,12 @@ export async function POST(
         legalReference: (docMeta?.legal_reference as string) ?? null,
         extractedText,
       });
-      await supabase
+      let updateIndexQuery = supabase
         .from('documents')
         .update({ search_text: searchText, keywords, indexed_at: new Date().toISOString() })
         .eq('id', documentId);
+      if (docSchool) updateIndexQuery = updateIndexQuery.eq('school_number', docSchool);
+      await updateIndexQuery;
     } catch {
       // Best-effort
     }
@@ -209,6 +221,7 @@ export async function POST(
       action: 'version.upload',
       entity_type: 'document',
       entity_id: documentId,
+      school_number: docSchool,
       new_values: { version_id: verData.id, version_number: newVersion, comment },
     });
     if (auditErr) {

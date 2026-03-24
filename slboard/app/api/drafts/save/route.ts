@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
+import { getUserAccessContext } from '../../../../lib/documentAccess';
 
 const createdById = '00000000-0000-0000-0000-000000000001';
 
@@ -19,6 +20,8 @@ export async function POST(req: NextRequest) {
     if (!supabase) {
       return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
     }
+    const access = await getUserAccessContext(user.email, supabase);
+    const schoolNumber = access.schoolNumber ?? '000000';
 
     const body = await req.json();
     const subject = (body.subject as string)?.trim();
@@ -39,6 +42,7 @@ export async function POST(req: NextRequest) {
     const { data: doc, error: docError } = await supabase
       .from('documents')
       .insert({
+        school_number: schoolNumber,
         title: subject,
         document_type_code: 'ELTERNBRIEF',
         created_at: today,
@@ -62,7 +66,7 @@ export async function POST(req: NextRequest) {
 
     const documentId = doc.id;
     const fileId = crypto.randomUUID();
-    const filePath = `${documentId}/${fileId}.txt`;
+    const filePath = `${schoolNumber}/${documentId}/${fileId}.txt`;
     const textContent = `Betreff: ${subject}\nZielgruppe: ${audience}\n\n${context ? `Kontext: ${context}\n\n` : ''}${draftBody}`;
     const buffer = Buffer.from(textContent, 'utf-8');
 
@@ -75,7 +79,7 @@ export async function POST(req: NextRequest) {
       });
 
     if (storageError) {
-      await supabase.from('documents').delete().eq('id', documentId);
+      await supabase.from('documents').delete().eq('id', documentId).eq('school_number', schoolNumber);
       return NextResponse.json(
         { error: `Speicher-Fehler: ${storageError.message}` },
         { status: 500 }
@@ -85,6 +89,7 @@ export async function POST(req: NextRequest) {
     const { data: verData, error: verError } = await supabase
       .from('document_versions')
       .insert({
+        school_number: schoolNumber,
         document_id: documentId,
         version_number: '1.0',
         created_by_id: createdById,
@@ -98,7 +103,7 @@ export async function POST(req: NextRequest) {
 
     if (verError || !verData) {
       await supabase.storage.from('documents').remove([filePath]);
-      await supabase.from('documents').delete().eq('id', documentId);
+      await supabase.from('documents').delete().eq('id', documentId).eq('school_number', schoolNumber);
       return NextResponse.json(
         { error: verError?.message ?? 'Version konnte nicht angelegt werden.' },
         { status: 500 }
@@ -108,7 +113,8 @@ export async function POST(req: NextRequest) {
     const { error: updateError } = await supabase
       .from('documents')
       .update({ current_version_id: verData.id })
-      .eq('id', documentId);
+      .eq('id', documentId)
+      .eq('school_number', schoolNumber);
 
     if (updateError) {
       return NextResponse.json(

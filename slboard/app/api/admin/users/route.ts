@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { isAdmin } from '../../../../lib/adminAuth';
+import { getUserAccessContext } from '../../../../lib/documentAccess';
 
 export async function GET() {
   try {
@@ -20,10 +21,15 @@ export async function GET() {
       return NextResponse.json({ error: 'Keine Admin-Berechtigung.' }, { status: 403 });
     }
 
-    const { data: users, error } = await supabase
+    const access = await getUserAccessContext(user.email, supabase);
+    const adminSchool = access.schoolNumber ?? null;
+
+    let usersQuery = supabase
       .from('app_users')
-      .select('id, username, full_name, email, org_unit, created_at')
+      .select('id, username, full_name, email, org_unit, school_number, created_at')
       .order('username');
+    if (adminSchool) usersQuery = usersQuery.eq('school_number', adminSchool);
+    const { data: users, error } = await usersQuery;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -68,6 +74,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Keine Admin-Berechtigung.' }, { status: 403 });
     }
 
+    const access = await getUserAccessContext(user.email, supabase);
+    const adminSchool = access.schoolNumber ?? null;
+
     const body = await req.json();
     const username = (body.username as string)?.trim();
     const fullName = (body.full_name as string)?.trim();
@@ -81,10 +90,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const requestedSchool = (body.school_number as string | undefined)?.trim() ?? '';
+    const schoolNumber = adminSchool || requestedSchool;
+    if (!schoolNumber) {
+      return NextResponse.json({ error: 'school_number ist erforderlich.' }, { status: 400 });
+    }
+    if (!/^\d{6}$/.test(schoolNumber)) {
+      return NextResponse.json({ error: 'school_number muss 6-stellig sein.' }, { status: 400 });
+    }
+
     const { data: newUser, error } = await supabase
       .from('app_users')
-      .insert({ username, full_name: fullName, email, org_unit: orgUnit })
-      .select('id, username, full_name, email, org_unit, created_at')
+      .insert({ username, full_name: fullName, email, org_unit: orgUnit, school_number: schoolNumber })
+      .select('id, username, full_name, email, org_unit, school_number, created_at')
       .single();
 
     if (error) {

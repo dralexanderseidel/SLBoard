@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
-import { canReadDocument, getUserAccessContext } from '../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../lib/documentAccess';
 
 /**
  * GET: Dokumentenliste mit Berechtigungs- und Schutzklassenfilter.
@@ -31,8 +31,14 @@ export async function GET(req: NextRequest) {
 
     let query = supabase
       .from('documents')
-      .select('id, title, document_type_code, created_at, status, protection_class_id, gremium, responsible_unit, summary')
+      .select(
+        'id, title, document_type_code, created_at, status, protection_class_id, gremium, responsible_unit, summary, school_number'
+      )
       .order('created_at', { ascending: false });
+
+    if (access.schoolNumber) {
+      query = query.eq('school_number', access.schoolNumber);
+    }
 
     if (searchQuery.trim()) {
       const pattern = `%${searchQuery.trim()}%`;
@@ -82,6 +88,7 @@ export async function GET(req: NextRequest) {
     }
 
     const filtered = (data ?? []).filter((d) =>
+      canAccessSchool(access, d.school_number as string | null) &&
       canReadDocument(access, d.protection_class_id as number, d.responsible_unit as string | null)
     );
 

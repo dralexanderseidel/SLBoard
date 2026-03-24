@@ -5,6 +5,7 @@ type SupabaseAdmin = ReturnType<typeof supabaseServer>;
 export type UserAccessContext = {
   hasAppUser: boolean;
   orgUnit: string | null;
+  schoolNumber: string | null;
   roles: string[];
   isSchulleitung: boolean;
   isSekretariat: boolean;
@@ -16,17 +17,31 @@ export async function getUserAccessContext(
 ): Promise<UserAccessContext> {
   try {
     if (!supabase) {
-      return { hasAppUser: false, orgUnit: null, roles: [], isSchulleitung: false, isSekretariat: false };
+      return {
+        hasAppUser: false,
+        orgUnit: null,
+        schoolNumber: null,
+        roles: [],
+        isSchulleitung: false,
+        isSekretariat: false,
+      };
     }
 
     const { data: appUser } = await supabase
       .from('app_users')
-      .select('id, org_unit')
+      .select('id, org_unit, school_number')
       .eq('email', authEmail)
       .single();
 
     if (!appUser) {
-      return { hasAppUser: false, orgUnit: null, roles: [], isSchulleitung: false, isSekretariat: false };
+      return {
+        hasAppUser: false,
+        orgUnit: null,
+        schoolNumber: null,
+        roles: [],
+        isSchulleitung: false,
+        isSekretariat: false,
+      };
     }
 
     const { data: rolesRows } = await supabase
@@ -41,13 +56,34 @@ export async function getUserAccessContext(
     return {
       hasAppUser: true,
       orgUnit: (appUser.org_unit as string | null) ?? null,
+      schoolNumber: (appUser.school_number as string | null) ?? null,
       roles,
       isSchulleitung,
       isSekretariat,
     };
   } catch {
-    return { hasAppUser: false, orgUnit: null, roles: [], isSchulleitung: false, isSekretariat: false };
+    return {
+      hasAppUser: false,
+      orgUnit: null,
+      schoolNumber: null,
+      roles: [],
+      isSchulleitung: false,
+      isSekretariat: false,
+    };
   }
+}
+
+/**
+ * Übergangslogik Phase 1:
+ * - Wenn beim Nutzer noch keine school_number gesetzt ist, bleibt Zugriff wie bisher.
+ * - Wenn school_number gesetzt ist, darf nur auf Daten derselben Schule zugegriffen werden.
+ */
+export function canAccessSchool(access: UserAccessContext, rowSchoolNumber?: string | null): boolean {
+  const userSchool = (access.schoolNumber ?? '').trim();
+  if (!userSchool) return true;
+  const rowSchool = (rowSchoolNumber ?? '').trim();
+  if (!rowSchool) return false;
+  return userSchool === rowSchool;
 }
 
 /**

@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient
 import { isAdmin } from '../../../../lib/adminAuth';
 import { getDocumentText } from '../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../lib/indexing';
+import { getUserAccessContext } from '../../../../lib/documentAccess';
 
 type Payload = {
   limit?: number;
@@ -27,15 +28,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Keine Admin-Berechtigung.' }, { status: 403 });
     }
 
+    const access = await getUserAccessContext(user.email, supabase);
+
     const body = (await req.json().catch(() => ({}))) as Payload;
     const limit = Math.max(1, Math.min(50, Number(body.limit) || 10));
     const offset = Math.max(0, Number(body.offset) || 0);
 
-    const { data: docs, error } = await supabase
+    let docsQuery = supabase
       .from('documents')
-      .select('id, title, document_type_code, gremium, responsible_unit, legal_reference, summary')
+      .select('id, title, document_type_code, gremium, responsible_unit, legal_reference, summary, school_number')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
+    if (access.schoolNumber) docsQuery = docsQuery.eq('school_number', access.schoolNumber);
+    const { data: docs, error } = await docsQuery;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -49,6 +54,7 @@ export async function POST(req: NextRequest) {
       responsible_unit: string | null;
       legal_reference: string | null;
       summary: string | null;
+      school_number: string | null;
     }>;
 
     let ok = 0;
@@ -67,10 +73,12 @@ export async function POST(req: NextRequest) {
           legalReference: d.legal_reference,
           extractedText,
         });
-        const { error: updErr } = await supabase
+        let updQuery = supabase
           .from('documents')
           .update({ search_text: searchText, keywords, indexed_at: new Date().toISOString() })
           .eq('id', d.id);
+        if (d.school_number) updQuery = updQuery.eq('school_number', d.school_number);
+        const { error: updErr } = await updQuery;
         if (updErr) throw new Error(updErr.message);
         ok += 1;
       } catch (e: unknown) {

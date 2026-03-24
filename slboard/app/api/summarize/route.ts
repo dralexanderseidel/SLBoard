@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDocumentText } from '../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
 import { supabaseServer } from '../../../lib/supabaseServer';
+import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
+import { canAccessSchool, getUserAccessContext } from '../../../lib/documentAccess';
+
+export const runtime = 'nodejs';
 
 type SummarizePayload = {
   title?: string;
@@ -13,6 +17,12 @@ type SummarizePayload = {
 
 export async function POST(req: NextRequest) {
   try {
+    const client = await createServerSupabaseClient();
+    const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
+    if (!user?.email) {
+      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+    }
+
     const { title, type, createdAt, text, documentId }: SummarizePayload = await req.json();
 
     let basisText = text ?? '';
@@ -71,10 +81,22 @@ ${fullContent}
     if (documentId) {
       const supabase = supabaseServer();
       if (supabase) {
-        await supabase
+        const access = await getUserAccessContext(user.email, supabase);
+        const { data: doc } = await supabase
+          .from('documents')
+          .select('id, school_number')
+          .eq('id', documentId)
+          .single();
+        const docSchool = (doc as { school_number?: string | null } | null)?.school_number ?? null;
+        if (!canAccessSchool(access, docSchool)) {
+          return NextResponse.json({ error: 'Keine Berechtigung für dieses Dokument.' }, { status: 403 });
+        }
+        let updateQuery = supabase
           .from('documents')
           .update({ summary: summaryText, summary_updated_at: new Date().toISOString() })
           .eq('id', documentId);
+        if (docSchool) updateQuery = updateQuery.eq('school_number', docSchool);
+        await updateQuery;
       }
     }
 

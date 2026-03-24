@@ -1,17 +1,19 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const registrationDone = searchParams.get('registered') === '1';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,26 +33,6 @@ export default function LoginPage() {
     } else {
       setMessage('Erfolgreich angemeldet.');
       router.push('/');
-    }
-  };
-
-  const handleSignup = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setMessage(null);
-    setLoading(true);
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      setError(error.message);
-    } else {
-      setMessage('Registrierung erfolgreich. Prüfen Sie ggf. Ihr Postfach zur Bestätigung.');
     }
   };
 
@@ -100,6 +82,11 @@ export default function LoginPage() {
           </div>
 
           {error && <p className="text-xs text-red-600">{error}</p>}
+          {registrationDone && !error && !message && (
+            <p className="text-xs text-green-600">
+              Schul-Setup erfolgreich abgeschlossen. Bitte jetzt mit dem Schuladmin-Konto anmelden.
+            </p>
+          )}
           {message && <p className="text-xs text-green-600">{message}</p>}
 
           <div className="flex flex-col gap-2 pt-2">
@@ -111,14 +98,12 @@ export default function LoginPage() {
             >
               {loading ? 'Bitte warten…' : 'Anmelden'}
             </button>
-            <button
-              type="button"
-              onClick={handleSignup}
-              disabled={loading}
-              className="h-9 rounded border border-zinc-300 px-4 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
+            <Link
+              href="/register-school"
+              className="inline-flex h-9 items-center justify-center rounded border border-zinc-300 px-4 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
             >
-              Neues Konto registrieren
-            </button>
+              Schule neu registrieren
+            </Link>
           </div>
         </form>
       </div>

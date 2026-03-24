@@ -9,6 +9,7 @@ type AppUser = {
   full_name: string;
   email: string;
   org_unit: string;
+  school_number: string | null;
   created_at: string;
   roles: string[];
 };
@@ -46,6 +47,7 @@ export default function AdminPage() {
     full_name: '',
     email: '',
     org_unit: 'Schulleitung',
+    school_number: '',
   });
   const [saving, setSaving] = useState(false);
 
@@ -190,12 +192,13 @@ export default function AdminPage() {
         body: JSON.stringify({
           ...createForm,
           org_unit: createForm.org_unit,
+          school_number: createForm.school_number,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Fehler beim Anlegen.');
       setUsers((prev) => [...prev, data.user]);
-      setCreateForm({ username: '', full_name: '', email: '', org_unit: 'Schulleitung' });
+      setCreateForm({ username: '', full_name: '', email: '', org_unit: 'Schulleitung', school_number: '' });
       setShowCreate(false);
       setMessage('Nutzer angelegt.');
     } catch (e) {
@@ -303,6 +306,18 @@ export default function AdminPage() {
               </div>
               <div>
                 <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                  Schulnummer (6-stellig)
+                </label>
+                <input
+                  type="text"
+                  value={createForm.school_number}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, school_number: e.target.value }))}
+                  className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                  placeholder="z.B. 123456"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
                   Organisationseinheit
                 </label>
                 <select
@@ -339,6 +354,7 @@ export default function AdminPage() {
                     Benutzer
                   </th>
                   <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">E-Mail</th>
+                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Schulnummer</th>
                   <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Org.-Einheit</th>
                   <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Rollen</th>
                   <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Aktionen</th>
@@ -392,6 +408,9 @@ export default function AdminPage() {
                       ) : (
                         <span className="text-zinc-700 dark:text-zinc-300">{u.email}</span>
                       )}
+                    </td>
+                    <td className="p-3">
+                      <span className="text-zinc-700 dark:text-zinc-300">{u.school_number ?? '—'}</span>
                     </td>
                     <td className="p-3">
                       {editingId === u.id ? (

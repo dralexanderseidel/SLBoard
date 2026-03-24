@@ -25,7 +25,26 @@ export async function middleware(request: NextRequest) {
   })
 
   // Session aktualisieren, damit Cookies für API-Routes verfügbar sind
-  await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  const { pathname } = request.nextUrl
+  const isApi = pathname.startsWith('/api/')
+  const isPublicPath = pathname === '/login' || pathname === '/register-school'
+
+  // API-Requests und öffentliche Routen nicht umleiten.
+  if (!isApi && !isPublicPath && !user) {
+    const loginUrl = new URL('/login', request.url)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  if (!isApi && user && (pathname === '/login' || pathname === '/register-school')) {
+    const appUrl = new URL('/', request.url)
+    return NextResponse.redirect(appUrl)
+  }
 
   return response
+}
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }

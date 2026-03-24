@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
-import { canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
 
 type ReviewOverdueItem = {
   documentId: string;
@@ -30,20 +30,23 @@ export async function GET() {
 
     // Review ist overdue, wenn review_date gesetzt und < heute.
     // Optional Einschränkung auf VEROEFFENTLICHT: sinnvoll für organisatorische Reviews.
-    const { data: docs, error } = await supabase
+    let docsQuery = supabase
       .from('documents')
-      .select('id, title, review_date, protection_class_id, responsible_unit, status')
+      .select('id, title, review_date, protection_class_id, responsible_unit, status, school_number')
       .not('review_date', 'is', null)
       .lt('review_date', ymd)
       .eq('status', 'VEROEFFENTLICHT')
       .order('review_date', { ascending: true })
       .limit(20);
+    if (access.schoolNumber) docsQuery = docsQuery.eq('school_number', access.schoolNumber);
+    const { data: docs, error } = await docsQuery;
 
     if (error) {
       return NextResponse.json({ data: [] });
     }
 
     const filtered = (docs ?? []).filter((d) =>
+      canAccessSchool(access, d.school_number as string | null) &&
       canReadDocument(
         access,
         d.protection_class_id as number,

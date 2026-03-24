@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
-import { canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
 
 /**
  * GET: Kürzlich veröffentlichte Dokumente (Hinweis für Gremien).
@@ -22,14 +22,16 @@ export async function GET() {
 
     const access = await getUserAccessContext(user.email, supabase);
 
-    const { data: auditEntries, error: auditError } = await supabase
+    let auditQuery = supabase
       .from('audit_log')
-      .select('entity_id, created_at, new_values, old_values')
+      .select('entity_id, created_at, new_values, old_values, school_number')
       .eq('entity_type', 'document')
       .eq('action', 'document.update')
       .not('new_values', 'is', null)
       .order('created_at', { ascending: false })
       .limit(50);
+    if (access.schoolNumber) auditQuery = auditQuery.eq('school_number', access.schoolNumber);
+    const { data: auditEntries, error: auditError } = await auditQuery;
 
     if (auditError) {
       return NextResponse.json({ data: [] });
@@ -50,7 +52,7 @@ export async function GET() {
 
     const query = supabase
       .from('documents')
-      .select('id, title, responsible_unit, protection_class_id')
+      .select('id, title, responsible_unit, protection_class_id, school_number')
       .in('id', documentIds)
       .eq('status', 'VEROEFFENTLICHT');
 
@@ -67,6 +69,7 @@ export async function GET() {
     }
     const result = docs
       .filter((d) =>
+        canAccessSchool(access, d.school_number as string | null) &&
         canReadDocument(access, d.protection_class_id as number, d.responsible_unit as string | null)
       )
       .map((d) => ({

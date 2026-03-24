@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { isAdmin } from '../../../../../lib/adminAuth';
+import { canAccessSchool, getUserAccessContext } from '../../../../../lib/documentAccess';
 
 export async function PATCH(
   req: NextRequest,
@@ -23,6 +24,8 @@ export async function PATCH(
       return NextResponse.json({ error: 'Keine Admin-Berechtigung.' }, { status: 403 });
     }
 
+    const access = await getUserAccessContext(user.email, supabase);
+
     const { id } = await params;
     const body = await req.json();
     const updates: Record<string, string> = {};
@@ -35,12 +38,23 @@ export async function PATCH(
       return NextResponse.json({ error: 'Keine Felder zum Aktualisieren.' }, { status: 400 });
     }
 
-    const { data, error } = await supabase
+    const { data: target } = await supabase
+      .from('app_users')
+      .select('id, school_number')
+      .eq('id', id)
+      .single();
+    const targetSchool = (target as { school_number?: string | null } | null)?.school_number ?? null;
+    if (!canAccessSchool(access, targetSchool)) {
+      return NextResponse.json({ error: 'Keine Berechtigung für diesen Nutzer.' }, { status: 403 });
+    }
+
+    let updateQuery = supabase
       .from('app_users')
       .update(updates)
       .eq('id', id)
-      .select('id, username, full_name, email, org_unit, created_at')
-      .single();
+      .select('id, username, full_name, email, org_unit, school_number, created_at');
+    if (targetSchool) updateQuery = updateQuery.eq('school_number', targetSchool);
+    const { data, error } = await updateQuery.single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

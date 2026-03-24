@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
-import { canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
 
 /**
  * GET: Audit-Log für ein Dokument (wer hat was wann geändert).
@@ -27,7 +27,7 @@ export async function GET(
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, responsible_unit, protection_class_id')
+      .select('id, responsible_unit, protection_class_id, school_number')
       .eq('id', documentId)
       .single();
 
@@ -35,22 +35,26 @@ export async function GET(
       return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
     }
 
+    const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
+    const mayAccessSchool = canAccessSchool(access, docSchool);
     const mayAccess = canReadDocument(
       access,
       (doc as { protection_class_id?: number | null }).protection_class_id,
       doc.responsible_unit ?? null
     );
-    if (!mayAccess) {
+    if (!mayAccessSchool || !mayAccess) {
       return NextResponse.json({ error: 'Keine Berechtigung für dieses Dokument.' }, { status: 403 });
     }
 
-    const { data: logs, error: logError } = await supabase
+    let logQuery = supabase
       .from('audit_log')
       .select('id, user_email, action, old_values, new_values, created_at')
       .eq('entity_type', 'document')
       .eq('entity_id', documentId)
       .order('created_at', { ascending: false })
       .limit(50);
+    if (docSchool) logQuery = logQuery.eq('school_number', docSchool);
+    const { data: logs, error: logError } = await logQuery;
 
     if (logError) {
       // Tabelle audit_log optional (Migration ggf. noch nicht ausgeführt)
