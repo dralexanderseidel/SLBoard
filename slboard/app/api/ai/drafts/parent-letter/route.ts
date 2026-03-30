@@ -4,6 +4,11 @@ import { createServerSupabaseClient } from '../../../../../lib/supabaseServerCli
 import { getDocumentText } from '../../../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../../../lib/llmClient';
 import { getUserAccessContext } from '../../../../../lib/documentAccess';
+import { extractKeywords } from '../../../../../lib/aiSearch';
+import {
+  buildPromptSnippetFromChunks,
+  pickTopChunksForQuestion,
+} from '../../../../../lib/chunkingOnTheFly';
 
 type Payload = {
   topic?: string;
@@ -11,6 +16,12 @@ type Payload = {
   purpose?: string;
   sourceIds?: string[];
 };
+
+const TEMPLATE_MAX_CHARS = 3800;
+const TEMPLATE_CHUNK_CHARS = 2400;
+const TEMPLATE_CHUNK_OVERLAP = 250;
+const TEMPLATE_MAX_CHUNKS = 3;
+const SUMMARY_CONTEXT_CHARS = 700;
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,36 +57,60 @@ export async function POST(req: NextRequest) {
 
     const access = await getUserAccessContext(user.email, supabase);
 
-    let docsToUse: { id: string; title: string }[] = [];
+    let docsToUse: { id: string; title: string; summary?: string | null }[] = [];
 
     if (sourceIds && sourceIds.length > 0) {
       let selectedDocsQuery = supabase
         .from('documents')
-        .select('id, title')
+        .select('id, title, summary')
         .in('id', sourceIds);
       if (access.schoolNumber) selectedDocsQuery = selectedDocsQuery.eq('school_number', access.schoolNumber);
       const { data } = await selectedDocsQuery;
-      docsToUse = (data ?? []).map((d) => ({ id: d.id, title: d.title }));
+      docsToUse = (data ?? []).map((d) => ({ id: d.id, title: d.title, summary: (d as any).summary ?? null }));
     }
 
     if (docsToUse.length === 0) {
       let fallbackDocsQuery = supabase
         .from('documents')
-        .select('id, title')
+        .select('id, title, summary')
         .eq('document_type_code', 'ELTERNBRIEF')
         .in('status', ['FREIGEGEBEN', 'VEROEFFENTLICHT'])
         .order('created_at', { ascending: false })
         .limit(5);
       if (access.schoolNumber) fallbackDocsQuery = fallbackDocsQuery.eq('school_number', access.schoolNumber);
       const { data } = await fallbackDocsQuery;
-      docsToUse = (data ?? []).map((d) => ({ id: d.id, title: d.title }));
+      docsToUse = (data ?? []).map((d) => ({ id: d.id, title: d.title, summary: (d as any).summary ?? null }));
     }
 
     const sourceTexts: { id: string; title: string; text: string }[] = [];
+    const keywords = extractKeywords(`${topic ?? ''} ${targetAudience ?? ''} ${purpose ?? ''}`);
+
+    const chunkParams = {
+      chunkChars: TEMPLATE_CHUNK_CHARS,
+      overlapChars: TEMPLATE_CHUNK_OVERLAP,
+      maxChunks: TEMPLATE_MAX_CHUNKS,
+    };
     for (const doc of docsToUse) {
-      const text = await getDocumentText(doc.id);
-      if (text && text.length > 50) {
-        sourceTexts.push({ id: doc.id, title: doc.title, text });
+      const fullText = ((await getDocumentText(doc.id)) ?? '').trim();
+      const summary = (doc.summary ?? '').trim();
+
+      // Optional schneller Kontext über Summary; Hauptsubstanz kommt aus relevanten Volltext-Passagen.
+      const summaryBlock =
+        summary.length > 30
+          ? `Zusammenfassung:\n${summary.slice(0, SUMMARY_CONTEXT_CHARS)}${summary.length > SUMMARY_CONTEXT_CHARS ? '…' : ''}\n\n`
+          : '';
+
+      let mainBlock = '';
+      if (fullText.length > 50) {
+        const selectedChunks = pickTopChunksForQuestion(fullText, keywords, chunkParams);
+        mainBlock = buildPromptSnippetFromChunks(selectedChunks, TEMPLATE_MAX_CHARS).trim();
+      } else if (summary.length > 50) {
+        mainBlock = summary.slice(0, TEMPLATE_MAX_CHARS).trim();
+      }
+
+      const combined = `${summaryBlock}${mainBlock}`.trim();
+      if (combined.length > 50) {
+        sourceTexts.push({ id: doc.id, title: doc.title, text: combined });
       }
     }
 
@@ -84,7 +119,7 @@ export async function POST(req: NextRequest) {
         ? sourceTexts
             .map(
               (s) =>
-                `--- Vorlage: ${s.title} ---\n${s.text.slice(0, 4000)}${s.text.length > 4000 ? '...' : ''}`,
+                `--- Vorlage: ${s.title} ---\n${s.text.slice(0, TEMPLATE_MAX_CHARS)}${s.text.length > TEMPLATE_MAX_CHARS ? '…' : ''}`,
             )
             .join('\n\n')
         : 'Es stehen keine Vorlagen zur Verfügung. Erstelle einen allgemeinen Entwurf.';
@@ -121,6 +156,20 @@ TEXT:
 
     if (betrefMatch) suggestedTitle = betrefMatch[1].trim();
     if (textMatch) body = textMatch[1].trim();
+
+    // Robustheit: Wenn die KI das Format nicht einhält, liefern wir trotzdem einen brauchbaren Text.
+    // - Betreff: Fallback bleibt das Thema.
+    // - Text: Falls nichts gefunden wurde, verwenden wir die Rohantwort (ohne leere Ausgabe).
+    const normalizedBody = (body ?? '').trim();
+    if (!textMatch && normalizedBody.length > 0) {
+      body = normalizedBody
+        .replace(/^\s*BETREFF:\s*\n[^\n]*\n+/i, '')
+        .replace(/^\s*TEXT:\s*\n/i, '')
+        .trim();
+    }
+    if (!body || body.trim().length === 0) {
+      body = rawResponse.trim() || topic.trim();
+    }
 
     return NextResponse.json({
       suggestedTitle,
