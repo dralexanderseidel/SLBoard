@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { apiError } from '../../../../../lib/apiError';
 
 /**
  * Erzeugt eine temporäre Signed URL für die Datei eines Dokuments.
@@ -15,18 +16,12 @@ export async function GET(
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json(
-        { error: 'Anmeldung erforderlich.' },
-        { status: 401 }
-      );
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json(
-        { error: 'Service nicht verfügbar.' },
-        { status: 500 }
-      );
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const { id: documentId } = await params;
@@ -41,7 +36,7 @@ export async function GET(
       .single();
 
     if (docError || !doc) {
-      return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
+      return apiError(404, 'NOT_FOUND', 'Dokument nicht gefunden.');
     }
 
     const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
@@ -52,16 +47,13 @@ export async function GET(
       doc.responsible_unit ?? null
     );
     if (!mayAccessSchool || !mayAccess) {
-      return NextResponse.json(
-        { error: 'Keine Berechtigung für dieses Dokument.' },
-        { status: 403 }
-      );
+      return apiError(403, 'FORBIDDEN', 'Keine Berechtigung für dieses Dokument.');
     }
 
     // Bestimmte Version (versionId) oder aktuelle Version
     const versionToUse = versionId && versionId.trim() ? versionId.trim() : (doc.current_version_id as string);
     if (!versionToUse) {
-      return NextResponse.json({ error: 'Dokument oder Version nicht gefunden.' }, { status: 404 });
+      return apiError(404, 'NOT_FOUND', 'Dokument oder Version nicht gefunden.');
     }
 
     let versionQuery = supabase
@@ -73,7 +65,7 @@ export async function GET(
     const { data: ver, error: verError } = await versionQuery.single();
 
     if (verError || !ver?.file_uri) {
-      return NextResponse.json({ error: 'Datei-Pfad nicht gefunden.' }, { status: 404 });
+      return apiError(404, 'NOT_FOUND', 'Datei-Pfad nicht gefunden.');
     }
 
     const { data: signed, error: signedError } = await supabase.storage
@@ -81,15 +73,12 @@ export async function GET(
       .createSignedUrl(ver.file_uri, 3600); // 1 Stunde gültig
 
     if (signedError) {
-      return NextResponse.json(
-        { error: signedError.message ?? 'Signed URL konnte nicht erzeugt werden.' },
-        { status: 500 }
-      );
+      return apiError(500, 'INTERNAL_ERROR', signedError.message ?? 'Signed URL konnte nicht erzeugt werden.');
     }
 
     return NextResponse.json({ signedUrl: signed.signedUrl });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }

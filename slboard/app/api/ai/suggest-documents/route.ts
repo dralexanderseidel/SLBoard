@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { apiError } from '../../../../lib/apiError';
 import {
   getSuggestedDocuments,
   scoreRelevance,
@@ -21,12 +22,12 @@ export async function POST(req: NextRequest) {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
     const access = await getUserAccessContext(user.email, supabase);
 
@@ -34,10 +35,7 @@ export async function POST(req: NextRequest) {
     const trimmed = typeof question === 'string' ? question.trim() : '';
 
     if (!trimmed) {
-      return NextResponse.json(
-        { error: 'Bitte geben Sie eine Frage oder Suchbegriffe ein.' },
-        { status: 400 },
-      );
+      return apiError(400, 'VALIDATION_ERROR', 'Bitte geben Sie eine Frage oder Suchbegriffe ein.');
     }
 
     const keywords = extractKeywords(trimmed);
@@ -64,6 +62,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ suggestedDocuments });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }

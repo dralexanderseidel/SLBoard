@@ -22,6 +22,7 @@ import {
 } from '../../../../lib/aiQueryDebugLog';
 import { getAiSettingsForSchool } from '../../../../lib/aiSettings';
 import { getSchoolProfileText } from '../../../../lib/schoolProfile';
+import { apiError } from '../../../../lib/apiError';
 
 export const runtime = 'nodejs';
 
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const body = (await req.json()) as { question?: string; documentIds?: string[] };
@@ -46,25 +47,16 @@ export async function POST(req: NextRequest) {
       : undefined;
 
     if (!trimmed) {
-      return NextResponse.json(
-        { error: 'Bitte geben Sie eine Frage ein.' },
-        { status: 400 },
-      );
+      return apiError(400, 'VALIDATION_ERROR', 'Bitte geben Sie eine Frage ein.');
     }
 
     if (!isLlmConfigured()) {
-      return NextResponse.json(
-        { error: 'LLM-Umgebungsvariablen sind nicht gesetzt.' },
-        { status: 500 },
-      );
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'LLM-Konfiguration fehlt.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json(
-        { error: 'Supabase-Service nicht verfügbar.' },
-        { status: 500 },
-      );
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const access = await getUserAccessContext(user.email, supabase);
@@ -161,7 +153,9 @@ Antworte in 3–6 Sätzen.`;
       }, aiSettings.debug_log_enabled);
     }
 
-    const answer = await callLlm(systemPrompt, userPrompt);
+    const answer = await callLlm(systemPrompt, userPrompt, {
+      timeoutMs: aiSettings.llm_timeout_ms,
+    });
 
     const sourcesPayload = sourceTexts.map((s) => ({
       documentId: s.id,
@@ -187,6 +181,6 @@ Antworte in 3–6 Sätzen.`;
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }

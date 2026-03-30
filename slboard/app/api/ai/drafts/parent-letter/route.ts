@@ -12,6 +12,7 @@ import {
 import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
 import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../../lib/aiQueryDebugLog';
+import { apiError } from '../../../../../lib/apiError';
 
 type Payload = {
   topic?: string;
@@ -31,31 +32,22 @@ export async function POST(req: NextRequest) {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const { topic, targetAudience, purpose, sourceIds }: Payload = await req.json();
 
     if (!topic?.trim()) {
-      return NextResponse.json(
-        { error: 'Thema/Betreff ist erforderlich.' },
-        { status: 400 },
-      );
+      return apiError(400, 'VALIDATION_ERROR', 'Thema/Betreff ist erforderlich.');
     }
 
     if (!isLlmConfigured()) {
-      return NextResponse.json(
-        { error: 'LLM-Umgebungsvariablen sind nicht gesetzt.' },
-        { status: 500 },
-      );
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'LLM-Konfiguration fehlt.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json(
-        { error: 'Supabase-Service nicht verfügbar.' },
-        { status: 500 },
-      );
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const access = await getUserAccessContext(user.email, supabase);
@@ -173,7 +165,9 @@ TEXT:
       );
     }
 
-    const rawResponse = await callLlm(systemPrompt, userPrompt);
+    const rawResponse = await callLlm(systemPrompt, userPrompt, {
+      timeoutMs: aiSettings.llm_timeout_ms,
+    });
 
     let suggestedTitle = topic;
     let body = rawResponse;
@@ -206,6 +200,6 @@ TEXT:
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }

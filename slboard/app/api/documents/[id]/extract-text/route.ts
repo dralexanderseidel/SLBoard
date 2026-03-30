@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '../../../../../lib/supabaseServerCli
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
 import { getDocumentTextDiagnostics } from '../../../../../lib/documentText';
+import { apiError } from '../../../../../lib/apiError';
 
 export const runtime = 'nodejs';
 
@@ -21,12 +22,12 @@ export async function GET(
     } = (await client?.auth.getUser()) ?? { data: { user: null } };
 
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const { id: documentId } = await params;
@@ -41,7 +42,7 @@ export async function GET(
       .single();
 
     if (docError || !doc) {
-      return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
+      return apiError(404, 'NOT_FOUND', 'Dokument nicht gefunden.');
     }
 
     const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
@@ -99,7 +100,7 @@ export async function GET(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }
 

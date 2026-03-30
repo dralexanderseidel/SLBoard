@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../lib/documentAccess';
+import { apiError } from '../../../lib/apiError';
 
 /**
  * GET: Dokumentenliste mit Berechtigungs- und Schutzklassenfilter.
@@ -13,12 +14,12 @@ export async function GET(req: NextRequest) {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const access = await getUserAccessContext(user.email, supabase);
@@ -84,7 +85,7 @@ export async function GET(req: NextRequest) {
     const { data, error } = await query;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return apiError(500, 'INTERNAL_ERROR', error.message);
     }
 
     const filtered = (data ?? []).filter((d) =>
@@ -95,6 +96,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ data: filtered });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }

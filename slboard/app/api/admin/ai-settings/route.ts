@@ -4,12 +4,14 @@ import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient
 import { isAdmin } from '../../../../lib/adminAuth';
 import { getUserAccessContext } from '../../../../lib/documentAccess';
 import { getAiSettingsForSchool } from '../../../../lib/aiSettings';
+import { apiError } from '../../../../lib/apiError';
 
 type UpdatePayload = Partial<{
   max_text_per_doc: number;
   chunk_chars: number;
   chunk_overlap_chars: number;
   max_chunks_per_doc: number;
+  llm_timeout_ms: number;
   debug_log_enabled: boolean;
   school_profile_text: string;
 }>;
@@ -20,12 +22,12 @@ export async function GET() {
   try {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
-    if (!user?.email) return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+    if (!user?.email) return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
 
     const supabase = supabaseServer();
-    if (!supabase) return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+    if (!supabase) return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     if (!(await isAdmin(user.email, supabase))) {
-      return NextResponse.json({ error: 'Keine Admin-Berechtigung.' }, { status: 403 });
+      return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
     const access = await getUserAccessContext(user.email, supabase);
@@ -40,7 +42,7 @@ export async function GET() {
     return NextResponse.json({ settings, school_profile_text });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', msg);
   }
 }
 
@@ -48,12 +50,12 @@ export async function PUT(req: NextRequest) {
   try {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
-    if (!user?.email) return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+    if (!user?.email) return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
 
     const supabase = supabaseServer();
-    if (!supabase) return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+    if (!supabase) return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     if (!(await isAdmin(user.email, supabase))) {
-      return NextResponse.json({ error: 'Keine Admin-Berechtigung.' }, { status: 403 });
+      return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
     const access = await getUserAccessContext(user.email, supabase);
@@ -72,6 +74,7 @@ export async function PUT(req: NextRequest) {
       chunk_chars: clampInt(body.chunk_chars, 500, 8000, 2500),
       chunk_overlap_chars: clampInt(body.chunk_overlap_chars, 0, 2000, 300),
       max_chunks_per_doc: clampInt(body.max_chunks_per_doc, 1, 10, 3),
+      llm_timeout_ms: clampInt(body.llm_timeout_ms, 5000, 120000, 45000),
       debug_log_enabled: Boolean(body.debug_log_enabled),
       updated_at: new Date().toISOString(),
     };
@@ -80,12 +83,12 @@ export async function PUT(req: NextRequest) {
       .from('ai_settings')
       .upsert(next, { onConflict: 'school_number' })
       .select(
-        'school_number, max_text_per_doc, chunk_chars, chunk_overlap_chars, max_chunks_per_doc, debug_log_enabled, updated_at'
+        'school_number, max_text_per_doc, chunk_chars, chunk_overlap_chars, max_chunks_per_doc, llm_timeout_ms, debug_log_enabled, updated_at'
       )
       .single();
 
     if (error || !data) {
-      return NextResponse.json({ error: error?.message ?? 'Konnte nicht speichern.' }, { status: 500 });
+      return apiError(500, 'INTERNAL_ERROR', error?.message ?? 'Konnte nicht speichern.');
     }
 
     const profileText = (body.school_profile_text ?? '').trim();
@@ -94,13 +97,13 @@ export async function PUT(req: NextRequest) {
       .update({ profile_text: profileText || null })
       .eq('school_number', schoolNumber);
     if (schoolErr) {
-      return NextResponse.json({ error: schoolErr.message }, { status: 500 });
+      return apiError(500, 'INTERNAL_ERROR', schoolErr.message);
     }
 
     return NextResponse.json({ settings: data, school_profile_text: profileText });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', msg);
   }
 }
 

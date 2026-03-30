@@ -5,6 +5,7 @@ import { isAdmin } from '../../../../lib/adminAuth';
 import { getDocumentText } from '../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../lib/indexing';
 import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { apiError } from '../../../../lib/apiError';
 
 type Payload = {
   limit?: number;
@@ -16,16 +17,16 @@ export async function POST(req: NextRequest) {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     if (!(await isAdmin(user.email, supabase))) {
-      return NextResponse.json({ error: 'Keine Admin-Berechtigung.' }, { status: 403 });
+      return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
     const access = await getUserAccessContext(user.email, supabase);
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
     const { data: docs, error } = await docsQuery;
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      return apiError(500, 'INTERNAL_ERROR', error.message);
     }
 
     const list = (docs ?? []) as Array<{
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', msg);
   }
 }
 

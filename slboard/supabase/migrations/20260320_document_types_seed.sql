@@ -9,7 +9,8 @@ values
   ('CURRICULUM', 'Curriculum', 1),
   ('VEREINBARUNG', 'Vereinbarung', 2),
   ('ELTERNBRIEF', 'Elternbrief', 1),
-  ('RUNDSCHREIBEN', 'Rundschreiben', 1)
+  ('RUNDSCHREIBEN', 'Rundschreiben', 1),
+  ('SITUATIVE_REGELUNG', 'Situative Regelung', 2)
 on conflict (code) do update
 set
   label = excluded.label,

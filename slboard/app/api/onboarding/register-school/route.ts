@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
+import { apiError } from '../../../../lib/apiError';
 
 type RegisterSchoolPayload = {
   schoolNumber?: string;
@@ -23,24 +24,24 @@ export async function POST(req: NextRequest) {
     const adminPassword = body.adminPassword ?? '';
 
     if (!/^\d{6}$/.test(schoolNumber)) {
-      return NextResponse.json({ error: 'Schulnummer muss 6-stellig sein.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Schulnummer muss 6-stellig sein.');
     }
     if (!schoolName) {
-      return NextResponse.json({ error: 'Schulname ist erforderlich.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Schulname ist erforderlich.');
     }
     if (!adminFullName) {
-      return NextResponse.json({ error: 'Name des Schuladmins ist erforderlich.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Name des Schuladmins ist erforderlich.');
     }
     if (!adminEmail || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(adminEmail)) {
-      return NextResponse.json({ error: 'Gültige Admin-E-Mail ist erforderlich.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Gültige Admin-E-Mail ist erforderlich.');
     }
     if (!adminPassword || adminPassword.length < 10) {
-      return NextResponse.json({ error: 'Passwort muss mindestens 10 Zeichen haben.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Passwort muss mindestens 10 Zeichen haben.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const { data: existingSchool } = await supabase
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
       .eq('school_number', schoolNumber)
       .maybeSingle();
     if (existingSchool) {
-      return NextResponse.json({ error: 'Diese Schule ist bereits registriert.' }, { status: 409 });
+      return apiError(409, 'BAD_REQUEST', 'Diese Schule ist bereits registriert.');
     }
 
     // 1) Auth-User erstellen
@@ -62,10 +63,7 @@ export async function POST(req: NextRequest) {
       },
     });
     if (authError || !createdAuth.user) {
-      return NextResponse.json(
-        { error: authError?.message ?? 'Schuladmin konnte nicht erstellt werden.' },
-        { status: 500 }
-      );
+      return apiError(500, 'INTERNAL_ERROR', authError?.message ?? 'Schuladmin konnte nicht erstellt werden.');
     }
 
     // 2) Schule + app_user + Rolle anlegen (bei Fehler Auth-User aufräumen)
@@ -94,10 +92,7 @@ export async function POST(req: NextRequest) {
       if (roleError) throw new Error(roleError.message);
     } catch (e) {
       await supabase.auth.admin.deleteUser(createdAuth.user.id).catch(() => {});
-      return NextResponse.json(
-        { error: e instanceof Error ? e.message : 'Schule konnte nicht registriert werden.' },
-        { status: 500 }
-      );
+      return apiError(500, 'INTERNAL_ERROR', e instanceof Error ? e.message : 'Schule konnte nicht registriert werden.');
     }
 
     return NextResponse.json({
@@ -107,7 +102,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }
 

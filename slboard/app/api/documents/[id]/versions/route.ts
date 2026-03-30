@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { apiError } from '../../../../../lib/apiError';
 
 /**
  * GET: Alle Versionen eines Dokuments (für Versionen-Historie).
@@ -14,12 +15,12 @@ export async function GET(
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const { id: documentId } = await params;
@@ -32,7 +33,7 @@ export async function GET(
       .single();
 
     if (docError || !doc) {
-      return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
+      return apiError(404, 'NOT_FOUND', 'Dokument nicht gefunden.');
     }
 
     const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
@@ -43,7 +44,7 @@ export async function GET(
       doc.responsible_unit ?? null
     );
     if (!mayAccessSchool || !mayAccess) {
-      return NextResponse.json({ error: 'Keine Berechtigung für dieses Dokument.' }, { status: 403 });
+      return apiError(403, 'FORBIDDEN', 'Keine Berechtigung für dieses Dokument.');
     }
 
     let versionsQuery = supabase
@@ -55,7 +56,7 @@ export async function GET(
     const { data: versions, error: verError } = await versionsQuery;
 
     if (verError) {
-      return NextResponse.json({ error: verError.message }, { status: 500 });
+      return apiError(500, 'INTERNAL_ERROR', verError.message);
     }
 
     return NextResponse.json({
@@ -70,6 +71,6 @@ export async function GET(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }

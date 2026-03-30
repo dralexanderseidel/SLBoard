@@ -7,6 +7,7 @@ import { callLlm, isLlmConfigured } from '../../../../../lib/llmClient';
 import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
 import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../../lib/aiQueryDebugLog';
+import { apiError } from '../../../../../lib/apiError';
 
 export const runtime = 'nodejs';
 
@@ -83,23 +84,23 @@ function normalizeAnalysis(raw: unknown): SteeringAnalysis | null {
 }
 
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     if (!isLlmConfigured()) {
-      return NextResponse.json({ error: 'LLM-Umgebungsvariablen sind nicht gesetzt.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'LLM-Konfiguration fehlt.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const { id: documentId } = await params;
@@ -108,14 +109,17 @@ export async function POST(
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
     const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
 
+    const body = (await req.json().catch(() => ({}))) as { force?: boolean };
+    const force = Boolean(body.force);
+
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, title, protection_class_id, responsible_unit, school_number, legal_reference')
+      .select('id, title, current_version_id, protection_class_id, responsible_unit, school_number, legal_reference, steering_analysis, steering_analysis_updated_at, steering_analysis_version_id')
       .eq('id', documentId)
       .single();
 
     if (docError || !doc) {
-      return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
+      return apiError(404, 'NOT_FOUND', 'Dokument nicht gefunden.');
     }
 
     const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
@@ -126,7 +130,19 @@ export async function POST(
       doc.responsible_unit ?? null
     );
     if (!mayAccessSchool || !mayAccess) {
-      return NextResponse.json({ error: 'Keine Berechtigung für dieses Dokument.' }, { status: 403 });
+      return apiError(403, 'FORBIDDEN', 'Keine Berechtigung für dieses Dokument.');
+    }
+
+    const cached = normalizeAnalysis((doc as { steering_analysis?: unknown }).steering_analysis);
+    const cachedVersionId = (doc as { steering_analysis_version_id?: string | null }).steering_analysis_version_id ?? null;
+    const currentVersionId = (doc as { current_version_id?: string | null }).current_version_id ?? null;
+    const cacheIsFresh = cached && cachedVersionId && currentVersionId && cachedVersionId === currentVersionId;
+    if (!force && cacheIsFresh) {
+      return NextResponse.json({
+        analysis: cached,
+        cached: true,
+        updatedAt: (doc as { steering_analysis_updated_at?: string | null }).steering_analysis_updated_at ?? null,
+      });
     }
 
     const extracted = await getDocumentText(documentId);
@@ -134,46 +150,54 @@ export async function POST(
     let basisText = (extracted ?? '').trim();
     if (!basisText) basisText = legalRef;
     if (!basisText || basisText.length < 60) {
-      return NextResponse.json(
-        { error: 'Für dieses Dokument steht kein ausreichender analysierbarer Text zur Verfügung.' },
-        { status: 400 }
-      );
+      return apiError(400, 'VALIDATION_ERROR', 'Für dieses Dokument steht kein ausreichender analysierbarer Text zur Verfügung.');
     }
 
     if (basisText.length > 14000) {
       basisText = basisText.slice(0, 14000) + '…';
     }
 
-    const systemPrompt = `Du bist ein Experte für Schulorganisation und institutionelle Steuerung im deutschen Schulsystem.
-
-Du analysierst schulische Dokumente nicht inhaltlich, sondern strukturell entlang eines Steuerungsmodells.
-
-Das Modell umfasst vier Dimensionen:
-1. Tragfähigkeit (Organisation)
-2. Belastungsgrad (Dokument)
-3. Entscheidungsstruktur
-4. Verbindlichkeit
-
-Arbeite streng textbasiert:
-- Keine Annahmen außerhalb des Dokuments
-- Keine Interpretation von Intentionen ohne Textbeleg
-- Präzise, kurze Begründungen (maximal 2 Sätze)
-
-Nutze ausschließlich diese Skala:
-- niedrig
-- mittel
-- hoch
-
-Bestimme die PASSUNG:
-- gut → Tragfähigkeit ≥ Belastungsgrad
-- kritisch → Tragfähigkeit < Belastungsgrad
-
-Leite daraus die Gesamtbewertung ab:
-- niedriger Steuerungsbedarf
-- mittlerer Steuerungsbedarf
-- hoher Steuerungsbedarf
-
-Antworte ausschließlich als JSON im geforderten Format.`;
+    const systemPrompt = `Du bist ein Experte für Schul-Governance. Deine Aufgabe ist die strukturelle Analyse von Schuldokumenten (z.B. Konzepte, Geschäftsordnungen, Beschlüsse).
+Analysemethode: Bewerte das Dokument ausschließlich anhand der explizit genannten Informationen. Falls Informationen zur Dimension 'Tragfähigkeit' im Dokument fehlen (z.B. Ressourcenklärung), bewerte diese basierend darauf, wie realistisch die Umsetzung der genannten Maßnahmen im Standardbetrieb erscheint.
+Dimensionen & Logik:
+1. Tragfähigkeit: Grad der personellen/strukturellen Ressourcen, die im Dokument für die Umsetzung explizit ausgewiesen oder implizit vorausgesetzt werden.
+2. Belastungsgrad: Komplexität, Zeitaufwand und Änderungsdruck, den die Inhalte des Dokuments für das Kollegium erzeugen.
+3. Entscheidungsstruktur: Trennschärfe von Verantwortlichkeiten (Wer? Was? Wann?).
+4. Verbindlichkeit: Sprachliche Präzision (Muss/Soll/Kann) und zeitliche Befristung/Überprüfung.
+Berechnung der PASSUNG:
+- Vergleiche die Scores von Tragfähigkeit und Belastungsgrad.
+- gut: Tragfähigkeit ist gleichwertig oder höher als der Belastungsgrad.
+- kritisch: Der Belastungsgrad übersteigt die erkennbare Tragfähigkeit.
+Output-Regeln:
+- Nutze für Scores ausschließlich: niedrig, mittel, hoch.
+- Begründungen: Maximal 2 Sätze, strenger Textbeleg.
+- Format: JSON
+{
+  "tragfaehigkeit": {
+    "score": "",
+    "begruendung": ""
+  },
+  "belastungsgrad": {
+    "score": "",
+    "begruendung": ""
+  },
+  "entscheidungsstruktur": {
+    "score": "",
+    "begruendung": ""
+  },
+  "verbindlichkeit": {
+    "score": "",
+    "begruendung": ""
+  },
+  "passung": {
+    "score": "",
+    "begruendung": ""
+  },
+  "gesamtbewertung": {
+    "score": "",
+    "begruendung": ""
+  }
+}`;
 
     const schoolContextBlock = schoolProfile ? `Schul-Steckbrief:\n${schoolProfile}\n\n` : '';
 
@@ -211,7 +235,9 @@ Antwortformat:
 
     let didRetry = false;
     let usedRepair = false;
-    let raw = await callLlm(systemPrompt, userPrompt);
+    let raw = await callLlm(systemPrompt, userPrompt, {
+      timeoutMs: aiSettings.llm_timeout_ms,
+    });
     let parsed = extractJsonObject(raw);
     let analysis = normalizeAnalysis(parsed);
 
@@ -228,7 +254,9 @@ WICHTIG:
       const retryUserPrompt = `${userPrompt}
 
 Antworte jetzt ausschließlich mit einem syntaktisch gültigen JSON-Objekt.`;
-      raw = await callLlm(retrySystemPrompt, retryUserPrompt);
+      raw = await callLlm(retrySystemPrompt, retryUserPrompt, {
+        timeoutMs: aiSettings.llm_timeout_ms,
+      });
       parsed = extractJsonObject(raw);
       analysis = normalizeAnalysis(parsed);
     }
@@ -253,7 +281,9 @@ Keine Markdown-Backticks, keine Zusatztexte.`;
 Defekte Antwort:
 ${raw}
 `;
-      raw = await callLlm(repairSystemPrompt, repairUserPrompt);
+      raw = await callLlm(repairSystemPrompt, repairUserPrompt, {
+        timeoutMs: aiSettings.llm_timeout_ms,
+      });
       parsed = extractJsonObject(raw);
       analysis = normalizeAnalysis(parsed);
     }
@@ -275,16 +305,24 @@ ${raw}
     }
 
     if (!analysis) {
-      return NextResponse.json(
-        { error: 'KI-Antwort konnte nicht als gültige Analyse verarbeitet werden.' },
-        { status: 500 }
-      );
+      return apiError(500, 'INTERNAL_ERROR', 'KI-Antwort konnte nicht als gültige Analyse verarbeitet werden.');
     }
 
-    return NextResponse.json({ analysis });
+    let updateQuery = supabase
+      .from('documents')
+      .update({
+        steering_analysis: analysis,
+        steering_analysis_updated_at: new Date().toISOString(),
+        steering_analysis_version_id: currentVersionId,
+      })
+      .eq('id', documentId);
+    if (docSchool) updateQuery = updateQuery.eq('school_number', docSchool);
+    await updateQuery;
+
+    return NextResponse.json({ analysis, cached: false });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', msg);
   }
 }
 

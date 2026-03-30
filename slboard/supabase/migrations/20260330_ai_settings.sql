@@ -6,6 +6,7 @@ create table if not exists public.ai_settings (
   chunk_chars integer not null default 2500,
   chunk_overlap_chars integer not null default 300,
   max_chunks_per_doc integer not null default 3,
+  llm_timeout_ms integer not null default 45000,
   debug_log_enabled boolean not null default false,
   updated_at timestamptz not null default now()
 );

@@ -437,6 +437,7 @@ function DraftAssistantContent() {
                   <option value="BESCHLUSS">Beschluss</option>
                   <option value="CURRICULUM">Curriculum</option>
                   <option value="VEREINBARUNG">Vereinbarung</option>
+                  <option value="SITUATIVE_REGELUNG">Situative Regelung</option>
                 </select>
               </div>
 

@@ -162,6 +162,7 @@ export default function DocumentsPage() {
     if (code === 'VEREINBARUNG') return 'Vereinbarung';
     if (code === 'ELTERNBRIEF') return 'Elternbrief';
     if (code === 'RUNDSCHREIBEN') return 'Rundschreiben';
+    if (code === 'SITUATIVE_REGELUNG') return 'Situative Regelung';
     return code;
   };
 
@@ -584,6 +585,7 @@ export default function DocumentsPage() {
               <option value="VEREINBARUNG">Vereinbarung</option>
               <option value="ELTERNBRIEF">Elternbrief</option>
               <option value="RUNDSCHREIBEN">Rundschreiben</option>
+              <option value="SITUATIVE_REGELUNG">Situative Regelung</option>
             </select>
           </div>
 

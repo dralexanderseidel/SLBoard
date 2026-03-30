@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '../../../../../lib/supabaseServerCli
 import { getDocumentText } from '../../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../../lib/indexing';
 import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { apiError } from '../../../../../lib/apiError';
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
@@ -41,12 +42,12 @@ export async function POST(
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const { id: documentId } = await params;
@@ -59,7 +60,7 @@ export async function POST(
       .single();
 
     if (docError || !doc) {
-      return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
+      return apiError(404, 'NOT_FOUND', 'Dokument nicht gefunden.');
     }
 
     const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
@@ -78,7 +79,7 @@ export async function POST(
         doc.responsible_unit ?? null
       );
     if (!mayEdit) {
-      return NextResponse.json({ error: 'Keine Berechtigung, dieses Dokument zu bearbeiten.' }, { status: 403 });
+      return apiError(403, 'FORBIDDEN', 'Keine Berechtigung, dieses Dokument zu bearbeiten.');
     }
 
     const formData = await req.formData();
@@ -86,7 +87,7 @@ export async function POST(
     const comment = (formData.get('comment') as string)?.trim() || 'Neue Version';
 
     if (!file || !(file instanceof File)) {
-      return NextResponse.json({ error: 'Keine gültige Datei übergeben.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Keine gültige Datei übergeben.');
     }
     if (file.size > MAX_FILE_SIZE_BYTES) {
       return NextResponse.json(
@@ -108,14 +109,14 @@ export async function POST(
       if (inferred) {
         mimeType = inferred;
       } else {
-        return NextResponse.json({ error: 'Nur PDF und Word (.pdf, .doc, .docx, .odt) erlaubt.' }, { status: 400 });
+        return apiError(400, 'VALIDATION_ERROR', 'Nur PDF und Word (.pdf, .doc, .docx, .odt) erlaubt.');
       }
     }
 
     const ext = MIME_TO_EXT[mimeType] ?? '.pdf';
     const safeName = sanitizeFilename(file.name);
     if (safeName.includes('..') || safeName.includes('/') || safeName.includes('\\')) {
-      return NextResponse.json({ error: 'Ungültiger Dateiname.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Ungültiger Dateiname.');
     }
 
     // Bestehende Versionsnummern holen
@@ -143,7 +144,7 @@ export async function POST(
 
     if (storageError) {
       return NextResponse.json(
-        { error: `Speicher-Fehler: ${storageError.message}` },
+        { error: `Speicher-Fehler: ${storageError.message}`, code: 'STORAGE_ERROR' },
         { status: 500 }
       );
     }
@@ -168,7 +169,7 @@ export async function POST(
     if (verError || !verData) {
       await supabase.storage.from('documents').remove([filePath]);
       return NextResponse.json(
-        { error: verError?.message ?? 'Version konnte nicht angelegt werden.' },
+        { error: verError?.message ?? 'Version konnte nicht angelegt werden.', code: 'INTERNAL_ERROR' },
         { status: 500 }
       );
     }
@@ -182,7 +183,7 @@ export async function POST(
 
     if (updateError) {
       return NextResponse.json(
-        { error: 'Aktuelle Version konnte nicht gesetzt werden.' },
+        { error: 'Aktuelle Version konnte nicht gesetzt werden.', code: 'INTERNAL_ERROR' },
         { status: 500 }
       );
     }
@@ -237,6 +238,6 @@ export async function POST(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }

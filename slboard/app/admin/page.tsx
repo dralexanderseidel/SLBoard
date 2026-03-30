@@ -47,6 +47,7 @@ export default function AdminPage() {
     chunk_chars: 2500,
     chunk_overlap_chars: 300,
     max_chunks_per_doc: 3,
+    llm_timeout_ms: 45000,
     debug_log_enabled: false,
     school_profile_text: '',
   });
@@ -103,6 +104,7 @@ export default function AdminPage() {
           chunk_chars: Number(s.chunk_chars) || 2500,
           chunk_overlap_chars: Number(s.chunk_overlap_chars) || 300,
           max_chunks_per_doc: Number(s.max_chunks_per_doc) || 3,
+          llm_timeout_ms: Number(s.llm_timeout_ms) || 45000,
           debug_log_enabled: Boolean(s.debug_log_enabled),
           school_profile_text: (data.school_profile_text as string | undefined) ?? '',
         });
@@ -377,6 +379,17 @@ export default function AdminPage() {
                 type="number"
                 value={aiForm.max_chunks_per_doc}
                 onChange={(e) => setAiForm((p) => ({ ...p, max_chunks_per_doc: Number(e.target.value) }))}
+                className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                LLM-Timeout (ms)
+              </label>
+              <input
+                type="number"
+                value={aiForm.llm_timeout_ms}
+                onChange={(e) => setAiForm((p) => ({ ...p, llm_timeout_ms: Number(e.target.value) }))}
                 className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
               />
             </div>

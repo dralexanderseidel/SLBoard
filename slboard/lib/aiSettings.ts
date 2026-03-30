@@ -6,6 +6,7 @@ export type AiSettingsRow = {
   chunk_chars: number;
   chunk_overlap_chars: number;
   max_chunks_per_doc: number;
+  llm_timeout_ms: number;
   debug_log_enabled: boolean;
   updated_at: string;
 };
@@ -15,6 +16,7 @@ const DEFAULTS = {
   chunk_chars: 2500,
   chunk_overlap_chars: 300,
   max_chunks_per_doc: 3,
+  llm_timeout_ms: 45000,
   debug_log_enabled: false,
 };
 
@@ -32,7 +34,7 @@ export async function getAiSettingsForSchool(schoolNumber: string | null | undef
   const { data, error } = await supabase
     .from('ai_settings')
     .select(
-      'school_number, max_text_per_doc, chunk_chars, chunk_overlap_chars, max_chunks_per_doc, debug_log_enabled, updated_at'
+      'school_number, max_text_per_doc, chunk_chars, chunk_overlap_chars, max_chunks_per_doc, llm_timeout_ms, debug_log_enabled, updated_at'
     )
     .eq('school_number', sn)
     .maybeSingle();

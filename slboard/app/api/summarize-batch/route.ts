@@ -4,6 +4,8 @@ import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { canAccessSchool, getUserAccessContext } from '../../../lib/documentAccess';
+import { apiError } from '../../../lib/apiError';
+import { getAiSettingsForSchool } from '../../../lib/aiSettings';
 
 export const runtime = 'nodejs';
 
@@ -18,24 +20,25 @@ export async function POST(req: NextRequest) {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const { documentIds }: SummarizeBatchPayload = await req.json();
 
     if (!Array.isArray(documentIds) || documentIds.length === 0) {
-      return NextResponse.json({ error: 'Keine documentIds übergeben.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Keine documentIds übergeben.');
     }
 
     if (!isLlmConfigured()) {
-      return NextResponse.json({ error: 'LLM-Umgebungsvariablen sind nicht gesetzt.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'LLM-Konfiguration fehlt.');
     }
 
     const supabase = supabaseServer();
     const access = await getUserAccessContext(user.email, supabase);
+    const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
 
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const uniqueIds = Array.from(new Set(documentIds.filter((id) => typeof id === 'string' && id.trim().length > 0)));
@@ -87,7 +90,9 @@ Inhalt:
 ${fullContent}
 `.trim();
 
-        const summary = await callLlm(systemPrompt, userPrompt);
+        const summary = await callLlm(systemPrompt, userPrompt, {
+          timeoutMs: aiSettings.llm_timeout_ms,
+        });
         const summaryText = summary || 'Keine Zusammenfassung vom LLM zurückgegeben.';
 
         let updateQuery = supabase
@@ -107,11 +112,9 @@ ${fullContent}
 
     const failCount = uniqueIds.length - okCount;
     return NextResponse.json({ okCount, failCount, results });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message ?? 'Unbekannter Fehler in /api/summarize-batch' },
-      { status: 500 },
-    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unbekannter Fehler in /api/summarize-batch';
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }
 

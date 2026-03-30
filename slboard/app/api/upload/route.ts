@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { getDocumentText } from '../../../lib/documentText';
 import { buildSearchIndex } from '../../../lib/indexing';
 import { getUserAccessContext } from '../../../lib/documentAccess';
+import { apiError } from '../../../lib/apiError';
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const ALLOWED_MIME_TYPES = [
@@ -33,18 +34,12 @@ export async function POST(req: NextRequest) {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json(
-        { error: 'Anmeldung erforderlich. Bitte melden Sie sich an.' },
-        { status: 401 }
-      );
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json(
-        { error: 'Supabase-Service ist nicht konfiguriert (SUPABASE_SERVICE_ROLE_KEY fehlt).' },
-        { status: 500 }
-      );
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const formData = await req.formData();
@@ -59,28 +54,26 @@ export async function POST(req: NextRequest) {
 
     // Validierung
     if (!file || !(file instanceof File)) {
-      return NextResponse.json({ error: 'Keine gültige Datei übergeben.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Keine gültige Datei übergeben.');
     }
     if (!title) {
-      return NextResponse.json({ error: 'Titel ist Pflichtfeld.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Titel ist ein Pflichtfeld.');
     }
     if (!date) {
-      return NextResponse.json({ error: 'Datum ist Pflichtfeld.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Datum ist ein Pflichtfeld.');
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      return NextResponse.json(
-        { error: `Datei ist zu groß. Maximale Größe: ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB.` },
-        { status: 400 }
+      return apiError(
+        400,
+        'VALIDATION_ERROR',
+        `Datei ist zu groß. Maximale Größe: ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB.`
       );
     }
 
     const mimeType = file.type || 'application/octet-stream';
     if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
-      return NextResponse.json(
-        { error: 'Nur PDF- und Word-Dateien (.pdf, .doc, .docx, .odt) sind erlaubt.' },
-        { status: 400 }
-      );
+      return apiError(400, 'VALIDATION_ERROR', 'Nur PDF- und Word-Dateien (.pdf, .doc, .docx, .odt) sind erlaubt.');
     }
 
     const ext = getExtension(mimeType);
@@ -88,7 +81,7 @@ export async function POST(req: NextRequest) {
 
     // Pfad-Traversal verhindern
     if (safeName.includes('..') || safeName.includes('/') || safeName.includes('\\')) {
-      return NextResponse.json({ error: 'Ungültiger Dateiname.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Ungültiger Dateiname.');
     }
 
     const protectionId = Math.max(1, Math.min(3, parseInt(protectionClass, 10) || 1));
@@ -115,10 +108,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (docError || !docData) {
-      return NextResponse.json(
-        { error: docError?.message ?? 'Dokument konnte nicht angelegt werden.' },
-        { status: 500 }
-      );
+      return apiError(500, 'INTERNAL_ERROR', docError?.message ?? 'Dokument konnte nicht angelegt werden.');
     }
 
     const documentId = docData.id as string;
@@ -137,10 +127,7 @@ export async function POST(req: NextRequest) {
 
     if (storageError) {
       await supabase.from('documents').delete().eq('id', documentId).eq('school_number', schoolNumber);
-      return NextResponse.json(
-        { error: `Speicher-Fehler: ${storageError.message}` },
-        { status: 500 }
-      );
+      return apiError(500, 'STORAGE_ERROR', `Speicher-Fehler: ${storageError.message}`);
     }
 
     // 3) Version mit file_uri anlegen
@@ -162,10 +149,7 @@ export async function POST(req: NextRequest) {
     if (verError || !verData) {
       await supabase.storage.from('documents').remove([filePath]);
       await supabase.from('documents').delete().eq('id', documentId).eq('school_number', schoolNumber);
-      return NextResponse.json(
-        { error: verError?.message ?? 'Dokumentversion konnte nicht angelegt werden.' },
-        { status: 500 }
-      );
+      return apiError(500, 'INTERNAL_ERROR', verError?.message ?? 'Dokumentversion konnte nicht angelegt werden.');
     }
 
     const versionId = verData.id as string;
@@ -178,10 +162,7 @@ export async function POST(req: NextRequest) {
       .eq('school_number', schoolNumber);
 
     if (updateDocError) {
-      return NextResponse.json(
-        { error: updateDocError.message ?? 'current_version_id konnte nicht gesetzt werden.' },
-        { status: 500 }
-      );
+      return apiError(500, 'INTERNAL_ERROR', updateDocError.message ?? 'current_version_id konnte nicht gesetzt werden.');
     }
 
     // 5) Phase A: Dokument indexieren (search_text + keywords)
@@ -213,6 +194,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler beim Upload.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }

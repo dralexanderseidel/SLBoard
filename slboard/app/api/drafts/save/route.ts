@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { apiError } from '../../../../lib/apiError';
 
 const createdById = '00000000-0000-0000-0000-000000000001';
 
@@ -13,12 +14,12 @@ export async function POST(req: NextRequest) {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
     const access = await getUserAccessContext(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
@@ -30,10 +31,7 @@ export async function POST(req: NextRequest) {
     const draftBody = (body.body as string)?.trim();
 
     if (!subject || !draftBody) {
-      return NextResponse.json(
-        { error: 'Betreff und Entwurfstext sind Pflicht.' },
-        { status: 400 }
-      );
+      return apiError(400, 'VALIDATION_ERROR', 'Betreff und Entwurfstext sind Pflicht.');
     }
 
     const today = new Date().toISOString().slice(0, 10);
@@ -58,10 +56,7 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (docError || !doc?.id) {
-      return NextResponse.json(
-        { error: docError?.message ?? 'Dokument konnte nicht angelegt werden.' },
-        { status: 500 }
-      );
+      return apiError(500, 'INTERNAL_ERROR', docError?.message ?? 'Dokument konnte nicht angelegt werden.');
     }
 
     const documentId = doc.id;
@@ -91,7 +86,7 @@ export async function POST(req: NextRequest) {
         ? 'Speicher-Fehler: Der Storage-Bucket "documents" erlaubt aktuell keinen Upload mit MIME-Type text/plain. Bitte in Supabase unter Storage > Bucket "documents" den Typ text/plain in allowed_mime_types ergänzen.'
         : `Speicher-Fehler: ${rawMsg}`;
       return NextResponse.json(
-        { error: friendlyMsg },
+        { error: friendlyMsg, code: 'STORAGE_ERROR' },
         { status: 500 }
       );
     }
@@ -114,10 +109,7 @@ export async function POST(req: NextRequest) {
     if (verError || !verData) {
       await supabase.storage.from('documents').remove([filePath]);
       await supabase.from('documents').delete().eq('id', documentId).eq('school_number', schoolNumber);
-      return NextResponse.json(
-        { error: verError?.message ?? 'Version konnte nicht angelegt werden.' },
-        { status: 500 }
-      );
+      return apiError(500, 'INTERNAL_ERROR', verError?.message ?? 'Version konnte nicht angelegt werden.');
     }
 
     const { error: updateError } = await supabase
@@ -127,10 +119,7 @@ export async function POST(req: NextRequest) {
       .eq('school_number', schoolNumber);
 
     if (updateError) {
-      return NextResponse.json(
-        { error: 'Aktuelle Version konnte nicht gesetzt werden.' },
-        { status: 500 }
-      );
+      return apiError(500, 'INTERNAL_ERROR', 'Aktuelle Version konnte nicht gesetzt werden.');
     }
 
     return NextResponse.json({
@@ -140,6 +129,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }

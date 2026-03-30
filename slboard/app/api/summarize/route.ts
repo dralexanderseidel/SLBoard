@@ -4,6 +4,8 @@ import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { canAccessSchool, getUserAccessContext } from '../../../lib/documentAccess';
+import { apiError } from '../../../lib/apiError';
+import { getAiSettingsForSchool } from '../../../lib/aiSettings';
 
 export const runtime = 'nodejs';
 
@@ -20,10 +22,13 @@ export async function POST(req: NextRequest) {
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const { title, type, createdAt, text, documentId }: SummarizePayload = await req.json();
+    const supabase = supabaseServer();
+    const access = supabase ? await getUserAccessContext(user.email, supabase) : null;
+    const aiSettings = await getAiSettingsForSchool(access?.schoolNumber ?? null);
 
     let basisText = text ?? '';
     const MAX_SUMMARY_CHARS = 12000;
@@ -42,17 +47,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (!title && !basisText) {
-      return NextResponse.json(
-        { error: 'Es wurden keine ausreichenden Inhalte für eine Zusammenfassung übergeben.' },
-        { status: 400 },
-      );
+      return apiError(400, 'VALIDATION_ERROR', 'Es wurden keine ausreichenden Inhalte für eine Zusammenfassung übergeben.');
     }
 
     if (!isLlmConfigured()) {
-      return NextResponse.json(
-        { error: 'LLM-Umgebungsvariablen sind nicht gesetzt.' },
-        { status: 500 },
-      );
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'LLM-Konfiguration fehlt.');
     }
 
     const header = [
@@ -74,14 +73,14 @@ Inhalt:
 ${fullContent}
 `.trim();
 
-    const summary = await callLlm(systemPrompt, userPrompt);
+    const summary = await callLlm(systemPrompt, userPrompt, {
+      timeoutMs: aiSettings.llm_timeout_ms,
+    });
     const summaryText = summary || 'Keine Zusammenfassung vom LLM zurückgegeben.';
 
     // Zusammenfassung in DB speichern, wenn documentId vorhanden
     if (documentId) {
-      const supabase = supabaseServer();
       if (supabase) {
-        const access = await getUserAccessContext(user.email, supabase);
         const { data: doc } = await supabase
           .from('documents')
           .select('id, school_number')
@@ -89,7 +88,7 @@ ${fullContent}
           .single();
         const docSchool = (doc as { school_number?: string | null } | null)?.school_number ?? null;
         if (!canAccessSchool(access, docSchool)) {
-          return NextResponse.json({ error: 'Keine Berechtigung für dieses Dokument.' }, { status: 403 });
+          return apiError(403, 'FORBIDDEN', 'Keine Berechtigung für dieses Dokument.');
         }
         let updateQuery = supabase
           .from('documents')
@@ -101,11 +100,9 @@ ${fullContent}
     }
 
     return NextResponse.json({ summary: summaryText });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message ?? 'Unbekannter Fehler in /api/summarize' },
-      { status: 500 },
-    );
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unbekannter Fehler in /api/summarize';
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }
 

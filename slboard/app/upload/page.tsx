@@ -127,6 +127,7 @@ export default function UploadPage() {
                 <option value="VEREINBARUNG">Vereinbarung</option>
                 <option value="ELTERNBRIEF">Elternbrief</option>
                 <option value="RUNDSCHREIBEN">Rundschreiben</option>
+                <option value="SITUATIVE_REGELUNG">Situative Regelung</option>
               </select>
             </div>
 

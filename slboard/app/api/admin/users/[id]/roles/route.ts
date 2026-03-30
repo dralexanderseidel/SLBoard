@@ -3,6 +3,7 @@ import { supabaseServer } from '../../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../../lib/supabaseServerClient';
 import { isAdmin } from '../../../../../../lib/adminAuth';
 import { canAccessSchool, getUserAccessContext } from '../../../../../../lib/documentAccess';
+import { apiError } from '../../../../../../lib/apiError';
 
 export async function PATCH(
   req: NextRequest,
@@ -12,16 +13,16 @@ export async function PATCH(
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     if (!(await isAdmin(user.email, supabase))) {
-      return NextResponse.json({ error: 'Keine Admin-Berechtigung.' }, { status: 403 });
+      return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
     const access = await getUserAccessContext(user.email, supabase);
@@ -37,7 +38,7 @@ export async function PATCH(
       .single();
     const targetSchool = (target as { school_number?: string | null } | null)?.school_number ?? null;
     if (!canAccessSchool(access, targetSchool)) {
-      return NextResponse.json({ error: 'Keine Berechtigung für diesen Nutzer.' }, { status: 403 });
+      return apiError(403, 'FORBIDDEN', 'Keine Berechtigung für diesen Nutzer.');
     }
 
     await supabase.from('user_roles').delete().eq('user_id', userId);
@@ -47,13 +48,13 @@ export async function PATCH(
         roles.map((role_code: string) => ({ user_id: userId, role_code }))
       );
       if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        return apiError(500, 'INTERNAL_ERROR', error.message);
       }
     }
 
     return NextResponse.json({ roles });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', msg);
   }
 }

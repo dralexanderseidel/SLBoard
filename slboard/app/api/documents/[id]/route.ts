@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
+import { apiError } from '../../../../lib/apiError';
 
 /** Erlaubte Workflow-Übergänge: Entwurf → Freigegeben → Veröffentlicht */
 const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -21,12 +22,12 @@ export async function PATCH(
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const { id: documentId } = await params;
@@ -39,7 +40,7 @@ export async function PATCH(
       .single();
 
     if (docError || !doc) {
-      return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
+      return apiError(404, 'NOT_FOUND', 'Dokument nicht gefunden.');
     }
 
     const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
@@ -55,10 +56,7 @@ export async function PATCH(
       doc.responsible_unit ?? null
     );
     if (!mayAccess) {
-      return NextResponse.json(
-        { error: 'Keine Berechtigung für dieses Dokument.' },
-        { status: 403 }
-      );
+      return apiError(403, 'FORBIDDEN', 'Keine Berechtigung für dieses Dokument.');
     }
 
     const body = (await req.json()) as Record<string, unknown>;
@@ -71,14 +69,12 @@ export async function PATCH(
       const currentStatus = (doc as { status?: string }).status ?? 'ENTWURF';
       const allowed = ALLOWED_STATUS_TRANSITIONS[currentStatus] ?? [];
       if (!allowed.includes(body.status)) {
-        return NextResponse.json(
-          {
-            error:
-              currentStatus === 'VEROEFFENTLICHT'
-                ? 'Veröffentlichte Dokumente können nicht mehr geändert werden.'
-                : `Status-Wechsel von "${currentStatus}" zu "${body.status}" ist nicht erlaubt. Nächster Schritt: ${allowed.join(' oder ') || 'keiner'}.`,
-          },
-          { status: 400 }
+        return apiError(
+          400,
+          'VALIDATION_ERROR',
+          currentStatus === 'VEROEFFENTLICHT'
+            ? 'Veröffentlichte Dokumente können nicht mehr geändert werden.'
+            : `Status-Wechsel von "${currentStatus}" zu "${body.status}" ist nicht erlaubt. Nächster Schritt: ${allowed.join(' oder ') || 'keiner'}.`
         );
       }
       updates.status = body.status;
@@ -115,7 +111,7 @@ export async function PATCH(
     }
 
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: 'Keine gültigen Felder zum Aktualisieren.' }, { status: 400 });
+      return apiError(400, 'VALIDATION_ERROR', 'Keine gültigen Felder zum Aktualisieren.');
     }
 
     let oldDocQuery = supabase.from('documents').select('*').eq('id', documentId);
@@ -127,7 +123,7 @@ export async function PATCH(
     const { error: updateError } = await updateQuery;
 
     if (updateError) {
-      return NextResponse.json({ error: updateError.message }, { status: 500 });
+      return apiError(500, 'INTERNAL_ERROR', updateError.message);
     }
 
     const oldValues = oldDoc as Record<string, unknown> | null;
@@ -151,7 +147,7 @@ export async function PATCH(
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }
 
@@ -166,12 +162,12 @@ export async function DELETE(
     const client = await createServerSupabaseClient();
     const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
     if (!user?.email) {
-      return NextResponse.json({ error: 'Anmeldung erforderlich.' }, { status: 401 });
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
     }
 
     const supabase = supabaseServer();
     if (!supabase) {
-      return NextResponse.json({ error: 'Service nicht verfügbar.' }, { status: 500 });
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
     const { id: documentId } = await params;
@@ -184,7 +180,7 @@ export async function DELETE(
       .single();
 
     if (docError || !doc) {
-      return NextResponse.json({ error: 'Dokument nicht gefunden.' }, { status: 404 });
+      return apiError(404, 'NOT_FOUND', 'Dokument nicht gefunden.');
     }
 
     const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
@@ -200,10 +196,7 @@ export async function DELETE(
       doc.responsible_unit ?? null
     );
     if (!mayAccess) {
-      return NextResponse.json(
-        { error: 'Keine Berechtigung, dieses Dokument zu löschen.' },
-        { status: 403 }
-      );
+      return apiError(403, 'FORBIDDEN', 'Keine Berechtigung, dieses Dokument zu löschen.');
     }
 
     let versionsQuery = supabase
@@ -251,15 +244,12 @@ export async function DELETE(
     const { error: deleteDocError } = await delDoc;
 
     if (deleteDocError) {
-      return NextResponse.json(
-        { error: deleteDocError.message ?? 'Dokument konnte nicht gelöscht werden.' },
-        { status: 500 }
-      );
+      return apiError(500, 'INTERNAL_ERROR', deleteDocError.message ?? 'Dokument konnte nicht gelöscht werden.');
     }
 
     return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiError(500, 'INTERNAL_ERROR', message);
   }
 }

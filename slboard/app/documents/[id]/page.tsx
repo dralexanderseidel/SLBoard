@@ -18,6 +18,8 @@ type DocumentDetail = {
   summary: string | null;
   review_date: string | null;
   summary_updated_at?: string | null;
+  steering_analysis?: SteeringAnalysis | null;
+  steering_analysis_updated_at?: string | null;
 };
 
 type VersionInfo = {
@@ -48,6 +50,7 @@ const DOC_TYPES = [
   'VEREINBARUNG',
   'ELTERNBRIEF',
   'RUNDSCHREIBEN',
+  'SITUATIVE_REGELUNG',
 ];
 const ORG_UNITS = ['Schulleitung', 'Sekretariat', 'Fachschaft Deutsch', 'Fachschaft Mathematik', 'Fachschaft Englisch', 'Steuergruppe', 'Lehrkräfte'];
 
@@ -82,6 +85,7 @@ export default function DocumentDetailPage() {
   const [steeringAnalysis, setSteeringAnalysis] = useState<SteeringAnalysis | null>(null);
   const [steeringLoading, setSteeringLoading] = useState(false);
   const [steeringError, setSteeringError] = useState<string | null>(null);
+  const [steeringUpdatedAt, setSteeringUpdatedAt] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<DocumentDetail>>({});
   const [saveLoading, setSaveLoading] = useState(false);
@@ -126,7 +130,7 @@ export default function DocumentDetailPage() {
       const { data, error } = await supabase
         .from('documents')
         .select(
-          'id, title, document_type_code, created_at, status, protection_class_id, gremium, responsible_unit, legal_reference, summary, summary_updated_at, review_date, current_version_id',
+          'id, title, document_type_code, created_at, status, protection_class_id, gremium, responsible_unit, legal_reference, summary, summary_updated_at, review_date, current_version_id, steering_analysis, steering_analysis_updated_at',
         )
         .eq('id', params.id)
         .single();
@@ -139,6 +143,8 @@ export default function DocumentDetailPage() {
         setDoc(typed);
         setSummary(typed?.summary?.trim() ?? null);
         setSummaryUpdatedAt(typed?.summary_updated_at ?? null);
+        setSteeringAnalysis((typed.steering_analysis as SteeringAnalysis | null) ?? null);
+        setSteeringUpdatedAt(typed.steering_analysis_updated_at ?? null);
 
         if (typed.current_version_id) {
           const { data: verData, error: verError } = await supabase
@@ -506,20 +512,26 @@ export default function DocumentDetailPage() {
     }
   };
 
-  const handleSteeringAnalysis = async () => {
+  const handleSteeringAnalysis = async (force = false) => {
     if (!params?.id) return;
     setSteeringLoading(true);
     setSteeringError(null);
-    setSteeringAnalysis(null);
     try {
       const res = await fetch(`/api/documents/${params.id}/steering-analysis`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
       });
-      const data = (await res.json()) as { analysis?: SteeringAnalysis; error?: string };
+      const data = (await res.json()) as { analysis?: SteeringAnalysis; error?: string; updatedAt?: string | null };
       if (!res.ok || !data.analysis) {
         throw new Error(data.error ?? 'Analyse konnte nicht erstellt werden.');
       }
       setSteeringAnalysis(data.analysis);
+      if (data.updatedAt !== undefined) {
+        setSteeringUpdatedAt(data.updatedAt ?? null);
+      } else if (force) {
+        setSteeringUpdatedAt(new Date().toISOString());
+      }
     } catch (e) {
       setSteeringError(e instanceof Error ? e.message : 'Analyse konnte nicht erstellt werden.');
     } finally {
@@ -527,7 +539,15 @@ export default function DocumentDetailPage() {
     }
   };
 
-  const trafficLight = (score: 'niedrig' | 'mittel' | 'hoch') => {
+  const trafficLight = (
+    score: 'niedrig' | 'mittel' | 'hoch',
+    invert = false
+  ) => {
+    if (invert) {
+      if (score === 'niedrig') return 'bg-red-500';
+      if (score === 'mittel') return 'bg-amber-400';
+      return 'bg-emerald-500';
+    }
     if (score === 'niedrig') return 'bg-emerald-500';
     if (score === 'mittel') return 'bg-amber-400';
     return 'bg-red-500';
@@ -541,6 +561,7 @@ export default function DocumentDetailPage() {
     if (code === 'CURRICULUM') return 'Curriculum';
     if (code === 'RUNDSCHREIBEN') return 'Rundschreiben';
     if (code === 'VEREINBARUNG') return 'Vereinbarung';
+    if (code === 'SITUATIVE_REGELUNG') return 'Situative Regelung';
     return code;
   };
 
@@ -895,7 +916,7 @@ export default function DocumentDetailPage() {
                       disabled={docAskLoading || !docQuestionInput.trim()}
                       className="h-8 rounded bg-blue-600 px-3 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
                     >
-                      {docAskLoading ? '…' : 'Fragen'}
+                      {docAskLoading ? '…' : 'fragen'}
                     </button>
                   </div>
                   {docAskError && <p className="mt-1 text-[11px] text-red-500">{docAskError}</p>}
@@ -943,6 +964,11 @@ export default function DocumentDetailPage() {
                     {steeringLoading ? 'Analyse läuft…' : 'Analyse des Steuerungsbedarfs'}
                   </button>
                   {steeringError && <p className="mt-2 text-[11px] text-red-500">{steeringError}</p>}
+                  {steeringUpdatedAt && (
+                    <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Letzte Analyse: {new Date(steeringUpdatedAt).toLocaleString('de-DE')}
+                    </p>
+                  )}
 
                   {steeringAnalysis && (
                     <div className="mt-2 rounded border border-zinc-200 bg-zinc-50/80 p-2 dark:border-zinc-800 dark:bg-zinc-900/40">
@@ -951,14 +977,14 @@ export default function DocumentDetailPage() {
                       </p>
                       <ul className="space-y-2">
                         {([
-                          ['Tragfähigkeit', steeringAnalysis.tragfaehigkeit],
-                          ['Belastungsgrad', steeringAnalysis.belastungsgrad],
-                          ['Entscheidungsstruktur', steeringAnalysis.entscheidungsstruktur],
-                          ['Verbindlichkeit', steeringAnalysis.verbindlichkeit],
-                        ] as const).map(([label, item]) => (
+                          ['Tragfähigkeit', steeringAnalysis.tragfaehigkeit, false],
+                          ['Belastungsgrad', steeringAnalysis.belastungsgrad, false],
+                          ['Entscheidungsstruktur', steeringAnalysis.entscheidungsstruktur, false],
+                          ['Verbindlichkeit', steeringAnalysis.verbindlichkeit, true],
+                        ] as const).map(([label, item, invert]) => (
                           <li key={label} className="rounded border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950">
                             <div className="mb-1 flex items-center gap-2">
-                              <span className={`inline-block h-2.5 w-2.5 rounded-full ${trafficLight(item.score)}`} />
+                              <span className={`inline-block h-2.5 w-2.5 rounded-full ${trafficLight(item.score, invert)}`} />
                               <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
                                 {label}: {item.score}
                               </span>
@@ -984,6 +1010,16 @@ export default function DocumentDetailPage() {
                         </p>
                       </div>
                     </div>
+                  )}
+                  {steeringAnalysis && (
+                    <button
+                      type="button"
+                      onClick={() => void handleSteeringAnalysis(true)}
+                      disabled={steeringLoading}
+                      className="mt-2 rounded border border-zinc-300 bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                    >
+                      Analyse aktualisieren
+                    </button>
                   )}
 
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -1168,6 +1204,7 @@ export default function DocumentDetailPage() {
                       <option value="VEREINBARUNG">Vereinbarung</option>
                       <option value="ELTERNBRIEF">Elternbrief</option>
                       <option value="RUNDSCHREIBEN">Rundschreiben</option>
+                      <option value="SITUATIVE_REGELUNG">Situative Regelung</option>
                     </select>
                   </div>
                   <div>
