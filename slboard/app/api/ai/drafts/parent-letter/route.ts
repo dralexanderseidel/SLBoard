@@ -9,6 +9,7 @@ import {
   buildPromptSnippetFromChunks,
   pickTopChunksForQuestion,
 } from '../../../../../lib/chunkingOnTheFly';
+import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
 
 type Payload = {
   topic?: string;
@@ -56,6 +57,7 @@ export async function POST(req: NextRequest) {
     }
 
     const access = await getUserAccessContext(user.email, supabase);
+    const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
 
     let docsToUse: { id: string; title: string; summary?: string | null }[] = [];
 
@@ -86,9 +88,9 @@ export async function POST(req: NextRequest) {
     const keywords = extractKeywords(`${topic ?? ''} ${targetAudience ?? ''} ${purpose ?? ''}`);
 
     const chunkParams = {
-      chunkChars: TEMPLATE_CHUNK_CHARS,
-      overlapChars: TEMPLATE_CHUNK_OVERLAP,
-      maxChunks: TEMPLATE_MAX_CHUNKS,
+      chunkChars: Math.max(500, Math.floor(aiSettings.chunk_chars ?? TEMPLATE_CHUNK_CHARS)),
+      overlapChars: Math.max(0, Math.floor(aiSettings.chunk_overlap_chars ?? TEMPLATE_CHUNK_OVERLAP)),
+      maxChunks: Math.max(1, Math.floor(aiSettings.max_chunks_per_doc ?? TEMPLATE_MAX_CHUNKS)),
     };
     for (const doc of docsToUse) {
       const fullText = ((await getDocumentText(doc.id)) ?? '').trim();

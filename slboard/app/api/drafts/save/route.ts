@@ -73,15 +73,25 @@ export async function POST(req: NextRequest) {
     const { error: storageError } = await supabase.storage
       .from('documents')
       .upload(filePath, buffer, {
-        contentType: 'text/plain; charset=utf-8',
+        contentType: 'text/plain',
         cacheControl: '3600',
         upsert: false,
       });
 
     if (storageError) {
       await supabase.from('documents').delete().eq('id', documentId).eq('school_number', schoolNumber);
+      const rawMsg = storageError.message ?? 'Unbekannter Storage-Fehler.';
+      const lower = rawMsg.toLowerCase();
+      const mimeHint =
+        lower.includes('mime type') ||
+        lower.includes('content type') ||
+        lower.includes('not supported') ||
+        lower.includes('invalid mime');
+      const friendlyMsg = mimeHint
+        ? 'Speicher-Fehler: Der Storage-Bucket "documents" erlaubt aktuell keinen Upload mit MIME-Type text/plain. Bitte in Supabase unter Storage > Bucket "documents" den Typ text/plain in allowed_mime_types ergänzen.'
+        : `Speicher-Fehler: ${rawMsg}`;
       return NextResponse.json(
-        { error: `Speicher-Fehler: ${storageError.message}` },
+        { error: friendlyMsg },
         { status: 500 }
       );
     }

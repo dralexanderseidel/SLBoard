@@ -39,6 +39,16 @@ export default function AdminPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [reindexLoading, setReindexLoading] = useState(false);
   const [reindexProgress, setReindexProgress] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiForm, setAiForm] = useState({
+    max_text_per_doc: 4500,
+    chunk_chars: 2500,
+    chunk_overlap_chars: 300,
+    max_chunks_per_doc: 3,
+    debug_log_enabled: false,
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<AppUser>>({});
   const [showCreate, setShowCreate] = useState(false);
@@ -77,6 +87,51 @@ export default function AdminPage() {
   useEffect(() => {
     void loadUsers();
   }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      setAiLoading(true);
+      setAiError(null);
+      try {
+        const res = await fetch('/api/admin/ai-settings', { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'KI-Einstellungen konnten nicht geladen werden.');
+        const s = data.settings ?? {};
+        setAiForm({
+          max_text_per_doc: Number(s.max_text_per_doc) || 4500,
+          chunk_chars: Number(s.chunk_chars) || 2500,
+          chunk_overlap_chars: Number(s.chunk_overlap_chars) || 300,
+          max_chunks_per_doc: Number(s.max_chunks_per_doc) || 3,
+          debug_log_enabled: Boolean(s.debug_log_enabled),
+        });
+      } catch (e) {
+        setAiError(e instanceof Error ? e.message : 'KI-Einstellungen konnten nicht geladen werden.');
+      } finally {
+        setAiLoading(false);
+      }
+    };
+    void load();
+  }, []);
+
+  const handleSaveAiSettings = async () => {
+    setAiLoading(true);
+    setAiError(null);
+    setAiMessage(null);
+    try {
+      const res = await fetch('/api/admin/ai-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(aiForm),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'KI-Einstellungen konnten nicht gespeichert werden.');
+      setAiMessage('KI-Konfiguration gespeichert.');
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : 'KI-Einstellungen konnten nicht gespeichert werden.');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const handleReindexDocuments = async () => {
     const ok = window.confirm(
@@ -260,6 +315,90 @@ export default function AdminPage() {
             {message}
           </p>
         )}
+
+        <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">KI-Konfiguration</h2>
+          <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
+            Diese Einstellungen gelten pro Schule und beeinflussen u. a. Chunking und Debug-Logging der KI-Anfragen.
+          </p>
+
+          {aiError && (
+            <p className="mb-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+              {aiError}
+            </p>
+          )}
+          {aiMessage && (
+            <p className="mb-2 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400">
+              {aiMessage}
+            </p>
+          )}
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                Max. Zeichen pro Dokument im Prompt
+              </label>
+              <input
+                type="number"
+                value={aiForm.max_text_per_doc}
+                onChange={(e) => setAiForm((p) => ({ ...p, max_text_per_doc: Number(e.target.value) }))}
+                className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                Chunk-Größe (Zeichen)
+              </label>
+              <input
+                type="number"
+                value={aiForm.chunk_chars}
+                onChange={(e) => setAiForm((p) => ({ ...p, chunk_chars: Number(e.target.value) }))}
+                className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                Chunk-Overlap (Zeichen)
+              </label>
+              <input
+                type="number"
+                value={aiForm.chunk_overlap_chars}
+                onChange={(e) => setAiForm((p) => ({ ...p, chunk_overlap_chars: Number(e.target.value) }))}
+                className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                Max. Chunks pro Dokument
+              </label>
+              <input
+                type="number"
+                value={aiForm.max_chunks_per_doc}
+                onChange={(e) => setAiForm((p) => ({ ...p, max_chunks_per_doc: Number(e.target.value) }))}
+                className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              />
+            </div>
+          </div>
+
+          <label className="mt-3 flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-200">
+            <input
+              type="checkbox"
+              checked={aiForm.debug_log_enabled}
+              onChange={(e) => setAiForm((p) => ({ ...p, debug_log_enabled: e.target.checked }))}
+              className="rounded"
+            />
+            Debug-Logging aktivieren (Chunks + Prompts)
+          </label>
+
+          <button
+            type="button"
+            onClick={handleSaveAiSettings}
+            disabled={aiLoading}
+            className="mt-3 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+          >
+            {aiLoading ? 'Speichere…' : 'KI-Konfiguration speichern'}
+          </button>
+        </section>
 
         {showCreate && (
           <form

@@ -55,6 +55,8 @@ export default function DocumentDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState<VersionInfo | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [previewTextLoading, setPreviewTextLoading] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryUpdatedAt, setSummaryUpdatedAt] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -185,6 +187,7 @@ export default function DocumentDetailPage() {
       if (cancelled) return;
       if (res.ok && data.signedUrl) {
         setPreviewUrl(data.signedUrl);
+        setPreviewText(null);
         setVersion({
           id: chosen.id,
           version_number: chosen.version_number,
@@ -194,10 +197,39 @@ export default function DocumentDetailPage() {
         });
       } else {
         setPreviewUrl(null);
+        setPreviewText(null);
       }
     })();
     return () => { cancelled = true; };
   }, [params?.id, selectedVersionId, allVersions]);
+
+  // Text-Vorschau für text/plain laden
+  useEffect(() => {
+    if (!previewUrl || version?.mime_type !== 'text/plain') {
+      setPreviewText(null);
+      setPreviewTextLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setPreviewTextLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(previewUrl);
+        if (!res.ok) throw new Error('Textvorschau konnte nicht geladen werden.');
+        const text = await res.text();
+        if (!cancelled) setPreviewText(text);
+      } catch {
+        if (!cancelled) setPreviewText(null);
+      } finally {
+        if (!cancelled) setPreviewTextLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [previewUrl, version?.mime_type]);
 
   const handleWorkflowStep = async (newStatus: string) => {
     if (!params?.id) return;
@@ -679,6 +711,25 @@ export default function DocumentDetailPage() {
                     />
                   </div>
                 )}
+
+              {previewUrl && version?.mime_type === 'text/plain' && (
+                <div className="mb-3 max-h-80 overflow-y-auto rounded border border-zinc-200 bg-white p-4 text-sm text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
+                  <h3 className="mb-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+                    Text-Vorschau
+                  </h3>
+                  {previewTextLoading ? (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Text wird geladen…</p>
+                  ) : previewText ? (
+                    <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed">
+                      {previewText}
+                    </pre>
+                  ) : (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      Die Textvorschau konnte nicht geladen werden.
+                    </p>
+                  )}
+                </div>
+              )}
 
               {!previewUrl && doc.legal_reference && doc.legal_reference.length > 50 && (
                 <div className="mb-3 max-h-80 overflow-y-auto rounded border border-zinc-200 bg-white p-4 text-sm text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">

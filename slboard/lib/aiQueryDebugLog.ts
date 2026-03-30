@@ -12,6 +12,10 @@ export function isAiQueryDebugEnabled(): boolean {
   return v === '1' || v === 'true' || v === 'yes';
 }
 
+export function isAiQueryDebugEnabledEffective(perSchoolEnabled: boolean | null | undefined): boolean {
+  return isAiQueryDebugEnabled() || Boolean(perSchoolEnabled);
+}
+
 export type AiQueryDebugDocEntry = {
   documentId: string;
   title: string;

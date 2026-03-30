@@ -17,18 +17,18 @@ import {
 } from '../../../../lib/chunkingOnTheFly';
 import {
   appendAiQueryDebugLog,
-  isAiQueryDebugEnabled,
+  isAiQueryDebugEnabledEffective,
   type AiQueryDebugDocEntry,
 } from '../../../../lib/aiQueryDebugLog';
+import { getAiSettingsForSchool } from '../../../../lib/aiSettings';
 
 export const runtime = 'nodejs';
 
-// MVP-Parameter für "Chunking on-the-fly".
-// Ziel: lange Dokumente nicht nur am Anfang zu verwenden, sondern relevante Passagen über Chunks.
-const MAX_TEXT_PER_DOC = 4500;
-const CHUNK_CHARS = 2500;
-const CHUNK_OVERLAP_CHARS = 300;
-const MAX_CHUNKS_PER_DOC = 3;
+// Defaults; werden pro Schule über public.ai_settings überschrieben.
+const DEFAULT_MAX_TEXT_PER_DOC = 4500;
+const DEFAULT_CHUNK_CHARS = 2500;
+const DEFAULT_CHUNK_OVERLAP_CHARS = 300;
+const DEFAULT_MAX_CHUNKS_PER_DOC = 3;
 
 export async function POST(req: NextRequest) {
   try {
@@ -67,6 +67,12 @@ export async function POST(req: NextRequest) {
     }
 
     const access = await getUserAccessContext(user.email, supabase);
+    const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
+    const MAX_TEXT_PER_DOC = aiSettings.max_text_per_doc ?? DEFAULT_MAX_TEXT_PER_DOC;
+    const CHUNK_CHARS = aiSettings.chunk_chars ?? DEFAULT_CHUNK_CHARS;
+    const CHUNK_OVERLAP_CHARS = aiSettings.chunk_overlap_chars ?? DEFAULT_CHUNK_OVERLAP_CHARS;
+    const MAX_CHUNKS_PER_DOC = aiSettings.max_chunks_per_doc ?? DEFAULT_MAX_CHUNKS_PER_DOC;
+    const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
 
     let docList: DocRow[] = [];
     if (documentIds && documentIds.length > 0) {
@@ -105,7 +111,7 @@ export async function POST(req: NextRequest) {
         const snippet = buildPromptSnippetFromChunks(selectedChunks, MAX_TEXT_PER_DOC);
         if (snippet.length > 30) {
           sourceTexts.push({ id: doc.id, title: doc.title, snippet });
-          if (isAiQueryDebugEnabled()) {
+          if (debugEnabled) {
             debugDocEntries.push({
               documentId: doc.id,
               title: doc.title,
@@ -137,7 +143,7 @@ ${contextBlock}
 
 Antworte in 3–6 Sätzen.`;
 
-    if (isAiQueryDebugEnabled()) {
+    if (debugEnabled) {
       void appendAiQueryDebugLog({
         timestamp: new Date().toISOString(),
         question: trimmed,
