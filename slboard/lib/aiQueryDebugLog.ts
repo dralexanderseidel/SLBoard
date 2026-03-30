@@ -36,14 +36,36 @@ export type AiQueryDebugPayload = {
   userPrompt: string;
 };
 
-export async function appendAiQueryDebugLog(payload: AiQueryDebugPayload): Promise<void> {
-  if (!isAiQueryDebugEnabled()) return;
+export async function appendAiQueryDebugLog(
+  payload: AiQueryDebugPayload,
+  perSchoolEnabled?: boolean
+): Promise<void> {
+  if (!isAiQueryDebugEnabledEffective(perSchoolEnabled)) return;
   try {
     const dir = path.join(process.cwd(), 'logs');
     await mkdir(dir, { recursive: true });
     const file = path.join(dir, 'ai-query-debug.log');
     const header = `\n${'='.repeat(80)}\n${payload.timestamp}\n${'='.repeat(80)}\n`;
     const body = `${JSON.stringify(payload, null, 2)}\n`;
+    await appendFile(file, header + body, 'utf8');
+  } catch (err) {
+    console.error('[AI_DEBUG_LOG] Schreiben fehlgeschlagen:', err);
+  }
+}
+
+export async function appendAiDebugEvent(
+  event: string,
+  payload: Record<string, unknown>,
+  perSchoolEnabled?: boolean
+): Promise<void> {
+  if (!isAiQueryDebugEnabledEffective(perSchoolEnabled)) return;
+  try {
+    const dir = path.join(process.cwd(), 'logs');
+    await mkdir(dir, { recursive: true });
+    const file = path.join(dir, 'ai-query-debug.log');
+    const ts = new Date().toISOString();
+    const header = `\n${'='.repeat(80)}\n${ts} :: ${event}\n${'='.repeat(80)}\n`;
+    const body = `${JSON.stringify({ timestamp: ts, event, ...payload }, null, 2)}\n`;
     await appendFile(file, header + body, 'utf8');
   } catch (err) {
     console.error('[AI_DEBUG_LOG] Schreiben fehlgeschlagen:', err);

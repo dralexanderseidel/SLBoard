@@ -103,9 +103,7 @@ function DraftAssistantContent() {
           if (meAccess?.schoolNumber) {
             one = one.eq('school_number', meAccess.schoolNumber);
           }
-          const { data: sourceDoc } = await one
-            .from('documents')
-            .single();
+          const { data: sourceDoc } = await one.single();
           if (sourceDoc) {
             setSources((prev) => [sourceDoc as SourceDoc, ...prev]);
             setSelectedSourceIds((prev) =>

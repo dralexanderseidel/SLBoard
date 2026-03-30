@@ -21,6 +21,7 @@ import {
   type AiQueryDebugDocEntry,
 } from '../../../../lib/aiQueryDebugLog';
 import { getAiSettingsForSchool } from '../../../../lib/aiSettings';
+import { getSchoolProfileText } from '../../../../lib/schoolProfile';
 
 export const runtime = 'nodejs';
 
@@ -68,6 +69,7 @@ export async function POST(req: NextRequest) {
 
     const access = await getUserAccessContext(user.email, supabase);
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
+    const schoolProfile = await getSchoolProfileText(access.schoolNumber);
     const MAX_TEXT_PER_DOC = aiSettings.max_text_per_doc ?? DEFAULT_MAX_TEXT_PER_DOC;
     const CHUNK_CHARS = aiSettings.chunk_chars ?? DEFAULT_CHUNK_CHARS;
     const CHUNK_OVERLAP_CHARS = aiSettings.chunk_overlap_chars ?? DEFAULT_CHUNK_OVERLAP_CHARS;
@@ -136,9 +138,11 @@ Beantworte die Nutzerfrage NUR auf Basis der bereitgestellten Dokumentpassagen.
 Wenn die Dokumente die Frage nicht beantworten, sage das klar.
 Zitiere keine Quellen wörtlich, fasse zusammen. Nenne am Ende die verwendeten Dokumenttitel.`;
 
+    const schoolContextBlock = schoolProfile ? `Schul-Steckbrief:\n${schoolProfile}\n\n` : '';
+
     const userPrompt = `Frage des Nutzers: ${trimmed}
 
-Dokumentpassagen:
+${schoolContextBlock}Dokumentpassagen:
 ${contextBlock}
 
 Antworte in 3–6 Sätzen.`;
@@ -154,7 +158,7 @@ Antworte in 3–6 Sätzen.`;
         documents: debugDocEntries,
         systemPrompt,
         userPrompt,
-      });
+      }, aiSettings.debug_log_enabled);
     }
 
     const answer = await callLlm(systemPrompt, userPrompt);

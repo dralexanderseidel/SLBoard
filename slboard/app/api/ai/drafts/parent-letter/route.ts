@@ -10,6 +10,8 @@ import {
   pickTopChunksForQuestion,
 } from '../../../../../lib/chunkingOnTheFly';
 import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
+import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
+import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../../lib/aiQueryDebugLog';
 
 type Payload = {
   topic?: string;
@@ -58,6 +60,8 @@ export async function POST(req: NextRequest) {
 
     const access = await getUserAccessContext(user.email, supabase);
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
+    const schoolProfile = await getSchoolProfileText(access.schoolNumber);
+    const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
 
     let docsToUse: { id: string; title: string; summary?: string | null }[] = [];
 
@@ -130,13 +134,15 @@ export async function POST(req: NextRequest) {
 Erstelle Entwürfe für Elternbriefe in sachlichem, freundlichem Ton.
 Antworte NUR mit dem geforderten Format, ohne zusätzliche Erklärungen.`;
 
+    const schoolContextBlock = schoolProfile ? `Schul-Steckbrief:\n${schoolProfile}\n\n` : '';
+
     const userPrompt = `Erstelle einen Entwurf für einen Elternbrief.
 
 Thema/Betreff: ${topic}
 Zielgruppe: ${targetAudience || 'Eltern'}
 Zweck/Kontext: ${purpose || 'Information'}
 
-Nutze folgende Vorlagen als Inspiration (Stil, Formulierungen):
+${schoolContextBlock}Nutze folgende Vorlagen als Inspiration (Stil, Formulierungen):
 
 ${vorlagenBlock}
 
@@ -147,6 +153,25 @@ BETREFF:
 
 TEXT:
 [Dein Vorschlag für den Entwurfstext, mit Anrede und Grußformel]`;
+
+    if (debugEnabled) {
+      void appendAiDebugEvent(
+        'ai/drafts/parent-letter',
+        {
+          schoolNumber: access.schoolNumber,
+          topic: topic ?? '',
+          targetAudience: targetAudience ?? '',
+          purpose: purpose ?? '',
+          sourceCount: sourceTexts.length,
+          sourceIds: docsToUse.map((d) => d.id),
+          chunkParams,
+          keywords,
+          systemPrompt,
+          userPrompt,
+        },
+        aiSettings.debug_log_enabled
+      );
+    }
 
     const rawResponse = await callLlm(systemPrompt, userPrompt);
 

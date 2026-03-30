@@ -11,6 +11,7 @@ type UpdatePayload = Partial<{
   chunk_overlap_chars: number;
   max_chunks_per_doc: number;
   debug_log_enabled: boolean;
+  school_profile_text: string;
 }>;
 
 export const runtime = 'nodejs';
@@ -29,7 +30,14 @@ export async function GET() {
 
     const access = await getUserAccessContext(user.email, supabase);
     const settings = await getAiSettingsForSchool(access.schoolNumber);
-    return NextResponse.json({ settings });
+    const schoolNumber = access.schoolNumber ?? '000000';
+    const { data: school } = await supabase
+      .from('schools')
+      .select('profile_text')
+      .eq('school_number', schoolNumber)
+      .maybeSingle();
+    const school_profile_text = ((school as { profile_text?: string | null } | null)?.profile_text ?? '').trim();
+    return NextResponse.json({ settings, school_profile_text });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -80,7 +88,16 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: error?.message ?? 'Konnte nicht speichern.' }, { status: 500 });
     }
 
-    return NextResponse.json({ settings: data });
+    const profileText = (body.school_profile_text ?? '').trim();
+    const { error: schoolErr } = await supabase
+      .from('schools')
+      .update({ profile_text: profileText || null })
+      .eq('school_number', schoolNumber);
+    if (schoolErr) {
+      return NextResponse.json({ error: schoolErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ settings: data, school_profile_text: profileText });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return NextResponse.json({ error: msg }, { status: 500 });

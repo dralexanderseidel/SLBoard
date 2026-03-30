@@ -28,6 +28,18 @@ type VersionInfo = {
   mime_type: string;
 };
 
+type SteeringAnalysis = {
+  tragfaehigkeit: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
+  belastungsgrad: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
+  entscheidungsstruktur: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
+  verbindlichkeit: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
+  passung: { score: 'gut' | 'kritisch'; begruendung: string };
+  gesamtbewertung: {
+    score: 'niedriger Steuerungsbedarf' | 'mittlerer Steuerungsbedarf' | 'hoher Steuerungsbedarf';
+    begruendung: string;
+  };
+};
+
 const DOC_TYPES = [
   'PROTOKOLL',
   'BESCHLUSS',
@@ -67,6 +79,9 @@ export default function DocumentDetailPage() {
   const [docSources, setDocSources] = useState<Array<{ documentId: string; title: string; snippet: string }>>([]);
   const [docAskLoading, setDocAskLoading] = useState(false);
   const [docAskError, setDocAskError] = useState<string | null>(null);
+  const [steeringAnalysis, setSteeringAnalysis] = useState<SteeringAnalysis | null>(null);
+  const [steeringLoading, setSteeringLoading] = useState(false);
+  const [steeringError, setSteeringError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<DocumentDetail>>({});
   const [saveLoading, setSaveLoading] = useState(false);
@@ -491,6 +506,33 @@ export default function DocumentDetailPage() {
     }
   };
 
+  const handleSteeringAnalysis = async () => {
+    if (!params?.id) return;
+    setSteeringLoading(true);
+    setSteeringError(null);
+    setSteeringAnalysis(null);
+    try {
+      const res = await fetch(`/api/documents/${params.id}/steering-analysis`, {
+        method: 'POST',
+      });
+      const data = (await res.json()) as { analysis?: SteeringAnalysis; error?: string };
+      if (!res.ok || !data.analysis) {
+        throw new Error(data.error ?? 'Analyse konnte nicht erstellt werden.');
+      }
+      setSteeringAnalysis(data.analysis);
+    } catch (e) {
+      setSteeringError(e instanceof Error ? e.message : 'Analyse konnte nicht erstellt werden.');
+    } finally {
+      setSteeringLoading(false);
+    }
+  };
+
+  const trafficLight = (score: 'niedrig' | 'mittel' | 'hoch') => {
+    if (score === 'niedrig') return 'bg-emerald-500';
+    if (score === 'mittel') return 'bg-amber-400';
+    return 'bg-red-500';
+  };
+
   const docTypeLabel = (code: string) => {
     if (code === 'PROTOKOLL') return 'Protokoll';
     if (code === 'BESCHLUSS') return 'Beschluss';
@@ -892,7 +934,58 @@ export default function DocumentDetailPage() {
                 )}
 
                 <div className="mt-3 border-t border-zinc-200 pt-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
-                  Weitere Aktionen (später):
+                  <button
+                    type="button"
+                    onClick={() => void handleSteeringAnalysis()}
+                    disabled={steeringLoading}
+                    className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-200 dark:hover:bg-blue-950"
+                  >
+                    {steeringLoading ? 'Analyse läuft…' : 'Analyse des Steuerungsbedarfs'}
+                  </button>
+                  {steeringError && <p className="mt-2 text-[11px] text-red-500">{steeringError}</p>}
+
+                  {steeringAnalysis && (
+                    <div className="mt-2 rounded border border-zinc-200 bg-zinc-50/80 p-2 dark:border-zinc-800 dark:bg-zinc-900/40">
+                      <p className="mb-2 text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
+                        Steuerungsanalyse
+                      </p>
+                      <ul className="space-y-2">
+                        {([
+                          ['Tragfähigkeit', steeringAnalysis.tragfaehigkeit],
+                          ['Belastungsgrad', steeringAnalysis.belastungsgrad],
+                          ['Entscheidungsstruktur', steeringAnalysis.entscheidungsstruktur],
+                          ['Verbindlichkeit', steeringAnalysis.verbindlichkeit],
+                        ] as const).map(([label, item]) => (
+                          <li key={label} className="rounded border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950">
+                            <div className="mb-1 flex items-center gap-2">
+                              <span className={`inline-block h-2.5 w-2.5 rounded-full ${trafficLight(item.score)}`} />
+                              <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
+                                {label}: {item.score}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-zinc-600 dark:text-zinc-300">{item.begruendung}</p>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="mt-2 rounded border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950">
+                        <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
+                          Passung: {steeringAnalysis.passung.score}
+                        </p>
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-300">
+                          {steeringAnalysis.passung.begruendung}
+                        </p>
+                      </div>
+                      <div className="mt-2 rounded border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950">
+                        <p className="text-[11px] font-semibold text-zinc-800 dark:text-zinc-100">
+                          Steuerungsbedarf: {steeringAnalysis.gesamtbewertung.score}
+                        </p>
+                        <p className="text-[11px] text-zinc-600 dark:text-zinc-300">
+                          {steeringAnalysis.gesamtbewertung.begruendung}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"
