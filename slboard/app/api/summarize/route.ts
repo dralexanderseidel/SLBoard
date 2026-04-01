@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { canAccessSchool, getUserAccessContext } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
 import { getAiSettingsForSchool } from '../../../lib/aiSettings';
+import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../lib/aiQueryDebugLog';
 
 export const runtime = 'nodejs';
 
@@ -29,6 +30,7 @@ export async function POST(req: NextRequest) {
     const supabase = supabaseServer();
     const access = supabase ? await getUserAccessContext(user.email, supabase) : null;
     const aiSettings = await getAiSettingsForSchool(access?.schoolNumber ?? null);
+    const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
 
     let basisText = text ?? '';
     const MAX_SUMMARY_CHARS = 12000;
@@ -77,6 +79,26 @@ ${fullContent}
       timeoutMs: aiSettings.llm_timeout_ms,
     });
     const summaryText = summary || 'Keine Zusammenfassung vom LLM zurückgegeben.';
+
+    if (debugEnabled) {
+      void appendAiDebugEvent(
+        'summarize',
+        {
+          schoolNumber: access?.schoolNumber ?? null,
+          documentId: documentId ?? null,
+          title: title ?? null,
+          type: type ?? null,
+          inputTextLength: basisText.length,
+          fullContentLength: fullContent.length,
+          timeoutMs: aiSettings.llm_timeout_ms,
+          systemPrompt,
+          userPrompt,
+          summaryLength: summaryText.length,
+          summaryPreview: summaryText.slice(0, 1200),
+        },
+        aiSettings.debug_log_enabled
+      );
+    }
 
     // Zusammenfassung in DB speichern, wenn documentId vorhanden
     if (documentId) {

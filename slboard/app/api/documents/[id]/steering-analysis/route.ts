@@ -8,6 +8,7 @@ import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
 import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../../lib/aiQueryDebugLog';
 import { apiError } from '../../../../../lib/apiError';
+import { chunkTextByParagraphs } from '../../../../../lib/chunkingOnTheFly';
 
 export const runtime = 'nodejs';
 
@@ -157,47 +158,59 @@ export async function POST(
       basisText = basisText.slice(0, 14000) + '…';
     }
 
-    const systemPrompt = `Du bist ein Experte für Schul-Governance. Deine Aufgabe ist die strukturelle Analyse von Schuldokumenten (z.B. Konzepte, Geschäftsordnungen, Beschlüsse).
-Analysemethode: Bewerte das Dokument ausschließlich anhand der explizit genannten Informationen. Falls Informationen zur Dimension 'Tragfähigkeit' im Dokument fehlen (z.B. Ressourcenklärung), bewerte diese basierend darauf, wie realistisch die Umsetzung der genannten Maßnahmen im Standardbetrieb erscheint.
-Dimensionen & Logik:
-1. Tragfähigkeit: Grad der personellen/strukturellen Ressourcen, die im Dokument für die Umsetzung explizit ausgewiesen oder implizit vorausgesetzt werden.
-2. Belastungsgrad: Komplexität, Zeitaufwand und Änderungsdruck, den die Inhalte des Dokuments für das Kollegium erzeugen.
-3. Entscheidungsstruktur: Trennschärfe von Verantwortlichkeiten (Wer? Was? Wann?).
-4. Verbindlichkeit: Sprachliche Präzision (Muss/Soll/Kann) und zeitliche Befristung/Überprüfung.
-Berechnung der PASSUNG:
-- Vergleiche die Scores von Tragfähigkeit und Belastungsgrad.
-- gut: Tragfähigkeit ist gleichwertig oder höher als der Belastungsgrad.
-- kritisch: Der Belastungsgrad übersteigt die erkennbare Tragfähigkeit.
-Output-Regeln:
-- Nutze für Scores ausschließlich: niedrig, mittel, hoch.
-- Begründungen: Maximal 2 Sätze, strenger Textbeleg.
-- Format: JSON
-{
-  "tragfaehigkeit": {
-    "score": "",
-    "begruendung": ""
-  },
-  "belastungsgrad": {
-    "score": "",
-    "begruendung": ""
-  },
-  "entscheidungsstruktur": {
-    "score": "",
-    "begruendung": ""
-  },
-  "verbindlichkeit": {
-    "score": "",
-    "begruendung": ""
-  },
-  "passung": {
-    "score": "",
-    "begruendung": ""
-  },
-  "gesamtbewertung": {
-    "score": "",
-    "begruendung": ""
-  }
-}`;
+    const steeringChunkParams = {
+      chunkChars: Math.max(500, Math.floor(aiSettings.chunk_chars ?? 2500)),
+      overlapChars: Math.max(0, Math.floor(aiSettings.chunk_overlap_chars ?? 300)),
+      maxChunks: Math.max(1, Math.floor(aiSettings.max_chunks_per_doc ?? 3)),
+    };
+    const steeringChunks = chunkTextByParagraphs(basisText, steeringChunkParams).slice(
+      0,
+      steeringChunkParams.maxChunks
+    );
+
+    const systemPrompt = `Du bist ein Experte für Schulorganisation und institutionelle Steuerung im deutschen Schulsystem.
+
+Du analysierst schulische Dokumente nicht inhaltlich, sondern strukturell entlang eines Steuerungsmodells.
+
+Das Modell umfasst vier Dimensionen:
+
+1. Tragfähigkeit (Organisation)
+→ Was kann die Schule aktuell leisten?
+
+2. Belastungsgrad (Dokument)
+→ Wie stark fordert das Dokument die Organisation heraus?
+
+3. Entscheidungsstruktur
+→ Ist klar geregelt, wer wann entscheidet und wie?
+
+4. Verbindlichkeit
+→ Wie klar und stabil sind die Regelungen formuliert?
+
+Arbeite mit folgender Evidenz-Logik:
+- Für Tragfähigkeit: beziehe den Schul-Steckbrief (falls vorhanden) zwingend mit ein.
+- Für Belastungsgrad, Entscheidungsstruktur und Verbindlichkeit: verwende ausschließlich den Dokumenttext.
+- Wenn eine Dimension im Dokument nicht ausreichend belegt ist, benenne das explizit und bewerte konservativ.
+- Keine Annahmen außerhalb des Dokuments
+- Keine Interpretation von Intentionen ohne Textbeleg
+- Präzise, kurze Begründungen
+- Jede Begründung muss sich auf konkrete Aussagen oder klar benannte Lücken im Dokument beziehen.
+- Gib keine allgemeinen Schul-Empfehlungen; analysiere nur das vorliegende Dokument.
+
+Nutze ausschließlich diese Skala:
+- niedrig
+- mittel
+- hoch
+Bestimme zusätzlich die PASSUNG:
+
+- gut → Tragfähigkeit ≥ Belastungsgrad
+- kritisch → Tragfähigkeit < Belastungsgrad
+
+Leite daraus eine Gesamtbewertung ab:
+
+- niedriger Steuerungsbedarf
+- mittlerer Steuerungsbedarf
+- hoher Steuerungsbedarf
+`;
 
     const schoolContextBlock = schoolProfile ? `Schul-Steckbrief:\n${schoolProfile}\n\n` : '';
 
@@ -207,6 +220,11 @@ Dokumenttitel: ${doc.title}
 
 ${schoolContextBlock}Dokumenttext:
 ${basisText}
+
+Wichtig:
+- Analysiere das konkrete Dokument, nicht die Schule im Allgemeinen.
+- Falls Schul-Steckbrief und Dokumenttext widersprüchlich sind, hat der Dokumenttext Vorrang.
+- Begründe jede Bewertung mit expliziten Textsignalen oder klar benannten fehlenden Textsignalen im Dokument.
 
 Antwortformat:
 {
@@ -226,6 +244,8 @@ Antwortformat:
           documentId,
           title: doc.title,
           basisTextLength: basisText.length,
+          chunkParams: steeringChunkParams,
+          selectedChunks: steeringChunks,
           systemPrompt,
           userPrompt,
         },

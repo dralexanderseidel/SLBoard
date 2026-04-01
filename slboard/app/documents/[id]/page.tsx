@@ -156,17 +156,6 @@ export default function DocumentDetailPage() {
           if (!verError && verData) {
             const v = verData as VersionInfo;
             setVersion(v);
-
-            // Signed URL über API (Bucket ist privat)
-            try {
-              const res = await fetch(`/api/documents/${params.id}/file`);
-              const data = (await res.json()) as { signedUrl?: string; error?: string };
-              if (res.ok && data.signedUrl) {
-                setPreviewUrl(data.signedUrl);
-              }
-            } catch {
-              // Vorschau nicht verfügbar
-            }
           }
         }
 
@@ -957,12 +946,20 @@ export default function DocumentDetailPage() {
                 <div className="mt-3 border-t border-zinc-200 pt-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
                   <button
                     type="button"
-                    onClick={() => void handleSteeringAnalysis()}
+                    onClick={() => void handleSteeringAnalysis(Boolean(steeringAnalysis))}
                     disabled={steeringLoading}
                     className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-200 dark:hover:bg-blue-950"
                   >
-                    {steeringLoading ? 'Analyse läuft…' : 'Analyse des Steuerungsbedarfs'}
+                    {steeringLoading
+                      ? 'Analyse läuft…'
+                      : steeringAnalysis
+                        ? 'Analyse des Steuerungsbedarfs aktualisieren'
+                        : 'Analyse des Steuerungsbedarfs'}
                   </button>
+                  <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Prüft das Dokument per KI auf Tragfähigkeit, Belastungsgrad, Entscheidungsstruktur und
+                    Verbindlichkeit und ermittelt daraus den Steuerungsbedarf.
+                  </p>
                   {steeringError && <p className="mt-2 text-[11px] text-red-500">{steeringError}</p>}
                   {steeringUpdatedAt && (
                     <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
@@ -977,9 +974,9 @@ export default function DocumentDetailPage() {
                       </p>
                       <ul className="space-y-2">
                         {([
-                          ['Tragfähigkeit', steeringAnalysis.tragfaehigkeit, false],
+                          ['Tragfähigkeit', steeringAnalysis.tragfaehigkeit, true],
                           ['Belastungsgrad', steeringAnalysis.belastungsgrad, false],
-                          ['Entscheidungsstruktur', steeringAnalysis.entscheidungsstruktur, false],
+                          ['Entscheidungsstruktur', steeringAnalysis.entscheidungsstruktur, true],
                           ['Verbindlichkeit', steeringAnalysis.verbindlichkeit, true],
                         ] as const).map(([label, item, invert]) => (
                           <li key={label} className="rounded border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950">
@@ -1011,17 +1008,6 @@ export default function DocumentDetailPage() {
                       </div>
                     </div>
                   )}
-                  {steeringAnalysis && (
-                    <button
-                      type="button"
-                      onClick={() => void handleSteeringAnalysis(true)}
-                      disabled={steeringLoading}
-                      className="mt-2 rounded border border-zinc-300 bg-white px-2 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                    >
-                      Analyse aktualisieren
-                    </button>
-                  )}
-
                   <div className="mt-2 flex flex-wrap gap-2">
                     <button
                       type="button"

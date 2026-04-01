@@ -6,6 +6,7 @@ import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { canAccessSchool, getUserAccessContext } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
 import { getAiSettingsForSchool } from '../../../lib/aiSettings';
+import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../lib/aiQueryDebugLog';
 
 export const runtime = 'nodejs';
 
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
     const supabase = supabaseServer();
     const access = await getUserAccessContext(user.email, supabase);
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
+    const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
 
     if (!supabase) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
@@ -95,6 +97,26 @@ ${fullContent}
         });
         const summaryText = summary || 'Keine Zusammenfassung vom LLM zurückgegeben.';
 
+        if (debugEnabled) {
+          void appendAiDebugEvent(
+            'summarize-batch-item',
+            {
+              schoolNumber: access.schoolNumber,
+              documentId,
+              title: doc.title ?? null,
+              type: doc.document_type_code ?? null,
+              inputTextLength: basisText.length,
+              fullContentLength: fullContent.length,
+              timeoutMs: aiSettings.llm_timeout_ms,
+              systemPrompt,
+              userPrompt,
+              summaryLength: summaryText.length,
+              summaryPreview: summaryText.slice(0, 1200),
+            },
+            aiSettings.debug_log_enabled
+          );
+        }
+
         let updateQuery = supabase
           .from('documents')
           .update({ summary: summaryText, summary_updated_at: new Date().toISOString() })
@@ -106,6 +128,17 @@ ${fullContent}
         results.push({ documentId, ok: true });
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Unbekannter Fehler beim Summarize.';
+        if (debugEnabled) {
+          void appendAiDebugEvent(
+            'summarize-batch-item-error',
+            {
+              schoolNumber: access.schoolNumber,
+              documentId,
+              error: message,
+            },
+            aiSettings.debug_log_enabled
+          );
+        }
         results.push({ documentId, ok: false, error: message });
       }
     }
