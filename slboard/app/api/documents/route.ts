@@ -6,7 +6,13 @@ import { apiError } from '../../../lib/apiError';
 
 /**
  * GET: Dokumentenliste mit Berechtigungs- und Schutzklassenfilter.
- * Query-Parameter: type, status, protectionClass, search
+ * Query-Parameter:
+ * - type, responsibleUnit, status, protectionClass, search
+ * - reachScope (intern|extern oder kommasepariert)
+ * - participation (eine oder mehrere Gruppen, kommasepariert) → participation_groups enthält alle angegebenen Gruppen
+ * - gremium (Freitext, ilike)
+ * - review (overdue|set|empty)
+ * - summary (has|missing)
  * - status kann als einzelne Statuskennung oder als kommaseparierte Liste kommen
  */
 export async function GET(req: NextRequest) {
@@ -26,14 +32,20 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const typeFilter = searchParams.get('type') ?? '';
+    const responsibleUnitFilter = searchParams.get('responsibleUnit') ?? '';
     const statusFilterRaw = searchParams.get('status') ?? '';
     const protectionFilter = searchParams.get('protectionClass') ?? '';
     const searchQuery = searchParams.get('search') ?? '';
+    const reachScopeRaw = searchParams.get('reachScope') ?? '';
+    const participationRaw = searchParams.get('participation') ?? '';
+    const gremiumFilter = searchParams.get('gremium') ?? '';
+    const reviewFilter = searchParams.get('review') ?? '';
+    const summaryFilter = searchParams.get('summary') ?? '';
 
     let query = supabase
       .from('documents')
       .select(
-        'id, title, document_type_code, created_at, status, protection_class_id, gremium, responsible_unit, participation_groups, summary, school_number'
+        'id, title, document_type_code, created_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, summary, school_number'
       )
       .order('created_at', { ascending: false });
 
@@ -60,6 +72,10 @@ export async function GET(req: NextRequest) {
       query = query.eq('document_type_code', typeFilter);
     }
 
+    if (responsibleUnitFilter.trim()) {
+      query = query.eq('responsible_unit', responsibleUnitFilter.trim());
+    }
+
     if (statusFilterRaw) {
       const ALLOWED_STATUSES = ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT'] as const;
       const statusList = statusFilterRaw
@@ -80,6 +96,56 @@ export async function GET(req: NextRequest) {
       if (!Number.isNaN(pc)) {
         query = query.eq('protection_class_id', pc);
       }
+    }
+
+    if (reachScopeRaw.trim()) {
+      const allowed = new Set(['intern', 'extern']);
+      const list = reachScopeRaw
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean)
+        .filter((s) => allowed.has(s));
+      if (list.length === 1) {
+        query = query.eq('reach_scope', list[0]);
+      } else if (list.length > 1) {
+        query = query.in('reach_scope', list);
+      }
+    }
+
+    if (participationRaw.trim()) {
+      const groups = participationRaw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 10);
+      if (groups.length > 0) {
+        query = query.contains('participation_groups', groups);
+      }
+    }
+
+    if (gremiumFilter.trim()) {
+      query = query.ilike('gremium', `%${gremiumFilter.trim()}%`);
+    }
+
+    if (reviewFilter === 'overdue' || reviewFilter === 'set' || reviewFilter === 'empty') {
+      if (reviewFilter === 'set') {
+        query = query.not('review_date', 'is', null);
+      } else if (reviewFilter === 'empty') {
+        query = query.is('review_date', null);
+      } else {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const todayIso = `${yyyy}-${mm}-${dd}`;
+        query = query.not('review_date', 'is', null).lt('review_date', todayIso);
+      }
+    }
+
+    if (summaryFilter === 'has') {
+      query = query.not('summary', 'is', null);
+    } else if (summaryFilter === 'missing') {
+      query = query.is('summary', null);
     }
 
     const { data, error } = await query;

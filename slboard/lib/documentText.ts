@@ -59,8 +59,9 @@ async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<PdfJsResult> {
       data: new Uint8Array(buffer),
       useSystemFonts: true,
       disableFontFace: true,
+      // pdfjs wird serverseitig ohne Worker betrieben; einige Typdefinitionen enthalten das Flag nicht (runtime ok).
       disableWorker: true,
-    });
+    } as unknown as Parameters<typeof pdfjs.getDocument>[0]);
     const pdf = await loadingTask.promise;
     const pages: string[] = [];
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum += 1) {

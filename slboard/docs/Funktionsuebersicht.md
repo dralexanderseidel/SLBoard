@@ -47,8 +47,9 @@ Gemeinsamer Header mit NOMOS-Logo, Links (Dashboard, Dokumente, Entwurfsassisten
 
 ### 4.1 Dokument (documents)
 
-- **Kernfelder:** id, title, document_type_code, created_at, status, protection_class_id, responsible_unit, gremium, legal_reference, summary, current_version_id (und ggf. created_by_id, responsible_person_id).
-- **Dokumenttypen:** ELTERNBRIEF, KONZEPT, PROTOKOLL, RUNDSCHREIBEN.
+- **Kernfelder:** id, title, document_type_code, created_at, status, protection_class_id, responsible_unit, gremium, participation_groups, reach_scope, legal_reference, summary, current_version_id (und ggf. created_by_id, responsible_person_id).
+- **Metadaten-Anzeige in der UI:** „Verantwortlich“ (= responsible_unit), „Beschlussgremium“ (= gremium), „Beteiligung“ (= participation_groups), „Reichweite“ (= reach_scope: intern|extern).
+- **Dokumenttypen:** werden mandantenspezifisch (pro Schule) gepflegt; Standardwerte werden initial befüllt (siehe Admin/Metadaten).
 - **Status-Workflow (nur diese Übergänge):**
   - **ENTWURF** → **FREIGEGEBEN** (Button „Freigeben“)
   - **FREIGEGEBEN** → **VEROEFFENTLICHT** (Button „Veröffentlichen“)
@@ -63,7 +64,7 @@ Gemeinsamer Header mit NOMOS-Logo, Links (Dashboard, Dokumente, Entwurfsassisten
 
 ### 4.3 Speicherung von Dateien
 
-- Supabase Storage, Bucket `documents`; Pfadformat `{documentId}/{fileId}.{ext}`.
+- Supabase Storage, Bucket `documents`; Pfadformat enthält `school_number` (Multi-Tenant).
 - Zugriff nur über signierte URLs; Berechtigung anhand `app_users`/`user_roles` und `documents.responsible_unit` (Policy „documents_select_by_unit“).
 
 ---
@@ -90,19 +91,21 @@ Details und Tabellendefinitionen: `docs/Berechtigungen-und-Zugriff.md`.
 
 | Methode | Route | Funktion |
 |---------|--------|----------|
-| GET | `/api/documents` | Liste mit Filter (type, status, protectionClass, search); Berechtigung nach org_unit/Rolle; **Volltextsuche** in title, document_type_code, gremium, **summary**, **legal_reference** |
-| PATCH | `/api/documents/[id]` | Metadaten/Status aktualisieren; **Workflow-Validierung** (nur erlaubte Statusübergänge); **Audit-Eintrag** (document.update) |
+| GET | `/api/documents` | Liste mit Filter (type, responsibleUnit, status, protectionClass, search); Berechtigung nach org_unit/Rolle; **Volltextsuche** in title, document_type_code, gremium, **summary**, **legal_reference**, **search_text** |
+| PATCH | `/api/documents/[id]` | Metadaten/Status aktualisieren (inkl. Beteiligung/Reichweite); **Workflow-Validierung** (nur erlaubte Statusübergänge); **Audit-Eintrag** (document.update) |
 | DELETE | `/api/documents/[id]` | Dokument löschen inkl. alle Versionen und zugehörige Storage-Dateien |
 | GET | `/api/documents/[id]/file` | Signierte URL für aktuelle oder angegebene Version (`?versionId=`) |
 | GET | `/api/documents/[id]/versions` | Alle Versionen des Dokuments (id, version_number, created_at, comment, mime_type, is_current) |
 | POST | `/api/documents/[id]/version` | Neue Version hochladen (PDF/Word); **Audit-Eintrag** (version.upload) |
 | GET | `/api/documents/[id]/audit` | Änderungsverlauf (audit_log) für dieses Dokument |
+| GET | `/api/documents/[id]/extract-text` | Diagnose: Text-Extraktion aus der aktuellen Version prüfen (hasText, textLength, optional debug) |
+| POST | `/api/documents/[id]/steering-analysis` | KI-Aktion „Analyse des Steuerungsbedarfs“ (mit Cache pro Dokument) |
 
 ### 6.2 Upload und Entwurf
 
 | Methode | Route | Funktion |
 |---------|--------|----------|
-| POST | `/api/upload` | Neues Dokument mit hochgeladener Datei anlegen (Titel, Typ, Datum, Status, etc.) |
+| POST | `/api/upload` | Neues Dokument mit hochgeladener Datei anlegen (Titel, Typ, Datum, Status, Beteiligung, Reichweite, etc.) |
 | POST | `/api/drafts/save` | **Entwurf als echtes Dokument:** Dokument anlegen, Entwurfstext als erste Version (.txt) im Storage, `current_version_id` setzen; Rückgabe documentId |
 
 ### 6.3 KI
@@ -113,11 +116,16 @@ Details und Tabellendefinitionen: `docs/Berechtigungen-und-Zugriff.md`.
 | POST | `/api/ai/query` | **KI-Antwort** auf Frage: optional **documentIds**; wenn angegeben, nur diese Dokumente als Kontext, sonst automatisch Vorschlagsliste (getSuggestedDocuments) → Kontext aus summary/Volltext/legal_reference → LLM; Rückgabe answer + sources |
 | POST | `/api/ai/drafts/parent-letter` | KI-Vorschlag für Elternbrief-Entwurf (Thema, Zielgruppe, Quellen-Dokumente); nutzt freigegebene/veröffentlichte Dokumente |
 | POST | `/api/summarize` | KI-Zusammenfassung für ein Dokument (documentId oder text/title/type); speichert Ergebnis in `documents.summary` |
+| POST | `/api/summarize-batch` | Batch-Zusammenfassung für mehrere Dokumente; optionales Debug-Logging |
 
-### 6.4 Benachrichtigungen und Admin
+### 6.4 Metadaten, Benachrichtigungen und Admin
 
 | Methode | Route | Funktion |
 |---------|--------|----------|
+| GET | `/api/metadata/options` | Tenant-spezifische Optionen für Auswahlfelder (Dokumenttypen, Verantwortlich) |
+| GET/PUT | `/api/admin/metadata` | Metadaten-Optionen pro Schule pflegen (Admin-only) |
+| GET/PUT | `/api/admin/ai-settings` | KI-Konfiguration pro Schule (Admin-only) inkl. Schul-Steckbrief |
+| POST | `/api/admin/reindex` | Search-Index für Dokumente neu erzeugen (Admin-only) |
 | GET | `/api/notifications/recently-published` | Kürzlich veröffentlichte Dokumente (aus audit_log: Statuswechsel auf VEROEFFENTLICHT); gefiltert nach Berechtigung |
 | GET | `/api/admin/users` | Liste app_users mit Rollen (nur Admin) |
 | POST | `/api/admin/users` | Nutzer anlegen (nur Admin) |
@@ -145,6 +153,8 @@ Pro Dokument wird Text in dieser Priorität verwendet:
 2. sonst **Volltext** aus Storage-Datei (PDF/Word über getDocumentText),  
 3. sonst **legal_reference**.  
 Text wird pro Dokument auf MAX_TEXT_PER_DOC Zeichen begrenzt.
+
+Für lange Dokumente wird zusätzlich **Chunking-on-the-fly** eingesetzt, um relevanten Kontext auszuwählen.
 
 ### 7.3 Entwurfsassistent
 
@@ -178,6 +188,8 @@ Text wird pro Dokument auf MAX_TEXT_PER_DOC Zeichen begrenzt.
 - **user_roles:** user_id, role_code (SCHULLEITUNG, SEKRETARIAT, LEHRKRAFT, etc.).
 - **audit_log:** Änderungsprotokoll (s. o.).
 - **ai_queries:** Optional gespeicherte KI-Anfragen (question, answer_excerpt, used_document_ids) für „Aktuelle Anfragen“ auf dem Dashboard.
+- **ai_settings:** KI-Konfiguration pro Schule.
+- **school_document_type_options / school_responsible_unit_options:** Metadaten-Optionen pro Schule.
 
 Migrationen in `supabase/migrations/`:
 - app_users und user_roles
@@ -185,6 +197,10 @@ Migrationen in `supabase/migrations/`:
 - legal_reference als Text
 - Storage-Policies (Zugriff nach responsible_unit)
 - audit_log
+- Multi-Tenant (schools + school_number + RLS)
+- Search-Index-Felder (search_text/keywords)
+- Beteiligung (participation_groups) und Reichweite (reach_scope)
+- Metadaten-Optionen pro Schule (Dokumenttypen/Verantwortlich)
 
 Storage: Bucket `documents` für Dokumentdateien; Zugriff über signierte URLs und Berechtigungsprüfung.
 
@@ -196,6 +212,7 @@ Storage: Bucket `documents` für Dokumentdateien; Zugriff über signierte URLs u
 - **Versionen:** Links in der Dokumentdetailseite Liste „Versionen“ mit Auswahl; gewählte Version bestimmt Vorschau und Download-Link.
 - **Hintergrund:** Heller Grauton (z. B. bg-zinc-100) hinter den weißen Inhaltsboxen für bessere Abgrenzung.
 - **NOMOS-Logo** in der Topzeile (nomos-logo-crop.png), verlinkt zur Startseite.
+- **Admin-Bereich:** verwaltet Benutzer/Rollen, KI-Konfiguration und Metadatenlisten pro Schule.
 
 ---
 

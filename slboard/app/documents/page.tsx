@@ -10,8 +10,10 @@ type DocumentListItem = {
   created_at: string;
   status: string;
   protection_class_id: number;
+  reach_scope?: 'intern' | 'extern' | null;
   gremium: string | null;
   responsible_unit: string;
+  participation_groups?: string[] | null;
   summary: string | null;
 };
 
@@ -35,8 +37,14 @@ export default function DocumentsPage() {
   const loadSeqRef = useRef(0);
   const bulkCapabilitiesSeqRef = useRef(0);
   const [typeFilter, setTypeFilter] = useState<string>(''); // z.B. ELTERNBRIEF, KONZEPT ...
+  const [responsibleUnitFilter, setResponsibleUnitFilter] = useState<string>(''); // Verantwortlich
   const [statusFilters, setStatusFilters] = useState<string[]>([]); // ENTWURF, FREIGEGEBEN, VEROEFFENTLICHT (multi)
   const [protectionFilter, setProtectionFilter] = useState<string>(''); // "1", "2" oder leer
+  const [reachScopeFilters, setReachScopeFilters] = useState<Array<'intern' | 'extern'>>([]);
+  const [participationFilter, setParticipationFilter] = useState<string>(''); // Beteiligung enthält Gruppe X (comma-sep möglich)
+  const [gremiumFilter, setGremiumFilter] = useState<string>(''); // Beschlussgremium (Freitext)
+  const [reviewFilter, setReviewFilter] = useState<string>(''); // overdue|set|empty
+  const [summaryFilter, setSummaryFilter] = useState<string>(''); // has|missing
   const [searchInput, setSearchInput] = useState<string>(''); // aktueller Texteingabe-Wert
   const [searchQuery, setSearchQuery] = useState<string>(''); // tatsächlich angewendete Suche
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -47,6 +55,8 @@ export default function DocumentsPage() {
   type SortDir = 'asc' | 'desc';
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [typeOptions, setTypeOptions] = useState<Array<{ code: string; label: string }>>([]);
+  const [responsibleUnitOptions, setResponsibleUnitOptions] = useState<string[]>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -57,8 +67,14 @@ export default function DocumentsPage() {
 
       const params = new URLSearchParams();
       if (typeFilter) params.set('type', typeFilter);
+      if (responsibleUnitFilter) params.set('responsibleUnit', responsibleUnitFilter);
       if (statusFilters.length > 0) params.set('status', statusFilters.join(','));
       if (protectionFilter) params.set('protectionClass', protectionFilter);
+      if (reachScopeFilters.length > 0) params.set('reachScope', reachScopeFilters.join(','));
+      if (participationFilter.trim()) params.set('participation', participationFilter.trim());
+      if (gremiumFilter.trim()) params.set('gremium', gremiumFilter.trim());
+      if (reviewFilter) params.set('review', reviewFilter);
+      if (summaryFilter) params.set('summary', summaryFilter);
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
 
       const url = `/api/documents${params.toString() ? `?${params.toString()}` : ''}`;
@@ -88,7 +104,37 @@ export default function DocumentsPage() {
     };
 
     void load();
-  }, [typeFilter, statusFilters, protectionFilter, searchQuery, reloadKey]);
+  }, [
+    typeFilter,
+    responsibleUnitFilter,
+    statusFilters,
+    protectionFilter,
+    reachScopeFilters,
+    participationFilter,
+    gremiumFilter,
+    reviewFilter,
+    summaryFilter,
+    searchQuery,
+    reloadKey,
+  ]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/metadata/options', { credentials: 'include', cache: 'no-store' });
+        const data = (await res.json()) as {
+          documentTypes?: Array<{ code: string; label: string }>;
+          responsibleUnits?: string[];
+        };
+        if (!res.ok) return;
+        if (Array.isArray(data.documentTypes)) setTypeOptions(data.documentTypes);
+        if (Array.isArray(data.responsibleUnits)) setResponsibleUnitOptions(data.responsibleUnits);
+      } catch {
+        // ignore
+      }
+    };
+    void load();
+  }, []);
 
   useEffect(() => {
     try {
@@ -154,7 +200,43 @@ export default function DocumentsPage() {
     return s;
   };
 
+  const toggleReachScopeChip = (scope: 'intern' | 'extern') => {
+    setReachScopeFilters((prev) => (prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]));
+  };
+
+  const reachScopeLabel = (scope: DocumentListItem['reach_scope']) => {
+    if (scope === 'extern') return 'extern';
+    return 'intern';
+  };
+
+  const renderParticipationBadges = (groups: string[] | null | undefined) => {
+    const list = (groups ?? []).map((g) => (g ?? '').trim()).filter(Boolean);
+    if (list.length === 0) return <span className="text-zinc-400">—</span>;
+    const shown = list.slice(0, 2);
+    const rest = list.length - shown.length;
+    return (
+      <div className="flex flex-wrap gap-1">
+        {shown.map((g) => (
+          <span
+            key={g}
+            className="inline-flex items-center rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+            title={g}
+          >
+            {g}
+          </span>
+        ))}
+        {rest > 0 && (
+          <span className="inline-flex items-center rounded border border-zinc-200 bg-white px-1.5 py-0.5 text-[10px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+            +{rest}
+          </span>
+        )}
+      </div>
+    );
+  };
+
   const docTypeLabel = (code: string) => {
+    const fromOptions = typeOptions.find((t) => t.code === code)?.label;
+    if (fromOptions) return fromOptions;
     if (code === 'PROTOKOLL') return 'Protokoll';
     if (code === 'BESCHLUSS') return 'Beschluss';
     if (code === 'KONZEPT') return 'Konzept';
@@ -579,17 +661,46 @@ export default function DocumentsPage() {
               className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
             >
               <option value="">Alle</option>
-              <option value="PROTOKOLL">Protokoll</option>
-              <option value="BESCHLUSS">Beschluss</option>
-              <option value="KONZEPT">Konzept</option>
-              <option value="CURRICULUM">Curriculum</option>
-              <option value="VEREINBARUNG">Vereinbarung</option>
-              <option value="ELTERNBRIEF">Elternbrief</option>
-              <option value="RUNDSCHREIBEN">Rundschreiben</option>
-              <option value="SITUATIVE_REGELUNG">Situative Regelung</option>
+              {(typeOptions.length > 0
+                ? typeOptions
+                : [
+                    { code: 'PROTOKOLL', label: 'Protokoll' },
+                    { code: 'BESCHLUSS', label: 'Beschluss' },
+                    { code: 'KONZEPT', label: 'Konzept' },
+                    { code: 'CURRICULUM', label: 'Curriculum' },
+                    { code: 'VEREINBARUNG', label: 'Vereinbarung' },
+                    { code: 'ELTERNBRIEF', label: 'Elternbrief' },
+                    { code: 'RUNDSCHREIBEN', label: 'Rundschreiben' },
+                    { code: 'SITUATIVE_REGELUNG', label: 'Situative Regelung' },
+                  ]
+              ).map((t) => (
+                <option key={t.code} value={t.code}>
+                  {t.label}
+                </option>
+              ))}
             </select>
           </div>
 
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+              Verantwortlich
+            </label>
+            <select
+              value={responsibleUnitFilter}
+              onChange={(e) => setResponsibleUnitFilter(e.target.value)}
+              className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+            >
+              <option value="">Alle</option>
+              {(responsibleUnitOptions.length > 0
+                ? responsibleUnitOptions
+                : ['Schulleitung', 'Sekretariat', 'Fachschaft Deutsch', 'Fachschaft Mathematik', 'Fachschaft Englisch', 'Steuergruppe', 'Lehrkräfte']
+              ).map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </div>
         </section>
 
         <div className="flex items-center justify-between gap-3">
@@ -605,8 +716,14 @@ export default function DocumentsPage() {
             type="button"
             onClick={() => {
               setTypeFilter('');
+              setResponsibleUnitFilter('');
               setStatusFilters([]);
               setProtectionFilter('');
+              setReachScopeFilters([]);
+              setParticipationFilter('');
+              setGremiumFilter('');
+              setReviewFilter('');
+              setSummaryFilter('');
               setSearchInput('');
               setSearchQuery('');
             }}
@@ -657,6 +774,110 @@ export default function DocumentsPage() {
                   <option value="1">1 – Öffentlich / unkritisch</option>
                   <option value="2">2 – Verwaltung/Sekretariat + Schulleitung</option>
                   <option value="3">3 – Nur Schulleitung</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-[240px] flex-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Reichweite
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { value: 'intern' as const, label: 'intern' },
+                    { value: 'extern' as const, label: 'extern' },
+                  ] as const).map((chip) => {
+                    const active = reachScopeFilters.includes(chip.value);
+                    return (
+                      <button
+                        key={chip.value}
+                        type="button"
+                        onClick={() => toggleReachScopeChip(chip.value)}
+                        className={`rounded-full border px-3 py-1 text-[11px] font-medium transition ${
+                          active
+                            ? 'border-violet-300 bg-violet-50 text-zinc-900 dark:border-violet-800 dark:bg-violet-950/50 dark:text-zinc-50'
+                            : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-[240px] flex-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Beteiligung enthält
+                </label>
+                <input
+                  list="participation_suggestions"
+                  value={participationFilter}
+                  onChange={(e) => setParticipationFilter(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.preventDefault();
+                  }}
+                  placeholder="z. B. Schulkonferenz (auch mehrere: A, B)"
+                  className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                />
+                <datalist id="participation_suggestions">
+                  {[
+                    'Schulkonferenz',
+                    'Lehrerkonferenz',
+                    'Fachkonferenz',
+                    'Steuergruppe',
+                    'Arbeitsgruppe',
+                    'Schulpflegschaft',
+                    'Schülervertretung',
+                  ].map((g) => (
+                    <option key={g} value={g} />
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="flex flex-col gap-1 min-w-[240px] flex-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Beschlussgremium
+                </label>
+                <input
+                  type="text"
+                  value={gremiumFilter}
+                  onChange={(e) => setGremiumFilter(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.preventDefault();
+                  }}
+                  placeholder="z. B. Schulkonferenz"
+                  className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Review-Datum
+                </label>
+                <select
+                  value={reviewFilter}
+                  onChange={(e) => setReviewFilter(e.target.value)}
+                  className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="">Alle</option>
+                  <option value="overdue">Review überfällig</option>
+                  <option value="set">Review gesetzt</option>
+                  <option value="empty">Review leer</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  KI-Zusammenfassung
+                </label>
+                <select
+                  value={summaryFilter}
+                  onChange={(e) => setSummaryFilter(e.target.value)}
+                  className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="">Alle</option>
+                  <option value="has">vorhanden</option>
+                  <option value="missing">fehlt</option>
                 </select>
               </div>
             </div>
@@ -1082,6 +1303,8 @@ export default function DocumentsPage() {
                   <th className="px-3 py-2 text-left">KI-Zusammenfassung vorhanden</th>
                   <th className="px-3 py-2 text-left">Beschlussgremium</th>
                   <th className="px-3 py-2 text-left">Verantwortlich</th>
+                  <th className="px-3 py-2 text-left">Reichweite</th>
+                  <th className="px-3 py-2 text-left">Beteiligung</th>
                   <th className="px-3 py-2 text-left">Schutzklasse</th>
                 </tr>
               </thead>
@@ -1205,6 +1428,18 @@ export default function DocumentsPage() {
                     </td>
                     <td className="px-3 py-2">{doc.gremium ?? '—'}</td>
                     <td className="px-3 py-2">{doc.responsible_unit}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                          reachScopeLabel(doc.reach_scope) === 'extern'
+                            ? 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-200'
+                            : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
+                        }`}
+                      >
+                        {reachScopeLabel(doc.reach_scope)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">{renderParticipationBadges(doc.participation_groups)}</td>
                     <td className="px-3 py-2">{doc.protection_class_id}</td>
                   </tr>
                 ))}
@@ -1304,6 +1539,15 @@ export default function DocumentsPage() {
                   <span className="inline-flex items-center rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
                     Schutzklasse {doc.protection_class_id}
                   </span>
+                  <span
+                    className={`inline-flex items-center rounded border px-2 py-0.5 text-[11px] font-medium ${
+                      reachScopeLabel(doc.reach_scope) === 'extern'
+                        ? 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-200'
+                        : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
+                    }`}
+                  >
+                    {reachScopeLabel(doc.reach_scope)}
+                  </span>
 
                   <Link
                     href={`/documents/${doc.id}?focus=summary`}
@@ -1331,6 +1575,10 @@ export default function DocumentsPage() {
                     )}
                   </Link>
                 </div>
+
+                {(doc.participation_groups ?? []).length > 0 && (
+                  <div className="mt-2">{renderParticipationBadges(doc.participation_groups)}</div>
+                )}
               </article>
             ))}
           </section>
@@ -1379,6 +1627,21 @@ export default function DocumentsPage() {
                           <span className="inline-flex items-center rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
                             SK {doc.protection_class_id}
                           </span>
+                          <span
+                            className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-medium ${
+                              reachScopeLabel(doc.reach_scope) === 'extern'
+                                ? 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-900/40 dark:bg-violet-950/30 dark:text-violet-200'
+                                : 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
+                            }`}
+                          >
+                            {reachScopeLabel(doc.reach_scope)}
+                          </span>
+                          {(doc.participation_groups ?? []).length > 0 && (
+                            <span className="inline-flex items-center rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+                              Beteiligung: {(doc.participation_groups ?? []).slice(0, 1).join('')}
+                              {(doc.participation_groups ?? []).length > 1 ? ` +${(doc.participation_groups ?? []).length - 1}` : ''}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

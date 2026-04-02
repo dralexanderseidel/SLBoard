@@ -192,7 +192,7 @@ export async function POST(
     try {
       let docMetaQuery = supabase
         .from('documents')
-        .select('title, document_type_code, gremium, responsible_unit, participation_groups, legal_reference')
+        .select('title, document_type_code, gremium, responsible_unit, reach_scope, participation_groups, legal_reference')
         .eq('id', documentId);
       if (docSchool) docMetaQuery = docMetaQuery.eq('school_number', docSchool);
       const { data: docMeta } = await docMetaQuery.single();
@@ -203,6 +203,7 @@ export async function POST(
         documentType: (docMeta?.document_type_code as string) ?? null,
         gremium: (docMeta?.gremium as string) ?? null,
         responsibleUnit: (docMeta?.responsible_unit as string) ?? null,
+        reachScope: (docMeta?.reach_scope as string) ?? null,
         participationGroups: (docMeta?.participation_groups as string[] | null) ?? null,
         summary: null,
         legalReference: (docMeta?.legal_reference as string) ?? null,

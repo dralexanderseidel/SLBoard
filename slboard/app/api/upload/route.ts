@@ -191,6 +191,7 @@ export async function POST(req: NextRequest) {
         documentType: type,
         gremium,
         responsibleUnit,
+        reachScope,
         participationGroups,
         summary: null,
         legalReference: null,

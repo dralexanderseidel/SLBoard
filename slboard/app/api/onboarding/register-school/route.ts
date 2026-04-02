@@ -14,6 +14,26 @@ function usernameFromEmail(email: string): string {
   return (email.split('@')[0] ?? 'admin').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40) || 'admin';
 }
 
+const DEFAULT_DOC_TYPES: Array<{ code: string; label: string; sort_order: number }> = [
+  { code: 'PROTOKOLL', label: 'Protokoll', sort_order: 10 },
+  { code: 'BESCHLUSS', label: 'Beschluss', sort_order: 20 },
+  { code: 'KONZEPT', label: 'Konzept', sort_order: 30 },
+  { code: 'CURRICULUM', label: 'Curriculum', sort_order: 40 },
+  { code: 'VEREINBARUNG', label: 'Vereinbarung', sort_order: 50 },
+  { code: 'ELTERNBRIEF', label: 'Elternbrief', sort_order: 60 },
+  { code: 'RUNDSCHREIBEN', label: 'Rundschreiben', sort_order: 70 },
+  { code: 'SITUATIVE_REGELUNG', label: 'Situative Regelung', sort_order: 80 },
+];
+const DEFAULT_RESP_UNITS: Array<{ name: string; sort_order: number }> = [
+  { name: 'Schulleitung', sort_order: 10 },
+  { name: 'Sekretariat', sort_order: 20 },
+  { name: 'Fachschaft Deutsch', sort_order: 30 },
+  { name: 'Fachschaft Mathematik', sort_order: 40 },
+  { name: 'Fachschaft Englisch', sort_order: 50 },
+  { name: 'Steuergruppe', sort_order: 60 },
+  { name: 'Lehrkräfte', sort_order: 70 },
+];
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as RegisterSchoolPayload;
@@ -72,6 +92,35 @@ export async function POST(req: NextRequest) {
         .from('schools')
         .insert({ school_number: schoolNumber, name: schoolName, active: true });
       if (schoolError) throw new Error(schoolError.message);
+
+      // 2a) Metadaten-Optionen für die neue Schule initial befüllen (idempotent)
+      try {
+        await supabase
+          .from('school_document_type_options')
+          .upsert(
+            DEFAULT_DOC_TYPES.map((t) => ({
+              school_number: schoolNumber,
+              code: t.code,
+              label: t.label,
+              sort_order: t.sort_order,
+              active: true,
+            })),
+            { onConflict: 'school_number,code' }
+          );
+        await supabase
+          .from('school_responsible_unit_options')
+          .upsert(
+            DEFAULT_RESP_UNITS.map((u) => ({
+              school_number: schoolNumber,
+              name: u.name,
+              sort_order: u.sort_order,
+              active: true,
+            })),
+            { onConflict: 'school_number,name' }
+          );
+      } catch {
+        // best-effort: Schule soll registrierbar bleiben, falls Migrationen noch nicht eingespielt sind
+      }
 
       const { data: appUser, error: appUserError } = await supabase
         .from('app_users')

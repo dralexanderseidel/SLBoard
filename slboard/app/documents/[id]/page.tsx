@@ -118,6 +118,9 @@ export default function DocumentDetailPage() {
   const [auditLog, setAuditLog] = useState<Array<{ user_email: string; action: string; old_values: Record<string, unknown> | null; new_values: Record<string, unknown> | null; created_at: string }>>([]);
   const [auditImportantOnly, setAuditImportantOnly] = useState(false);
   const [editParticipationInput, setEditParticipationInput] = useState('');
+  const [documentTypeOptions, setDocumentTypeOptions] = useState<Array<{ code: string; label: string }>>([]);
+  const [responsibleUnitOptions, setResponsibleUnitOptions] = useState<string[]>([]);
+  const [responsibleCustom, setResponsibleCustom] = useState(false);
 
   useEffect(() => {
     const focus = searchParams.get('focus');
@@ -131,6 +134,24 @@ export default function DocumentDetailPage() {
 
     return () => window.clearTimeout(t);
   }, [searchParams, doc]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/metadata/options', { credentials: 'include', cache: 'no-store' });
+        const data = (await res.json()) as {
+          documentTypes?: Array<{ code: string; label: string }>;
+          responsibleUnits?: string[];
+        };
+        if (!res.ok) return;
+        if (Array.isArray(data.documentTypes)) setDocumentTypeOptions(data.documentTypes);
+        if (Array.isArray(data.responsibleUnits)) setResponsibleUnitOptions(data.responsibleUnits);
+      } catch {
+        // ignore
+      }
+    };
+    void load();
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -1205,31 +1226,65 @@ export default function DocumentDetailPage() {
                       onChange={(e) => setEditForm((f) => ({ ...f, document_type_code: e.target.value }))}
                       className="w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-950"
                     >
-                      <option value="PROTOKOLL">Protokoll</option>
-                      <option value="BESCHLUSS">Beschluss</option>
-                      <option value="KONZEPT">Konzept</option>
-                      <option value="CURRICULUM">Curriculum</option>
-                      <option value="VEREINBARUNG">Vereinbarung</option>
-                      <option value="ELTERNBRIEF">Elternbrief</option>
-                      <option value="RUNDSCHREIBEN">Rundschreiben</option>
-                      <option value="SITUATIVE_REGELUNG">Situative Regelung</option>
+                      {(documentTypeOptions.length > 0
+                        ? documentTypeOptions
+                        : [
+                            { code: 'PROTOKOLL', label: 'Protokoll' },
+                            { code: 'BESCHLUSS', label: 'Beschluss' },
+                            { code: 'KONZEPT', label: 'Konzept' },
+                            { code: 'CURRICULUM', label: 'Curriculum' },
+                            { code: 'VEREINBARUNG', label: 'Vereinbarung' },
+                            { code: 'ELTERNBRIEF', label: 'Elternbrief' },
+                            { code: 'RUNDSCHREIBEN', label: 'Rundschreiben' },
+                            { code: 'SITUATIVE_REGELUNG', label: 'Situative Regelung' },
+                          ]
+                      ).map((t) => (
+                        <option key={t.code} value={t.code}>
+                          {t.label}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>
                     <label className="mb-0.5 block text-zinc-500">Verantwortlich</label>
-                    <select
-                      value={editForm.responsible_unit ?? ''}
-                      onChange={(e) => setEditForm((f) => ({ ...f, responsible_unit: e.target.value }))}
-                      className="w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-950"
-                    >
-                      <option value="Schulleitung">Schulleitung</option>
-                      <option value="Sekretariat">Sekretariat</option>
-                      <option value="Fachschaft Deutsch">Fachschaft Deutsch</option>
-                      <option value="Fachschaft Mathematik">Fachschaft Mathematik</option>
-                      <option value="Fachschaft Englisch">Fachschaft Englisch</option>
-                      <option value="Steuergruppe">Steuergruppe</option>
-                      <option value="Lehrkräfte">Lehrkräfte</option>
-                    </select>
+                    {!responsibleCustom ? (
+                      <select
+                        value={editForm.responsible_unit ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === '__custom__') {
+                            setResponsibleCustom(true);
+                            return;
+                          }
+                          setEditForm((f) => ({ ...f, responsible_unit: v }));
+                        }}
+                        className="w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-950"
+                      >
+                        {(responsibleUnitOptions.length > 0 ? responsibleUnitOptions : ORG_UNITS).map((u) => (
+                          <option key={u} value={u}>
+                            {u}
+                          </option>
+                        ))}
+                        <option value="__custom__">Andere…</option>
+                      </select>
+                    ) : (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={editForm.responsible_unit ?? ''}
+                          onChange={(e) => setEditForm((f) => ({ ...f, responsible_unit: e.target.value }))}
+                          className="w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-950"
+                          placeholder="Verantwortlich"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setResponsibleCustom(false)}
+                          className="rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                        >
+                          Liste
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="mb-0.5 block text-zinc-500">Reichweite</label>

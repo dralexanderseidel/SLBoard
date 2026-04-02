@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 type Status = 'ENTWURF' | 'FREIGEGEBEN' | 'VEROEFFENTLICHT';
@@ -31,18 +31,49 @@ export default function UploadPage() {
   };
 
   const [type, setType] = useState('PROTOKOLL');
+  const [typeOptions, setTypeOptions] = useState<Array<{ code: string; label: string }>>([]);
   const [date, setDate] = useState(() => getTodayISODateLocal());
   const [status, setStatus] = useState<Status>('ENTWURF');
   const [reachScope, setReachScope] = useState<ReachScope>('intern');
   const [protectionClass, setProtectionClass] = useState('1');
   const [gremium, setGremium] = useState('');
   const [responsibleUnit, setResponsibleUnit] = useState('Schulleitung');
+  const [responsibleUnitOptions, setResponsibleUnitOptions] = useState<string[]>([]);
   const [participationGroups, setParticipationGroups] = useState<string[]>([]);
   const [participationInput, setParticipationInput] = useState('');
   const [items, setItems] = useState<UploadItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/metadata/options', { credentials: 'include', cache: 'no-store' });
+        const data = (await res.json()) as {
+          documentTypes?: Array<{ code: string; label: string }>;
+          responsibleUnits?: string[];
+        };
+        if (!res.ok) return;
+        if (Array.isArray(data.documentTypes) && data.documentTypes.length > 0) {
+          setTypeOptions(data.documentTypes);
+          if (!data.documentTypes.some((t) => t.code === type)) {
+            setType(data.documentTypes[0]!.code);
+          }
+        }
+        if (Array.isArray(data.responsibleUnits) && data.responsibleUnits.length > 0) {
+          setResponsibleUnitOptions(data.responsibleUnits);
+          if (!data.responsibleUnits.includes(responsibleUnit)) {
+            setResponsibleUnit(data.responsibleUnits[0]!);
+          }
+        }
+      } catch {
+        // ignore (fallback to hardcoded defaults)
+      }
+    };
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,14 +170,23 @@ export default function UploadPage() {
                 onChange={(e) => setType(e.target.value)}
                 className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
               >
-                <option value="PROTOKOLL">Protokoll</option>
-                <option value="BESCHLUSS">Beschluss</option>
-                <option value="KONZEPT">Konzept</option>
-                <option value="CURRICULUM">Curriculum</option>
-                <option value="VEREINBARUNG">Vereinbarung</option>
-                <option value="ELTERNBRIEF">Elternbrief</option>
-                <option value="RUNDSCHREIBEN">Rundschreiben</option>
-                <option value="SITUATIVE_REGELUNG">Situative Regelung</option>
+                {(typeOptions.length > 0
+                  ? typeOptions
+                  : [
+                      { code: 'PROTOKOLL', label: 'Protokoll' },
+                      { code: 'BESCHLUSS', label: 'Beschluss' },
+                      { code: 'KONZEPT', label: 'Konzept' },
+                      { code: 'CURRICULUM', label: 'Curriculum' },
+                      { code: 'VEREINBARUNG', label: 'Vereinbarung' },
+                      { code: 'ELTERNBRIEF', label: 'Elternbrief' },
+                      { code: 'RUNDSCHREIBEN', label: 'Rundschreiben' },
+                      { code: 'SITUATIVE_REGELUNG', label: 'Situative Regelung' },
+                    ]
+                ).map((t) => (
+                  <option key={t.code} value={t.code}>
+                    {t.label}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -232,8 +272,17 @@ export default function UploadPage() {
               value={responsibleUnit}
               onChange={(e) => setResponsibleUnit(e.target.value)}
               required
+              list="responsible-unit-options"
               className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
             />
+            <datalist id="responsible-unit-options">
+              {(responsibleUnitOptions.length > 0
+                ? responsibleUnitOptions
+                : ['Schulleitung', 'Sekretariat', 'Fachschaft Deutsch', 'Fachschaft Mathematik', 'Fachschaft Englisch', 'Steuergruppe', 'Lehrkräfte']
+              ).map((u) => (
+                <option key={u} value={u} />
+              ))}
+            </datalist>
           </div>
 
           <div className="flex flex-col gap-2">

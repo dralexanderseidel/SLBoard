@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     let docsQuery = supabase
       .from('documents')
-      .select('id, title, document_type_code, gremium, responsible_unit, participation_groups, legal_reference, summary, school_number')
+      .select('id, title, document_type_code, gremium, responsible_unit, reach_scope, participation_groups, legal_reference, summary, school_number')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
     if (access.schoolNumber) docsQuery = docsQuery.eq('school_number', access.schoolNumber);
@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
       document_type_code: string;
       gremium: string | null;
       responsible_unit: string | null;
+      reach_scope: string | null;
       participation_groups: string[] | null;
       legal_reference: string | null;
       summary: string | null;
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest) {
           documentType: d.document_type_code,
           gremium: d.gremium,
           responsibleUnit: d.responsible_unit,
+          reachScope: d.reach_scope,
           participationGroups: d.participation_groups,
           summary: d.summary,
           legalReference: d.legal_reference,

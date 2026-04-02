@@ -3,6 +3,8 @@ import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
+import { getDocumentText } from '../../../../lib/documentText';
+import { buildSearchIndex } from '../../../../lib/indexing';
 
 /** Erlaubte Workflow-Übergänge: Entwurf → Freigegeben → Veröffentlicht */
 const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -154,6 +156,55 @@ export async function PATCH(
     });
     if (auditErr) {
       // audit_log Tabelle optional (Migration ggf. noch nicht ausgeführt)
+    }
+
+    // GAP-Fix: Wenn index-relevante Metadaten geändert wurden, search_text/keywords sofort nachziehen,
+    // damit die Freitextsuche nicht bis zum nächsten Reindex/Version-Upload "hinterherhinkt".
+    const INDEX_RELEVANT_KEYS = new Set([
+      'title',
+      'document_type_code',
+      'gremium',
+      'responsible_unit',
+      'participation_groups',
+      'legal_reference',
+      'summary',
+    ]);
+    const shouldReindex = Object.keys(updates).some((k) => INDEX_RELEVANT_KEYS.has(k));
+    if (shouldReindex) {
+      let docForIndexQuery = supabase
+        .from('documents')
+        .select('id, title, document_type_code, gremium, responsible_unit, reach_scope, participation_groups, summary, legal_reference, school_number')
+        .eq('id', documentId);
+      if (docSchool) docForIndexQuery = docForIndexQuery.eq('school_number', docSchool);
+      const { data: docForIndex } = await docForIndexQuery.single();
+
+      if (docForIndex?.title) {
+        let extractedText: string | null = null;
+        try {
+          extractedText = await getDocumentText(documentId);
+        } catch {
+          extractedText = null;
+        }
+
+        const idx = buildSearchIndex({
+          title: String(docForIndex.title),
+          documentType: (docForIndex.document_type_code as string | null) ?? null,
+          gremium: (docForIndex.gremium as string | null) ?? null,
+          responsibleUnit: (docForIndex.responsible_unit as string | null) ?? null,
+          reachScope: (docForIndex.reach_scope as string | null) ?? null,
+          participationGroups: (docForIndex.participation_groups as string[] | null) ?? null,
+          summary: (docForIndex.summary as string | null) ?? null,
+          legalReference: (docForIndex.legal_reference as string | null) ?? null,
+          extractedText,
+        });
+
+        let idxUpdate = supabase
+          .from('documents')
+          .update({ search_text: idx.searchText, keywords: idx.keywords, indexed_at: new Date().toISOString() })
+          .eq('id', documentId);
+        if (docSchool) idxUpdate = idxUpdate.eq('school_number', docSchool);
+        await idxUpdate;
+      }
     }
 
     return NextResponse.json({ success: true });

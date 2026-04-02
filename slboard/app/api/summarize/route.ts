@@ -28,8 +28,11 @@ export async function POST(req: NextRequest) {
 
     const { title, type, createdAt, text, documentId }: SummarizePayload = await req.json();
     const supabase = supabaseServer();
-    const access = supabase ? await getUserAccessContext(user.email, supabase) : null;
-    const aiSettings = await getAiSettingsForSchool(access?.schoolNumber ?? null);
+    if (!supabase) {
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
+    }
+    const access = await getUserAccessContext(user.email, supabase);
+    const aiSettings = await getAiSettingsForSchool(access.schoolNumber ?? null);
     const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
 
     let basisText = text ?? '';
