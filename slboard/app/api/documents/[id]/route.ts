@@ -85,6 +85,18 @@ export async function PATCH(
     if (typeof body.gremium === 'string') {
       updates.gremium = body.gremium.trim() || null;
     }
+    if (typeof body.reach_scope === 'string') {
+      const v = body.reach_scope.trim().toLowerCase();
+      if (v === 'intern' || v === 'extern') updates.reach_scope = v;
+    }
+    if (Array.isArray(body.participation_groups)) {
+      const groups = body.participation_groups
+        .filter((v): v is string => typeof v === 'string')
+        .map((v) => v.trim())
+        .filter(Boolean)
+        .slice(0, 20);
+      updates.participation_groups = groups;
+    }
     if (typeof body.responsible_unit === 'string' && body.responsible_unit.trim()) {
       updates.responsible_unit = body.responsible_unit.trim();
     }

@@ -3,6 +3,7 @@ export type IndexInput = {
   documentType?: string | null;
   gremium?: string | null;
   responsibleUnit?: string | null;
+  participationGroups?: string[] | null;
   summary?: string | null;
   legalReference?: string | null;
   extractedText?: string | null;
@@ -64,6 +65,7 @@ export function buildSearchIndex(input: IndexInput): IndexResult {
     (input.documentType ?? '').trim(),
     (input.gremium ?? '').trim(),
     (input.responsibleUnit ?? '').trim(),
+    ...(input.participationGroups ?? []).map((g) => g.trim()).filter(Boolean),
   ].filter(Boolean);
 
   const basisText =

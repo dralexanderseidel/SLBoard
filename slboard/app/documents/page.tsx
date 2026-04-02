@@ -228,6 +228,7 @@ export default function DocumentsPage() {
 
   const allVisibleIds = docs.map((d) => d.id);
   const allSelected = allVisibleIds.length > 0 && selectedIds.length === allVisibleIds.length;
+  const noneSelected = selectedIds.length === 0;
 
   const displayedDocs = [...docs].sort((a, b) => {
     const dirMul = sortDir === 'asc' ? 1 : -1;
@@ -671,6 +672,45 @@ export default function DocumentsPage() {
           </section>
         )}
 
+        {/* Auswahl: Alle / Keine */}
+        {!loading && !error && docs.length > 0 && (
+          <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={() => {
+                    setBulkDeleteResult(null);
+                    setBulkUpdateResult(null);
+                    setBulkSummarizeResult(null);
+                    setSelectedIds([...allVisibleIds]);
+                  }}
+                  className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-zinc-700 dark:text-zinc-200">Alle</span>
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={noneSelected}
+                  onChange={() => {
+                    setBulkDeleteResult(null);
+                    setBulkUpdateResult(null);
+                    setBulkSummarizeResult(null);
+                    setSelectedIds([]);
+                  }}
+                  className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-zinc-700 dark:text-zinc-200">Keine</span>
+              </label>
+            </div>
+            <span className="text-zinc-600 dark:text-zinc-300">
+              Ausgewählt: <span className="font-semibold">{selectedIds.length}</span>
+            </span>
+          </section>
+        )}
+
         {/* Bulk-Aktionen: nur bei Mehrfachauswahl */}
         {!loading && !error && docs.length > 0 && selectedIds.length > 1 && (
           <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -695,7 +735,7 @@ export default function DocumentsPage() {
 
             {!bulkCapabilitiesLoading && blockedSelectedIds.length > 0 && (
               <p className="w-full rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-                Hinweis: Ein Teil der Auswahl ist nicht änderbar (z. B. wegen Rolle/Organisationseinheit/Schutzklasse).
+                Hinweis: Ein Teil der Auswahl ist nicht änderbar (z. B. wegen Rolle/Verantwortlich/Schutzklasse).
               </p>
             )}
 
@@ -1040,8 +1080,8 @@ export default function DocumentsPage() {
                     </button>
                   </th>
                   <th className="px-3 py-2 text-left">KI-Zusammenfassung vorhanden</th>
-                  <th className="px-3 py-2 text-left">Gremium</th>
-                  <th className="px-3 py-2 text-left">Organisationseinheit</th>
+                  <th className="px-3 py-2 text-left">Beschlussgremium</th>
+                  <th className="px-3 py-2 text-left">Verantwortlich</th>
                   <th className="px-3 py-2 text-left">Schutzklasse</th>
                 </tr>
               </thead>

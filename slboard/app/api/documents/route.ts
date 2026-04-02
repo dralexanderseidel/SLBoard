@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     let query = supabase
       .from('documents')
       .select(
-        'id, title, document_type_code, created_at, status, protection_class_id, gremium, responsible_unit, summary, school_number'
+        'id, title, document_type_code, created_at, status, protection_class_id, gremium, responsible_unit, participation_groups, summary, school_number'
       )
       .order('created_at', { ascending: false });
 

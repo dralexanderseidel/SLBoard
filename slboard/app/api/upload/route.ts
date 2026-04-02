@@ -49,8 +49,24 @@ export async function POST(req: NextRequest) {
     const date = (formData.get('date') as string)?.trim();
     const status = (formData.get('status') as string)?.trim() || 'ENTWURF';
     const protectionClass = (formData.get('protectionClass') as string)?.trim() || '1';
+    const reachScopeRaw = ((formData.get('reachScope') as string) ?? 'intern').trim().toLowerCase();
+    const reachScope = reachScopeRaw === 'extern' ? 'extern' : 'intern';
     const gremium = (formData.get('gremium') as string)?.trim() || null;
     const responsibleUnit = (formData.get('responsibleUnit') as string)?.trim() || 'Schulleitung';
+    const participationGroupsRaw = (formData.get('participationGroups') as string | null) ?? '[]';
+    let participationGroups: string[] = [];
+    try {
+      const parsed = JSON.parse(participationGroupsRaw) as unknown;
+      if (Array.isArray(parsed)) {
+        participationGroups = parsed
+          .filter((v): v is string => typeof v === 'string')
+          .map((v) => v.trim())
+          .filter(Boolean)
+          .slice(0, 20);
+      }
+    } catch {
+      participationGroups = [];
+    }
 
     // Validierung
     if (!file || !(file instanceof File)) {
@@ -103,6 +119,8 @@ export async function POST(req: NextRequest) {
         protection_class_id: protectionId,
         status,
         gremium,
+        participation_groups: participationGroups,
+        reach_scope: reachScope,
       })
       .select('id')
       .single();
@@ -173,6 +191,7 @@ export async function POST(req: NextRequest) {
         documentType: type,
         gremium,
         responsibleUnit,
+        participationGroups,
         summary: null,
         legalReference: null,
         extractedText,

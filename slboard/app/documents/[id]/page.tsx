@@ -12,8 +12,10 @@ type DocumentDetail = {
   created_at: string;
   status: string;
   protection_class_id: number;
+  reach_scope: 'intern' | 'extern';
   gremium: string | null;
   responsible_unit: string;
+  participation_groups: string[] | null;
   legal_reference: string | null;
   summary: string | null;
   review_date: string | null;
@@ -53,6 +55,15 @@ const DOC_TYPES = [
   'SITUATIVE_REGELUNG',
 ];
 const ORG_UNITS = ['Schulleitung', 'Sekretariat', 'Fachschaft Deutsch', 'Fachschaft Mathematik', 'Fachschaft Englisch', 'Steuergruppe', 'Lehrkräfte'];
+const PARTICIPATION_GROUP_OPTIONS = [
+  'Schulkonferenz',
+  'Lehrerkonferenz',
+  'Fachkonferenz',
+  'Schülervertretung',
+  'Elternvertretung',
+  'Steuergruppe',
+  'Ganztagsteam',
+];
 
 /** Workflow: erlaubte nächste Schritte */
 const WORKFLOW_NEXT: Record<string, { label: string; value: string } | null> = {
@@ -106,6 +117,7 @@ export default function DocumentDetailPage() {
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [auditLog, setAuditLog] = useState<Array<{ user_email: string; action: string; old_values: Record<string, unknown> | null; new_values: Record<string, unknown> | null; created_at: string }>>([]);
   const [auditImportantOnly, setAuditImportantOnly] = useState(false);
+  const [editParticipationInput, setEditParticipationInput] = useState('');
 
   useEffect(() => {
     const focus = searchParams.get('focus');
@@ -130,7 +142,7 @@ export default function DocumentDetailPage() {
       const { data, error } = await supabase
         .from('documents')
         .select(
-          'id, title, document_type_code, created_at, status, protection_class_id, gremium, responsible_unit, legal_reference, summary, summary_updated_at, review_date, current_version_id, steering_analysis, steering_analysis_updated_at',
+          'id, title, document_type_code, created_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, legal_reference, summary, summary_updated_at, review_date, current_version_id, steering_analysis, steering_analysis_updated_at',
         )
         .eq('id', params.id)
         .single();
@@ -269,6 +281,8 @@ export default function DocumentDetailPage() {
         legal_reference: doc.legal_reference ?? '',
         gremium: doc.gremium ?? '',
         responsible_unit: doc.responsible_unit,
+        reach_scope: doc.reach_scope ?? 'intern',
+        participation_groups: doc.participation_groups ?? [],
         document_type_code: doc.document_type_code,
         protection_class_id: doc.protection_class_id,
         review_date: doc.review_date ?? null,
@@ -394,8 +408,8 @@ export default function DocumentDetailPage() {
       createdAt: new Date(doc.created_at).toLocaleDateString('de-DE'),
       text:
         doc.legal_reference ??
-        `Dieses Dokument ist ein ${docTypeLabel(doc.document_type_code)} der Organisationseinheit ${doc.responsible_unit}${
-          doc.gremium ? ` im Gremium ${doc.gremium}` : ''
+        `Dieses Dokument ist ein ${docTypeLabel(doc.document_type_code)}. Verantwortlich ist ${doc.responsible_unit}${
+          doc.gremium ? `, Beschlussgremium: ${doc.gremium}` : ''
         }.`,
     };
 
@@ -814,13 +828,21 @@ export default function DocumentDetailPage() {
               <div className="mt-3 rounded border border-dashed border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
                 <p className="mb-1 font-medium">Kurzbeschreibung</p>
                 <p>
-                  Dieses Dokument ist ein {docTypeLabel(doc.document_type_code)} der
-                  Organisationseinheit{' '}
+                  Dieses Dokument ist ein {docTypeLabel(doc.document_type_code)}. Verantwortlich:{' '}
                   <span className="font-medium">{doc.responsible_unit}</span>
+                  {' '}
+                  · Reichweite <span className="font-medium">{doc.reach_scope}</span>
                   {doc.gremium && (
                     <>
                       {' '}
-                      im Gremium <span className="font-medium">{doc.gremium}</span>
+                      · Beschlussgremium <span className="font-medium">{doc.gremium}</span>
+                    </>
+                  )}
+                  {(doc.participation_groups ?? []).length > 0 && (
+                    <>
+                      {' '}
+                      · Beteiligung{' '}
+                      <span className="font-medium">{(doc.participation_groups ?? []).join(', ')}</span>
                     </>
                   )}
                   . Erstelldatum:{' '}
@@ -1194,7 +1216,7 @@ export default function DocumentDetailPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-0.5 block text-zinc-500">Organisationseinheit</label>
+                    <label className="mb-0.5 block text-zinc-500">Verantwortlich</label>
                     <select
                       value={editForm.responsible_unit ?? ''}
                       onChange={(e) => setEditForm((f) => ({ ...f, responsible_unit: e.target.value }))}
@@ -1210,7 +1232,18 @@ export default function DocumentDetailPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-0.5 block text-zinc-500">Gremium</label>
+                    <label className="mb-0.5 block text-zinc-500">Reichweite</label>
+                    <select
+                      value={(editForm.reach_scope as string) ?? 'intern'}
+                      onChange={(e) => setEditForm((f) => ({ ...f, reach_scope: e.target.value as 'intern' | 'extern' }))}
+                      className="w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-950"
+                    >
+                      <option value="intern">intern</option>
+                      <option value="extern">extern</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-0.5 block text-zinc-500">Beschlussgremium</label>
                     <input
                       type="text"
                       value={(editForm.gremium as string) ?? ''}
@@ -1218,6 +1251,96 @@ export default function DocumentDetailPage() {
                       className="w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-950"
                       placeholder="optional"
                     />
+                  </div>
+                  <div>
+                    <label className="mb-0.5 block text-zinc-500">Beteiligung</label>
+                    <div className="mb-1 flex flex-wrap gap-1.5">
+                      {PARTICIPATION_GROUP_OPTIONS.map((group) => {
+                        const current = Array.isArray(editForm.participation_groups)
+                          ? (editForm.participation_groups as string[])
+                          : [];
+                        const active = current.includes(group);
+                        return (
+                          <button
+                            key={group}
+                            type="button"
+                            onClick={() =>
+                              setEditForm((f) => {
+                                const existing = Array.isArray(f.participation_groups)
+                                  ? (f.participation_groups as string[])
+                                  : [];
+                                return {
+                                  ...f,
+                                  participation_groups: existing.includes(group)
+                                    ? existing.filter((g) => g !== group)
+                                    : [...existing, group],
+                                };
+                              })
+                            }
+                            className={`rounded border px-2 py-0.5 text-[11px] ${
+                              active
+                                ? 'border-blue-300 bg-blue-50 text-zinc-900 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50'
+                                : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900'
+                            }`}
+                          >
+                            {group}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={editParticipationInput}
+                        onChange={(e) => setEditParticipationInput(e.target.value)}
+                        placeholder="Weitere Gruppe hinzufügen"
+                        className="w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-950"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const value = editParticipationInput.trim();
+                          if (!value) return;
+                          setEditForm((f) => {
+                            const existing = Array.isArray(f.participation_groups)
+                              ? (f.participation_groups as string[])
+                              : [];
+                            if (existing.includes(value)) return f;
+                            return { ...f, participation_groups: [...existing, value].slice(0, 20) };
+                          });
+                          setEditParticipationInput('');
+                        }}
+                        className="rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                      >
+                        Hinzufügen
+                      </button>
+                    </div>
+                    {Array.isArray(editForm.participation_groups) && editForm.participation_groups.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {(editForm.participation_groups as string[]).map((group) => (
+                          <span
+                            key={group}
+                            className="inline-flex items-center gap-1 rounded border border-zinc-300 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                          >
+                            {group}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setEditForm((f) => ({
+                                  ...f,
+                                  participation_groups: Array.isArray(f.participation_groups)
+                                    ? (f.participation_groups as string[]).filter((g) => g !== group)
+                                    : [],
+                                }))
+                              }
+                              aria-label={`${group} entfernen`}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="mb-0.5 block text-zinc-500">Schutzklasse</label>
@@ -1294,12 +1417,20 @@ export default function DocumentDetailPage() {
                     </dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="text-zinc-500">Organisationseinheit</dt>
+                    <dt className="text-zinc-500">Reichweite</dt>
+                    <dd>{doc.reach_scope ?? 'intern'}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-zinc-500">Verantwortlich</dt>
                     <dd>{doc.responsible_unit}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="text-zinc-500">Gremium</dt>
+                    <dt className="text-zinc-500">Beschlussgremium</dt>
                     <dd>{doc.gremium ?? '—'}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-zinc-500">Beteiligung</dt>
+                    <dd>{(doc.participation_groups ?? []).length ? (doc.participation_groups ?? []).join(', ') : '—'}</dd>
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <dt className="text-zinc-500">Rechtsbezug</dt>

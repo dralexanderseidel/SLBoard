@@ -4,11 +4,22 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 
 type Status = 'ENTWURF' | 'FREIGEGEBEN' | 'VEROEFFENTLICHT';
+type ReachScope = 'intern' | 'extern';
 
 type UploadItem = {
   file: File;
   title: string;
 };
+
+const PARTICIPATION_GROUP_OPTIONS = [
+  'Schulkonferenz',
+  'Lehrerkonferenz',
+  'Fachkonferenz',
+  'Schülervertretung',
+  'Elternvertretung',
+  'Steuergruppe',
+  'Ganztagsteam',
+];
 
 export default function UploadPage() {
   const getTodayISODateLocal = () => {
@@ -22,9 +33,12 @@ export default function UploadPage() {
   const [type, setType] = useState('PROTOKOLL');
   const [date, setDate] = useState(() => getTodayISODateLocal());
   const [status, setStatus] = useState<Status>('ENTWURF');
+  const [reachScope, setReachScope] = useState<ReachScope>('intern');
   const [protectionClass, setProtectionClass] = useState('1');
   const [gremium, setGremium] = useState('');
   const [responsibleUnit, setResponsibleUnit] = useState('Schulleitung');
+  const [participationGroups, setParticipationGroups] = useState<string[]>([]);
+  const [participationInput, setParticipationInput] = useState('');
   const [items, setItems] = useState<UploadItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -56,9 +70,11 @@ export default function UploadPage() {
           formData.set('type', type);
           formData.set('date', date);
           formData.set('status', status);
+          formData.set('reachScope', reachScope);
           formData.set('protectionClass', protectionClass);
           formData.set('gremium', gremium);
           formData.set('responsibleUnit', responsibleUnit);
+          formData.set('participationGroups', JSON.stringify(participationGroups));
 
           const res = await fetch('/api/upload', { method: 'POST', body: formData });
           const data = (await res.json()) as { success?: boolean; error?: string; message?: string };
@@ -80,6 +96,9 @@ export default function UploadPage() {
 
       setDate('');
       setGremium('');
+      setReachScope('intern');
+      setParticipationGroups([]);
+      setParticipationInput('');
       setItems([]);
       const fileInput = document.getElementById('file') as HTMLInputElement | null;
       if (fileInput) fileInput.value = '';
@@ -163,6 +182,20 @@ export default function UploadPage() {
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                Reichweite *
+              </label>
+              <select
+                value={reachScope}
+                onChange={(e) => setReachScope(e.target.value as ReachScope)}
+                className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              >
+                <option value="intern">intern</option>
+                <option value="extern">extern</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
                 Schutzklasse *
               </label>
               <select
@@ -178,7 +211,7 @@ export default function UploadPage() {
 
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
-                Gremium
+                Beschlussgremium
               </label>
               <input
                 type="text"
@@ -192,7 +225,7 @@ export default function UploadPage() {
 
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
-              Organisationseinheit *
+              Verantwortlich *
             </label>
             <input
               type="text"
@@ -201,6 +234,76 @@ export default function UploadPage() {
               required
               className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
             />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+              Beteiligung
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {PARTICIPATION_GROUP_OPTIONS.map((group) => {
+                const active = participationGroups.includes(group);
+                return (
+                  <button
+                    key={group}
+                    type="button"
+                    onClick={() =>
+                      setParticipationGroups((prev) =>
+                        prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]
+                      )
+                    }
+                    className={`rounded border px-2 py-1 text-[11px] ${
+                      active
+                        ? 'border-blue-300 bg-blue-50 text-zinc-900 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50'
+                        : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900'
+                    }`}
+                  >
+                    {group}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={participationInput}
+                onChange={(e) => setParticipationInput(e.target.value)}
+                placeholder="Weitere Gruppe hinzufügen"
+                className="h-8 w-full rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const value = participationInput.trim();
+                  if (!value || participationGroups.includes(value)) return;
+                  setParticipationGroups((prev) => [...prev, value].slice(0, 20));
+                  setParticipationInput('');
+                }}
+                className="rounded border border-zinc-300 px-2 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              >
+                Hinzufügen
+              </button>
+            </div>
+            {participationGroups.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {participationGroups.map((group) => (
+                  <span
+                    key={group}
+                    className="inline-flex items-center gap-1 rounded border border-zinc-300 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                  >
+                    {group}
+                    <button
+                      type="button"
+                      onClick={() => setParticipationGroups((prev) => prev.filter((g) => g !== group))}
+                      className="text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-100"
+                      aria-label={`${group} entfernen`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pt-2">
