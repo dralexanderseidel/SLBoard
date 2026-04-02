@@ -963,21 +963,22 @@ export default function DocumentDetailPage() {
                     {docSources.length > 0 && (
                       <div className="mt-2">
                         <p className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">
-                          Quellen
+                          Textbelege
                         </p>
-                        <ul className="mt-1 space-y-1">
+                        <ul className="mt-1 space-y-2">
                           {docSources.map((s) => (
-                            <li key={s.documentId} className="text-[11px]">
+                            <li key={s.documentId} className="text-[11px] rounded border border-zinc-200 bg-white/70 px-2 py-1 dark:border-zinc-800 dark:bg-zinc-900/40">
                               <Link
                                 href={`/documents/${s.documentId}`}
                                 className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
                               >
                                 {s.title}
                               </Link>
-                              <span className="text-zinc-500 dark:text-zinc-400">
-                                {' '}
-                                – {s.snippet}
-                              </span>
+                              {s.snippet && (
+                                <p className="mt-0.5 italic text-zinc-500 dark:text-zinc-400">
+                                  "{s.snippet}"
+                                </p>
+                              )}
                             </li>
                           ))}
                         </ul>

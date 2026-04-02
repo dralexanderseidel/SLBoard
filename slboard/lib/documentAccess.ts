@@ -98,18 +98,23 @@ export function canReadDocument(
   responsibleUnit?: string | null
 ): boolean {
   const pc = Number(protectionClassId ?? 1);
+  const hasLevel2AccessRole =
+    access.isSchulleitung ||
+    access.isSekretariat ||
+    access.roles.includes('VERWALTUNG') ||
+    access.roles.includes('KOORDINATION');
 
   if (pc >= 3) {
     return access.isSchulleitung;
   }
 
   if (pc === 2) {
-    return access.isSchulleitung || access.isSekretariat;
+    return hasLevel2AccessRole;
   }
 
   if (pc === 1) {
     // Level 1: öffentlich, aber nur für Lehrkräfte (DSGVO-Kontext)
-    return access.roles.includes('LEHRKRAFT') || access.isSchulleitung || access.isSekretariat;
+    return access.roles.includes('LEHRKRAFT') || hasLevel2AccessRole;
   }
 
   // Fallback für unbekannte Werte: restriktiv

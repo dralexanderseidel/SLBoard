@@ -541,6 +541,55 @@ export default function DocumentsPage() {
     }
   };
 
+  const handleBulkSetReachScope = async (targetScope: 'intern' | 'extern') => {
+    if (selectedIds.length === 0) return;
+    setBulkDeleteResult(null);
+    setBulkUpdateResult(null);
+    const ids = editableSelectedIds.length > 0 ? [...editableSelectedIds] : [...selectedIds];
+    if (ids.length === 0) return;
+
+    setBulkUpdating(true);
+    try {
+      loadSeqRef.current += 1;
+
+      const results = await Promise.allSettled(
+        ids.map(async (id) => {
+          const res = await fetch(`/api/documents/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reach_scope: targetScope }),
+          });
+          const data = (await res.json()) as { error?: string };
+          if (!res.ok) throw new Error(data.error ?? 'Fehler beim Setzen der Reichweite.');
+          return true;
+        })
+      );
+
+      const okCount = results.filter((r) => r.status === 'fulfilled').length;
+      const failCount = results.length - okCount;
+      const skippedCount = selectedIds.length - ids.length;
+      const firstFailReason = results.find((r) => r.status === 'rejected');
+      const failText =
+        firstFailReason && firstFailReason.status === 'rejected'
+          ? firstFailReason.reason instanceof Error
+            ? firstFailReason.reason.message
+            : String(firstFailReason.reason)
+          : null;
+      setBulkUpdateResult(
+        failCount === 0
+          ? `${okCount}/${results.length} Dokument(e) aktualisiert (Reichweite -> ${targetScope})${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.`
+          : `${okCount}/${results.length} aktualisiert (Reichweite -> ${targetScope}), ${failCount} fehlgeschlagen${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.${failText ? ` Grund: ${failText}` : ''}`
+      );
+
+      setSelectedIds([]);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setBulkUpdateResult(e instanceof Error ? e.message : 'Bulk-Update der Reichweite fehlgeschlagen.');
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
   const handleBulkGenerateSummaries = async () => {
     if (selectedIds.length === 0) return;
     if (!bulkSummariesArmed) return;
@@ -1071,6 +1120,39 @@ export default function DocumentsPage() {
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
                 {bulkUpdating ? '…' : 'Schutzklasse -> 3'}
+              </button>
+
+              <span className="mx-1 h-5 border-l border-zinc-200 dark:border-zinc-800" />
+
+              <button
+                type="button"
+                onClick={() => void handleBulkSetReachScope('intern')}
+                disabled={
+                  selectedIds.length === 0 ||
+                  bulkCapabilitiesLoading ||
+                  editableSelectedIds.length === 0 ||
+                  bulkDeleting ||
+                  bulkUpdating ||
+                  bulkSummarizing
+                }
+                className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
+              >
+                {bulkUpdating ? '…' : 'Reichweite -> intern'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkSetReachScope('extern')}
+                disabled={
+                  selectedIds.length === 0 ||
+                  bulkCapabilitiesLoading ||
+                  editableSelectedIds.length === 0 ||
+                  bulkDeleting ||
+                  bulkUpdating ||
+                  bulkSummarizing
+                }
+                className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
+              >
+                {bulkUpdating ? '…' : 'Reichweite -> extern'}
               </button>
 
               <span className="mx-1 h-5 border-l border-zinc-200 dark:border-zinc-800" />

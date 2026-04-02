@@ -414,7 +414,7 @@ export default function Home() {
               {querySources.length > 0 && (
                 <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-700">
                   <h4 className="mb-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-                    Verwendete Dokumente
+                    Textbelege aus verwendeten Dokumenten
                   </h4>
                   <ul className="space-y-2">
                     {querySources.map((s) => (
@@ -429,8 +429,8 @@ export default function Home() {
                           {s.title}
                         </Link>
                         {s.snippet && (
-                          <p className="mt-0.5 line-clamp-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-                            {s.snippet}
+                          <p className="mt-1 rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] italic text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                            "{s.snippet}"
                           </p>
                         )}
                       </li>

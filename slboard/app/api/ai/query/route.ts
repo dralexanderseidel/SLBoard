@@ -75,7 +75,12 @@ export async function POST(req: NextRequest) {
       docList = (await getSuggestedDocuments(trimmed, access.schoolNumber)).slice(0, MAX_DOCS);
     }
 
-    const sourceTexts: { id: string; title: string; snippet: string }[] = [];
+    const sourceTexts: {
+      id: string;
+      title: string;
+      promptSnippet: string;
+      evidenceSnippet: string;
+    }[] = [];
     const keywords = extractKeywords(trimmed);
     const debugDocEntries: AiQueryDebugDocEntry[] = [];
 
@@ -102,16 +107,24 @@ export async function POST(req: NextRequest) {
 
       if (text && text.trim().length > 30) {
         const selectedChunks = pickTopChunksForQuestion(text, keywords, chunkParams);
-        const snippet = buildPromptSnippetFromChunks(selectedChunks, MAX_TEXT_PER_DOC);
-        if (snippet.length > 30) {
-          sourceTexts.push({ id: doc.id, title: doc.title, snippet });
+        const promptSnippet = buildPromptSnippetFromChunks(selectedChunks, MAX_TEXT_PER_DOC);
+        if (promptSnippet.length > 30) {
+          const firstChunk = (selectedChunks[0] ?? '').replace(/\s+/g, ' ').trim();
+          const evidenceSnippet =
+            firstChunk.length > 360 ? `${firstChunk.slice(0, 360)}…` : firstChunk;
+          sourceTexts.push({
+            id: doc.id,
+            title: doc.title,
+            promptSnippet,
+            evidenceSnippet,
+          });
           if (debugEnabled) {
             debugDocEntries.push({
               documentId: doc.id,
               title: doc.title,
               chunkParams,
               selectedChunks,
-              builtSnippetLength: snippet.length,
+              builtSnippetLength: promptSnippet.length,
             });
           }
         }
@@ -121,7 +134,7 @@ export async function POST(req: NextRequest) {
     const contextBlock =
       sourceTexts.length > 0
         ? sourceTexts
-            .map((s) => `--- ${s.title} ---\n${s.snippet}`)
+            .map((s) => `--- ${s.title} ---\n${s.promptSnippet}`)
             .join('\n\n')
         : 'Es wurden keine passenden Dokumente gefunden.';
 
@@ -160,7 +173,7 @@ Antworte in 3–6 Sätzen.`;
     const sourcesPayload = sourceTexts.map((s) => ({
       documentId: s.id,
       title: s.title,
-      snippet: s.snippet.slice(0, 200) + (s.snippet.length > 200 ? '…' : ''),
+      snippet: s.evidenceSnippet,
     }));
 
     const userId = '00000000-0000-0000-0000-000000000001';
