@@ -53,6 +53,7 @@ export default function DocumentsPage() {
   const [gremiumFilter, setGremiumFilter] = useState<string>(''); // Beschlussgremium (Freitext)
   const [reviewFilter, setReviewFilter] = useState<string>(''); // overdue|set|empty
   const [summaryFilter, setSummaryFilter] = useState<string>(''); // has|missing
+  const [steeringFilter, setSteeringFilter] = useState<string>(''); // has|missing
   const [searchInput, setSearchInput] = useState<string>(''); // aktueller Texteingabe-Wert
   const [searchQuery, setSearchQuery] = useState<string>(''); // tatsächlich angewendete Suche
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -84,6 +85,7 @@ export default function DocumentsPage() {
       if (gremiumFilter.trim()) params.set('gremium', gremiumFilter.trim());
       if (reviewFilter) params.set('review', reviewFilter);
       if (summaryFilter) params.set('summary', summaryFilter);
+      if (steeringFilter) params.set('steering', steeringFilter);
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
 
       const url = `/api/documents${params.toString() ? `?${params.toString()}` : ''}`;
@@ -123,6 +125,7 @@ export default function DocumentsPage() {
     gremiumFilter,
     reviewFilter,
     summaryFilter,
+    steeringFilter,
     searchQuery,
     reloadKey,
   ]);
@@ -873,6 +876,7 @@ export default function DocumentsPage() {
               setGremiumFilter('');
               setReviewFilter('');
               setSummaryFilter('');
+              setSteeringFilter('');
               setSearchInput('');
               setSearchQuery('');
             }}
@@ -1022,6 +1026,21 @@ export default function DocumentsPage() {
                 <select
                   value={summaryFilter}
                   onChange={(e) => setSummaryFilter(e.target.value)}
+                  className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="">Alle</option>
+                  <option value="has">vorhanden</option>
+                  <option value="missing">fehlt</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                  Steuerungsanalyse
+                </label>
+                <select
+                  value={steeringFilter}
+                  onChange={(e) => setSteeringFilter(e.target.value)}
                   className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                 >
                   <option value="">Alle</option>

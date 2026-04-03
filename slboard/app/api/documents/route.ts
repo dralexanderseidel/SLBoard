@@ -4,6 +4,21 @@ import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
 
+/** Entspricht der Anzeige-Logik in app/documents/page.tsx (steeringNeedScore). */
+function isSteeringAnalysisPresent(steering_analysis: unknown): boolean {
+  const score =
+    steering_analysis &&
+    typeof steering_analysis === 'object' &&
+    'gesamtbewertung' in steering_analysis
+      ? (steering_analysis as { gesamtbewertung?: { score?: string } }).gesamtbewertung?.score
+      : undefined;
+  return (
+    score === 'niedriger Steuerungsbedarf' ||
+    score === 'mittlerer Steuerungsbedarf' ||
+    score === 'hoher Steuerungsbedarf'
+  );
+}
+
 /**
  * GET: Dokumentenliste mit Berechtigungs- und Schutzklassenfilter.
  * Query-Parameter:
@@ -13,6 +28,7 @@ import { apiError } from '../../../lib/apiError';
  * - gremium (Freitext, ilike)
  * - review (overdue|set|empty)
  * - summary (has|missing)
+ * - steering (has|missing) — Steuerungsanalyse (nur „vorhanden“, wenn gesamtbewertung.score gesetzt ist, nicht nur jsonb ≠ null)
  * - status kann als einzelne Statuskennung oder als kommaseparierte Liste kommen
  */
 export async function GET(req: NextRequest) {
@@ -41,6 +57,7 @@ export async function GET(req: NextRequest) {
     const gremiumFilter = searchParams.get('gremium') ?? '';
     const reviewFilter = searchParams.get('review') ?? '';
     const summaryFilter = searchParams.get('summary') ?? '';
+    const steeringFilter = searchParams.get('steering') ?? '';
 
     let query = supabase
       .from('documents')
@@ -154,10 +171,16 @@ export async function GET(req: NextRequest) {
       return apiError(500, 'INTERNAL_ERROR', error.message);
     }
 
-    const filtered = (data ?? []).filter((d) =>
+    let filtered = (data ?? []).filter((d) =>
       canAccessSchool(access, d.school_number as string | null) &&
       canReadDocument(access, d.protection_class_id as number, d.responsible_unit as string | null)
     );
+
+    if (steeringFilter === 'has') {
+      filtered = filtered.filter((d) => isSteeringAnalysisPresent(d.steering_analysis));
+    } else if (steeringFilter === 'missing') {
+      filtered = filtered.filter((d) => !isSteeringAnalysisPresent(d.steering_analysis));
+    }
 
     return NextResponse.json({ data: filtered });
   } catch (err) {
