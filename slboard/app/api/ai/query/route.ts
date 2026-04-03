@@ -23,6 +23,7 @@ import {
 import { getAiSettingsForSchool } from '../../../../lib/aiSettings';
 import { getSchoolProfileText } from '../../../../lib/schoolProfile';
 import { apiError } from '../../../../lib/apiError';
+import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../../lib/aiPromptTemplates';
 
 export const runtime = 'nodejs';
 
@@ -138,19 +139,15 @@ export async function POST(req: NextRequest) {
             .join('\n\n')
         : 'Es wurden keine passenden Dokumente gefunden.';
 
-    const systemPrompt = `Du bist ein deutscher Assistent für schulische Verwaltungsdokumente.
-Beantworte die Nutzerfrage NUR auf Basis der bereitgestellten Dokumentpassagen.
-Wenn die Dokumente die Frage nicht beantworten, sage das klar.
-Zitiere keine Quellen wörtlich, fasse zusammen. Nenne am Ende die verwendeten Dokumenttitel.`;
-
+    const promptTemplate = await getSchoolPromptTemplate(access.schoolNumber ?? '000000', 'qa');
+    const systemPrompt = [promptTemplate.system_locked, promptTemplate.system_editable].filter(Boolean).join('\n\n').trim();
     const schoolContextBlock = schoolProfile ? `Schul-Steckbrief:\n${schoolProfile}\n\n` : '';
-
-    const userPrompt = `Frage des Nutzers: ${trimmed}
-
-${schoolContextBlock}Dokumentpassagen:
-${contextBlock}
-
-Antworte in 3–6 Sätzen.`;
+    const userPromptTemplate = [promptTemplate.user_locked, promptTemplate.user_editable].filter(Boolean).join('\n\n').trim();
+    const userPrompt = renderPromptTemplate(userPromptTemplate, {
+      question: trimmed,
+      school_profile_block: schoolContextBlock,
+      context: contextBlock,
+    });
 
     if (debugEnabled) {
       void appendAiQueryDebugLog({
@@ -161,6 +158,7 @@ Antworte in 3–6 Sätzen.`;
         documentSelection: documentIds && documentIds.length > 0 ? 'explicit_ids' : 'suggested',
         explicitDocumentIds: documentIds,
         documents: debugDocEntries,
+        promptTemplateVersion: promptTemplate.version,
         systemPrompt,
         userPrompt,
       }, aiSettings.debug_log_enabled);

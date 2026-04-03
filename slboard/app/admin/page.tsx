@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 type AppUser = {
   id: string;
@@ -36,8 +37,25 @@ const ORG_UNITS = [
 
 type DocumentTypeOption = { code: string; label: string; active: boolean; sort_order: number };
 type ResponsibleUnitOption = { name: string; active: boolean; sort_order: number };
+type PromptUseCase = 'qa' | 'summary' | 'steering';
+type PromptTemplateConfig = {
+  use_case: PromptUseCase;
+  system_locked: string;
+  user_locked: string;
+  system_editable: string;
+  user_editable: string;
+  version: number;
+  updated_at: string | null;
+};
 
 export default function AdminPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [usersPanelOpen, setUsersPanelOpen] = useState(true);
+  const [aiPanelOpen, setAiPanelOpen] = useState(true);
+  const [promptPanelOpen, setPromptPanelOpen] = useState(true);
+  const [metadataPanelOpen, setMetadataPanelOpen] = useState(true);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +93,13 @@ export default function AdminPage() {
   const [newRespUnit, setNewRespUnit] = useState('');
   const [newDocTypeCode, setNewDocTypeCode] = useState('');
   const [newDocTypeLabel, setNewDocTypeLabel] = useState('');
+  const [promptLoading, setPromptLoading] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const [promptMessage, setPromptMessage] = useState<string | null>(null);
+  const [promptTemplates, setPromptTemplates] = useState<PromptTemplateConfig[]>([]);
+  const [activePromptUseCase, setActivePromptUseCase] = useState<PromptUseCase>('steering');
+  const [promptPreviewLoading, setPromptPreviewLoading] = useState(false);
+  const [promptPreviewResult, setPromptPreviewResult] = useState<string | null>(null);
 
   const activeOrgUnitOptions = (responsibleUnitOptions.length > 0
     ? responsibleUnitOptions.filter((u) => u.active).map((u) => u.name).filter(Boolean)
@@ -84,6 +109,28 @@ export default function AdminPage() {
     const cur = (current ?? '').trim();
     if (!cur) return activeOrgUnitOptions;
     return activeOrgUnitOptions.includes(cur) ? activeOrgUnitOptions : [cur, ...activeOrgUnitOptions];
+  };
+
+  useEffect(() => {
+    const p = new URLSearchParams(searchParams.toString());
+    const usersParam = p.get('usersPanel');
+    const aiParam = p.get('aiPanel');
+    const promptParam = p.get('promptPanel');
+    const metaParam = p.get('metaPanel');
+    if (usersParam === '0' || usersParam === '1') setUsersPanelOpen(usersParam === '1');
+    if (aiParam === '0' || aiParam === '1') setAiPanelOpen(aiParam === '1');
+    if (promptParam === '0' || promptParam === '1') setPromptPanelOpen(promptParam === '1');
+    if (metaParam === '0' || metaParam === '1') setMetadataPanelOpen(metaParam === '1');
+  }, [searchParams]);
+
+  const setPanelQuery = (next: { users?: boolean; ai?: boolean; prompt?: boolean; meta?: boolean }) => {
+    const p = new URLSearchParams(searchParams.toString());
+    if (typeof next.users === 'boolean') p.set('usersPanel', next.users ? '1' : '0');
+    if (typeof next.ai === 'boolean') p.set('aiPanel', next.ai ? '1' : '0');
+    if (typeof next.prompt === 'boolean') p.set('promptPanel', next.prompt ? '1' : '0');
+    if (typeof next.meta === 'boolean') p.set('metaPanel', next.meta ? '1' : '0');
+    const q = p.toString();
+    router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
   };
 
   const loadUsers = async () => {
@@ -111,6 +158,25 @@ export default function AdminPage() {
 
   useEffect(() => {
     void loadUsers();
+  }, []);
+
+  useEffect(() => {
+    const load = async () => {
+      setPromptLoading(true);
+      setPromptError(null);
+      setPromptMessage(null);
+      try {
+        const res = await fetch('/api/admin/ai-prompts', { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'KI-Prompts konnten nicht geladen werden.');
+        setPromptTemplates((data.templates ?? []) as PromptTemplateConfig[]);
+      } catch (e) {
+        setPromptError(e instanceof Error ? e.message : 'KI-Prompts konnten nicht geladen werden.');
+      } finally {
+        setPromptLoading(false);
+      }
+    };
+    void load();
   }, []);
 
   useEffect(() => {
@@ -200,6 +266,90 @@ export default function AdminPage() {
       setAiError(e instanceof Error ? e.message : 'KI-Einstellungen konnten nicht gespeichert werden.');
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const handleSavePromptTemplates = async () => {
+    setPromptLoading(true);
+    setPromptError(null);
+    setPromptMessage(null);
+    try {
+      const payload = {
+        templates: promptTemplates.map((t) => ({
+          use_case: t.use_case,
+          system_editable: t.system_editable,
+          user_editable: t.user_editable,
+        })),
+      };
+      const res = await fetch('/api/admin/ai-prompts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'KI-Prompts konnten nicht gespeichert werden.');
+      setPromptTemplates((data.templates ?? []) as PromptTemplateConfig[]);
+      setPromptMessage('KI-Prompts gespeichert.');
+    } catch (e) {
+      setPromptError(e instanceof Error ? e.message : 'KI-Prompts konnten nicht gespeichert werden.');
+    } finally {
+      setPromptLoading(false);
+    }
+  };
+
+  const handlePreviewPrompt = async (mode: 'prompt_only' | 'llm_test') => {
+    setPromptPreviewLoading(true);
+    setPromptError(null);
+    setPromptMessage(null);
+    setPromptPreviewResult(null);
+    try {
+      const res = await fetch('/api/admin/ai-prompts/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ use_case: activePromptUseCase, mode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Prompt-Preview fehlgeschlagen.');
+      const showSteeringFormat =
+        activePromptUseCase === 'steering' && (data.mode ?? mode) === 'llm_test';
+      const formatInfo = showSteeringFormat
+        ? ` · JSON-Format ok: ${data.steeringFormatOk ? 'ja' : 'nein'}`
+        : '';
+      const errorInfo =
+        showSteeringFormat && Array.isArray(data.steeringFormatErrors) && data.steeringFormatErrors.length > 0
+          ? `\nFehler:\n- ${(data.steeringFormatErrors as string[]).join('\n- ')}`
+          : '';
+      setPromptPreviewResult(
+        `Use Case: ${data.use_case} · Modus: ${data.mode ?? mode}${formatInfo}${errorInfo}\n\n` +
+          `--- Prompt-Ausgabe (gekürzt) ---\n${(data.outputPreview as string | undefined) ?? 'Keine Ausgabe (nur Vorschau).'}` 
+      );
+    } catch (e) {
+      setPromptError(e instanceof Error ? e.message : 'Prompt-Preview fehlgeschlagen.');
+    } finally {
+      setPromptPreviewLoading(false);
+    }
+  };
+
+  const handleResetPromptTemplate = async () => {
+    const ok = window.confirm(`Prompt-Bausteine fuer "${activePromptUseCase}" auf Schul-Default zuruecksetzen?`);
+    if (!ok) return;
+    setPromptLoading(true);
+    setPromptError(null);
+    setPromptMessage(null);
+    try {
+      const res = await fetch('/api/admin/ai-prompts', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ use_case: activePromptUseCase }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Reset fehlgeschlagen.');
+      setPromptTemplates((data.templates ?? []) as PromptTemplateConfig[]);
+      setPromptMessage(`Prompt-Bausteine fuer "${activePromptUseCase}" auf Default zurueckgesetzt.`);
+    } catch (e) {
+      setPromptError(e instanceof Error ? e.message : 'Reset fehlgeschlagen.');
+    } finally {
+      setPromptLoading(false);
     }
   };
 
@@ -353,13 +503,6 @@ export default function AdminPage() {
             >
               {reindexLoading ? 'Reindex läuft…' : 'Dokumente reindizieren'}
             </button>
-            <button
-              type="button"
-              onClick={() => setShowCreate(!showCreate)}
-              className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-            >
-              {showCreate ? 'Abbrechen' : 'Neuer Nutzer'}
-            </button>
             <Link
               href="/"
               className="text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
@@ -386,250 +529,338 @@ export default function AdminPage() {
           </p>
         )}
 
-        {showCreate && (
-          <form
-            onSubmit={handleCreate}
-            className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        <section className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <button
+            type="button"
+            onClick={() => {
+              const next = !usersPanelOpen;
+              setUsersPanelOpen(next);
+              setPanelQuery({ users: next });
+            }}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
           >
-            <h2 className="mb-3 text-sm font-semibold">Neuen Nutzer anlegen</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
-                  Benutzername *
-                </label>
-                <input
-                  type="text"
-                  value={createForm.username}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, username: e.target.value }))}
-                  className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  placeholder="z.B. mueller"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
-                  Vollständiger Name *
-                </label>
-                <input
-                  type="text"
-                  value={createForm.full_name}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, full_name: e.target.value }))}
-                  className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  placeholder="z.B. Dr. Anna Müller"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
-                  E-Mail *
-                </label>
-                <input
-                  type="email"
-                  value={createForm.email}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
-                  className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  placeholder="leitung@schule.de"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
-                  Schulnummer (6-stellig)
-                </label>
-                <input
-                  type="text"
-                  value={createForm.school_number}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, school_number: e.target.value }))}
-                  className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                  placeholder="z.B. 123456"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
-                  Organisationseinheit
-                </label>
-                <select
-                  value={createForm.org_unit}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, org_unit: e.target.value }))}
-                  className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                >
-                  {orgUnitSelectOptions(createForm.org_unit).map((ou) => (
-                    <option key={ou} value={ou}>
-                      {ou}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Nutzer & Rollen</h2>
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                Benutzerverwaltung inkl. Rollen und Organisationseinheiten.
+              </p>
             </div>
-            <button
-              type="submit"
-              disabled={saving}
-              className="mt-3 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+            <span
+              className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+              aria-hidden="true"
             >
-              {saving ? 'Wird angelegt…' : 'Nutzer anlegen'}
-            </button>
-          </form>
-        )}
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className={`transition-transform ${usersPanelOpen ? 'rotate-180' : ''}`}
+              >
+                <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          </button>
 
-        {loading ? (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">Lade Nutzer…</p>
-        ) : (
-          <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-zinc-200 dark:border-zinc-700">
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">
-                    Benutzer
-                  </th>
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">E-Mail</th>
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Schulnummer</th>
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Org.-Einheit</th>
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Rollen</th>
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Aktionen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr
-                    key={u.id}
-                    className="border-b border-zinc-100 dark:border-zinc-800"
+          {usersPanelOpen && (
+            <div className="space-y-4 border-t border-zinc-200 p-4 dark:border-zinc-800">
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowCreate(!showCreate)}
+                  className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                >
+                  {showCreate ? 'Neues Nutzerformular schließen' : 'Neuen Nutzer anlegen'}
+                </button>
+              </div>
+              {showCreate && (
+                <form
+                  onSubmit={handleCreate}
+                  className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  <h2 className="mb-3 text-sm font-semibold">Neuen Nutzer anlegen</h2>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                        Benutzername *
+                      </label>
+                      <input
+                        type="text"
+                        value={createForm.username}
+                        onChange={(e) => setCreateForm((f) => ({ ...f, username: e.target.value }))}
+                        className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                        placeholder="z.B. mueller"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                        Vollständiger Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={createForm.full_name}
+                        onChange={(e) => setCreateForm((f) => ({ ...f, full_name: e.target.value }))}
+                        className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                        placeholder="z.B. Dr. Anna Müller"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                        E-Mail *
+                      </label>
+                      <input
+                        type="email"
+                        value={createForm.email}
+                        onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
+                        className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                        placeholder="leitung@schule.de"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                        Schulnummer (6-stellig)
+                      </label>
+                      <input
+                        type="text"
+                        value={createForm.school_number}
+                        onChange={(e) => setCreateForm((f) => ({ ...f, school_number: e.target.value }))}
+                        className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                        placeholder="z.B. 123456"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                        Organisationseinheit
+                      </label>
+                      <select
+                        value={createForm.org_unit}
+                        onChange={(e) => setCreateForm((f) => ({ ...f, org_unit: e.target.value }))}
+                        className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                      >
+                        {orgUnitSelectOptions(createForm.org_unit).map((ou) => (
+                          <option key={ou} value={ou}>
+                            {ou}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="mt-3 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
                   >
-                    <td className="p-3">
-                      {editingId === u.id ? (
-                        <div className="space-y-2">
-                          <input
-                            type="text"
-                            value={editForm.username ?? ''}
-                            onChange={(e) =>
-                              setEditForm((f) => ({ ...f, username: e.target.value }))
-                            }
-                            className="w-full rounded border px-2 py-1 text-xs"
-                            placeholder="Benutzername"
-                          />
-                          <input
-                            type="text"
-                            value={editForm.full_name ?? ''}
-                            onChange={(e) =>
-                              setEditForm((f) => ({ ...f, full_name: e.target.value }))
-                            }
-                            className="w-full rounded border px-2 py-1 text-xs"
-                            placeholder="Vollständiger Name"
-                          />
-                        </div>
-                      ) : (
-                        <div>
-                          <div className="font-medium">{u.full_name}</div>
-                          <div className="text-[11px] text-zinc-500">{u.username}</div>
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      {editingId === u.id ? (
-                        <input
-                          type="email"
-                          value={editForm.email ?? ''}
-                          onChange={(e) =>
-                            setEditForm((f) => ({ ...f, email: e.target.value }))
-                          }
-                          className="w-full rounded border px-2 py-1 text-xs"
-                        />
-                      ) : (
-                        <span className="text-zinc-700 dark:text-zinc-300">{u.email}</span>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <span className="text-zinc-700 dark:text-zinc-300">{u.school_number ?? '—'}</span>
-                    </td>
-                    <td className="p-3">
-                      {editingId === u.id ? (
-                        <select
-                          value={editForm.org_unit ?? ''}
-                          onChange={(e) =>
-                            setEditForm((f) => ({ ...f, org_unit: e.target.value }))
-                          }
-                          className="rounded border px-2 py-1 text-xs"
+                    {saving ? 'Wird angelegt…' : 'Nutzer anlegen'}
+                  </button>
+                </form>
+              )}
+
+              {loading ? (
+                <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                  <div className="p-3">
+                    <div className="mb-3 h-4 w-36 animate-pulse rounded bg-zinc-200 dark:bg-zinc-700" />
+                    <div className="space-y-2">
+                      <div className="h-10 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+                      <div className="h-10 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+                      <div className="h-10 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+                      <div className="h-10 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+                      <div className="h-10 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+                    </div>
+                    <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">Lade Nutzer…</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-zinc-200 dark:border-zinc-700">
+                        <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">
+                          Benutzer
+                        </th>
+                        <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">E-Mail</th>
+                        <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Schulnummer</th>
+                        <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Org.-Einheit</th>
+                        <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Rollen</th>
+                        <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Aktionen</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((u) => (
+                        <tr
+                          key={u.id}
+                          className="border-b border-zinc-100 dark:border-zinc-800"
                         >
-                          {orgUnitSelectOptions(editForm.org_unit as string | undefined).map((ou) => (
-                            <option key={ou} value={ou}>
-                              {ou}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span>{u.org_unit}</span>
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-2">
-                        {AVAILABLE_ROLES.map((role) => {
-                          const checked = u.roles.includes(role);
-                          return (
-                            <label
-                              key={role}
-                              className="flex items-center gap-1 text-[11px]"
-                            >
+                          <td className="p-3">
+                            {editingId === u.id ? (
+                              <div className="space-y-2">
+                                <input
+                                  type="text"
+                                  value={editForm.username ?? ''}
+                                  onChange={(e) =>
+                                    setEditForm((f) => ({ ...f, username: e.target.value }))
+                                  }
+                                  className="w-full rounded border px-2 py-1 text-xs"
+                                  placeholder="Benutzername"
+                                />
+                                <input
+                                  type="text"
+                                  value={editForm.full_name ?? ''}
+                                  onChange={(e) =>
+                                    setEditForm((f) => ({ ...f, full_name: e.target.value }))
+                                  }
+                                  className="w-full rounded border px-2 py-1 text-xs"
+                                  placeholder="Vollständiger Name"
+                                />
+                              </div>
+                            ) : (
+                              <div>
+                                <div className="font-medium">{u.full_name}</div>
+                                <div className="text-[11px] text-zinc-500">{u.username}</div>
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            {editingId === u.id ? (
                               <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={(e) => {
-                                  const newRoles = e.target.checked
-                                    ? [...u.roles, role]
-                                    : u.roles.filter((r) => r !== role);
-                                  void handleRolesChange(u.id, newRoles);
-                                }}
-                                disabled={saving}
-                                className="rounded"
+                                type="email"
+                                value={editForm.email ?? ''}
+                                onChange={(e) =>
+                                  setEditForm((f) => ({ ...f, email: e.target.value }))
+                                }
+                                className="w-full rounded border px-2 py-1 text-xs"
                               />
-                              {role}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      {editingId === u.id ? (
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={handleSaveEdit}
-                            disabled={saving}
-                            className="rounded bg-blue-600 px-2 py-1 text-[11px] text-white hover:bg-blue-700 disabled:opacity-60"
-                          >
-                            Speichern
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingId(null)}
-                            className="rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
-                          >
-                            Abbrechen
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(u)}
-                          className="rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
-                        >
-                          Bearbeiten
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                            ) : (
+                              <span className="text-zinc-700 dark:text-zinc-300">{u.email}</span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <span className="text-zinc-700 dark:text-zinc-300">{u.school_number ?? '—'}</span>
+                          </td>
+                          <td className="p-3">
+                            {editingId === u.id ? (
+                              <select
+                                value={editForm.org_unit ?? ''}
+                                onChange={(e) =>
+                                  setEditForm((f) => ({ ...f, org_unit: e.target.value }))
+                                }
+                                className="rounded border px-2 py-1 text-xs"
+                              >
+                                {orgUnitSelectOptions(editForm.org_unit as string | undefined).map((ou) => (
+                                  <option key={ou} value={ou}>
+                                    {ou}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <span>{u.org_unit}</span>
+                            )}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-2">
+                              {AVAILABLE_ROLES.map((role) => {
+                                const checked = u.roles.includes(role);
+                                return (
+                                  <label
+                                    key={role}
+                                    className="flex items-center gap-1 text-[11px]"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={(e) => {
+                                        const newRoles = e.target.checked
+                                          ? [...u.roles, role]
+                                          : u.roles.filter((r) => r !== role);
+                                        void handleRolesChange(u.id, newRoles);
+                                      }}
+                                      disabled={saving}
+                                      className="rounded"
+                                    />
+                                    {role}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            {editingId === u.id ? (
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleSaveEdit}
+                                  disabled={saving}
+                                  className="rounded bg-blue-600 px-2 py-1 text-[11px] text-white hover:bg-blue-700 disabled:opacity-60"
+                                >
+                                  Speichern
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingId(null)}
+                                  className="rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                                >
+                                  Abbrechen
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleEdit(u)}
+                                className="rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                              >
+                                Bearbeiten
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-          Hinweis: Diese Oberfläche verwaltet die Tabelle app_users. Nutzer für Supabase Auth
-          (Login) müssen separat im Supabase-Dashboard unter Authentication → Users angelegt werden.
-          Die E-Mail sollte mit app_users übereinstimmen.
-        </p>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                Hinweis: Diese Oberfläche verwaltet die Tabelle app_users. Nutzer für Supabase Auth
+                (Login) müssen separat im Supabase-Dashboard unter Authentication → Users angelegt werden.
+                Die E-Mail sollte mit app_users übereinstimmen.
+              </p>
+            </div>
+          )}
+        </section>
 
-        <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">KI-Konfiguration</h2>
-          <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
-            Diese Einstellungen gelten pro Schule und beeinflussen u. a. Chunking und Debug-Logging der KI-Anfragen.
-          </p>
+        <section className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <button
+            type="button"
+            onClick={() => {
+              const next = !aiPanelOpen;
+              setAiPanelOpen(next);
+              setPanelQuery({ ai: next });
+            }}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
+          >
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">KI-Konfiguration</h2>
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                Einstellungen für Chunking, Timeout, Schulkontext und Debug-Logging.
+              </p>
+            </div>
+            <span
+              className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+              aria-hidden="true"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className={`transition-transform ${aiPanelOpen ? 'rotate-180' : ''}`}
+              >
+                <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          </button>
+          {aiPanelOpen && (
+            <div className="border-t border-zinc-200 p-4 dark:border-zinc-800">
 
           {aiError && (
             <p className="mb-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
@@ -726,21 +957,235 @@ export default function AdminPage() {
             Debug-Logging aktivieren (Chunks + Prompts)
           </label>
 
-          <button
-            type="button"
-            onClick={handleSaveAiSettings}
-            disabled={aiLoading}
-            className="mt-3 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {aiLoading ? 'Speichere…' : 'KI-Konfiguration speichern'}
-          </button>
+              <button
+                type="button"
+                onClick={handleSaveAiSettings}
+                disabled={aiLoading}
+                className="mt-3 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {aiLoading ? 'Speichere…' : 'KI-Konfiguration speichern'}
+              </button>
+            </div>
+          )}
         </section>
 
-        <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">Metadaten pflegen</h2>
-          <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
-            Diese Listen gelten pro Schule und steuern die Auswahlfelder für „Typ“ und „Verantwortlich“.
-          </p>
+        <section className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <button
+            type="button"
+            onClick={() => {
+              const next = !promptPanelOpen;
+              setPromptPanelOpen(next);
+              setPanelQuery({ prompt: next });
+            }}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
+          >
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">KI-Prompts</h2>
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                Schulspezifische Prompt-Bausteine mit gesperrtem Antwortformat.
+              </p>
+            </div>
+            <span
+              className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+              aria-hidden="true"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className={`transition-transform ${promptPanelOpen ? 'rotate-180' : ''}`}
+              >
+                <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          </button>
+          {promptPanelOpen && (
+            <div className="border-t border-zinc-200 p-4 dark:border-zinc-800">
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                Bearbeitbar sind nur die Zusatzbausteine. Das Antwortformat (z. B. JSON fuer Steuerungsanalyse)
+                bleibt im gesperrten Block unveraendert.
+              </p>
+
+              {promptError && (
+                <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-[11px] text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+                  {promptError}
+                </p>
+              )}
+              {promptMessage && (
+                <p className="mt-2 rounded border border-green-200 bg-green-50 px-2 py-1 text-[11px] text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+                  {promptMessage}
+                </p>
+              )}
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(['qa', 'summary', 'steering'] as PromptUseCase[]).map((uc) => (
+                  <button
+                    key={uc}
+                    type="button"
+                    onClick={() => setActivePromptUseCase(uc)}
+                    className={`rounded border px-2 py-1 text-[11px] ${
+                      activePromptUseCase === uc
+                        ? 'border-blue-300 bg-blue-50 text-zinc-900 dark:border-blue-800 dark:bg-blue-950/40 dark:text-zinc-50'
+                        : 'border-zinc-300 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200'
+                    }`}
+                  >
+                    {uc === 'qa' ? 'Q&A' : uc === 'summary' ? 'Zusammenfassung' : 'Steuerungsanalyse'}
+                  </button>
+                ))}
+              </div>
+
+              {promptLoading && promptTemplates.length === 0 ? (
+                <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400">Lade Prompt-Templates…</p>
+              ) : (
+                (() => {
+                  const current = promptTemplates.find((t) => t.use_case === activePromptUseCase);
+                  if (!current) {
+                    return <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400">Kein Template gefunden.</p>;
+                  }
+                  return (
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                          Gesperrter System-Block (readonly)
+                        </label>
+                        <textarea
+                          readOnly
+                          value={current.system_locked}
+                          rows={6}
+                          className="w-full rounded border border-zinc-200 bg-zinc-100 px-2 py-1.5 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                          Editierbarer System-Zusatz
+                        </label>
+                        <textarea
+                          value={current.system_editable}
+                          rows={4}
+                          onChange={(e) =>
+                            setPromptTemplates((prev) =>
+                              prev.map((t) =>
+                                t.use_case === current.use_case ? { ...t, system_editable: e.target.value } : t
+                              )
+                            )
+                          }
+                          className="w-full rounded border border-zinc-300 px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                          Gesperrter User-Block (readonly)
+                        </label>
+                        <textarea
+                          readOnly
+                          value={current.user_locked}
+                          rows={8}
+                          className="w-full rounded border border-zinc-200 bg-zinc-100 px-2 py-1.5 font-mono text-[11px] text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                          Editierbarer User-Zusatz
+                        </label>
+                        <textarea
+                          value={current.user_editable}
+                          rows={4}
+                          onChange={(e) =>
+                            setPromptTemplates((prev) =>
+                              prev.map((t) =>
+                                t.use_case === current.use_case ? { ...t, user_editable: e.target.value } : t
+                              )
+                            )
+                          }
+                          className="w-full rounded border border-zinc-300 px-2 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+                        />
+                      </div>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        Version: {current.version}
+                        {current.updated_at ? ` · Aktualisiert: ${new Date(current.updated_at).toLocaleString('de-DE')}` : ''}
+                      </p>
+                    </div>
+                  );
+                })()
+              )}
+
+              <button
+                type="button"
+                onClick={handleSavePromptTemplates}
+                disabled={promptLoading || promptTemplates.length === 0}
+                className="mt-3 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {promptLoading ? 'Speichere Prompt-Bausteine…' : 'Prompt-Bausteine speichern'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handlePreviewPrompt('prompt_only')}
+                disabled={promptPreviewLoading || promptTemplates.length === 0}
+                className="ml-2 mt-3 rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                {promptPreviewLoading ? 'Lade Vorschau…' : 'Prompt-Vorschau (ohne LLM)'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handlePreviewPrompt('llm_test')}
+                disabled={promptPreviewLoading || promptTemplates.length === 0}
+                className="ml-2 mt-3 rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                {promptPreviewLoading ? 'Teste Prompt…' : 'Prompt testen (LLM)'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleResetPromptTemplate()}
+                disabled={promptLoading || promptTemplates.length === 0}
+                className="ml-2 mt-3 rounded border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950"
+              >
+                Auf Default zuruecksetzen
+              </button>
+              {promptPreviewResult && (
+                <pre className="mt-3 max-h-64 overflow-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
+                  {promptPreviewResult}
+                </pre>
+              )}
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <button
+            type="button"
+            onClick={() => {
+              const next = !metadataPanelOpen;
+              setMetadataPanelOpen(next);
+              setPanelQuery({ meta: next });
+            }}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
+          >
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Metadaten pflegen</h2>
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                Schulspezifische Listen für Dokumenttypen und verantwortliche Einheiten.
+              </p>
+            </div>
+            <span
+              className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+              aria-hidden="true"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className={`transition-transform ${metadataPanelOpen ? 'rotate-180' : ''}`}
+              >
+                <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          </button>
+          {metadataPanelOpen && (
+            <div className="border-t border-zinc-200 p-4 dark:border-zinc-800">
 
           {metaError && (
             <p className="mb-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
@@ -899,14 +1344,16 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleSaveMetadata}
-            disabled={metaLoading}
-            className="mt-3 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
-          >
-            {metaLoading ? 'Speichere…' : 'Metadaten speichern'}
-          </button>
+              <button
+                type="button"
+                onClick={handleSaveMetadata}
+                disabled={metaLoading}
+                className="mt-3 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {metaLoading ? 'Speichere…' : 'Metadaten speichern'}
+              </button>
+            </div>
+          )}
         </section>
       </div>
     </main>

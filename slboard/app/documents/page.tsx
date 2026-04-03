@@ -15,6 +15,11 @@ type DocumentListItem = {
   responsible_unit: string;
   participation_groups?: string[] | null;
   summary: string | null;
+  steering_analysis?: {
+    gesamtbewertung?: {
+      score?: 'niedriger Steuerungsbedarf' | 'mittlerer Steuerungsbedarf' | 'hoher Steuerungsbedarf' | string;
+    } | null;
+  } | null;
 };
 
 export default function DocumentsPage() {
@@ -29,6 +34,9 @@ export default function DocumentsPage() {
   const [bulkSummariesArmed, setBulkSummariesArmed] = useState(false);
   const [bulkSummarizing, setBulkSummarizing] = useState(false);
   const [bulkSummarizeResult, setBulkSummarizeResult] = useState<string | null>(null);
+  const [bulkSteeringArmed, setBulkSteeringArmed] = useState(false);
+  const [bulkSteeringAnalyzing, setBulkSteeringAnalyzing] = useState(false);
+  const [bulkSteeringResult, setBulkSteeringResult] = useState<string | null>(null);
   const [editableSelectedIds, setEditableSelectedIds] = useState<string[]>([]);
   const [blockedSelectedIds, setBlockedSelectedIds] = useState<string[]>([]);
   const [bulkCapabilitiesLoading, setBulkCapabilitiesLoading] = useState(false);
@@ -57,6 +65,7 @@ export default function DocumentsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [typeOptions, setTypeOptions] = useState<Array<{ code: string; label: string }>>([]);
   const [responsibleUnitOptions, setResponsibleUnitOptions] = useState<string[]>([]);
+  const bulkAiBusy = bulkSummarizing || bulkSteeringAnalyzing;
 
   useEffect(() => {
     const load = async () => {
@@ -209,6 +218,36 @@ export default function DocumentsPage() {
     return 'intern';
   };
 
+  const steeringNeedScore = (doc: DocumentListItem) => {
+    const score = doc.steering_analysis?.gesamtbewertung?.score;
+    if (score === 'niedriger Steuerungsbedarf') return 'low';
+    if (score === 'mittlerer Steuerungsbedarf') return 'medium';
+    if (score === 'hoher Steuerungsbedarf') return 'high';
+    return null;
+  };
+
+  const steeringIconTone = (doc: DocumentListItem) => {
+    const score = steeringNeedScore(doc);
+    if (score === 'low') {
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200 dark:hover:bg-emerald-950';
+    }
+    if (score === 'medium') {
+      return 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950';
+    }
+    if (score === 'high') {
+      return 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200 dark:hover:bg-red-950';
+    }
+    return 'border-zinc-200 bg-white text-zinc-400 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-600 dark:hover:bg-zinc-800';
+  };
+
+  const steeringIconTitle = (doc: DocumentListItem) => {
+    const score = steeringNeedScore(doc);
+    if (score === 'low') return 'Steuerungsanalyse vorhanden: niedriger Steuerungsbedarf';
+    if (score === 'medium') return 'Steuerungsanalyse vorhanden: mittlerer Steuerungsbedarf';
+    if (score === 'high') return 'Steuerungsanalyse vorhanden: hoher Steuerungsbedarf';
+    return 'Steuerungsanalyse fehlt';
+  };
+
   const renderParticipationBadges = (groups: string[] | null | undefined) => {
     const list = (groups ?? []).map((g) => (g ?? '').trim()).filter(Boolean);
     if (list.length === 0) return <span className="text-zinc-400">—</span>;
@@ -256,12 +295,13 @@ export default function DocumentsPage() {
 
   const handleRowWorkflowStep = async (documentId: string, newStatus: string) => {
     if (rowActionLoadingId) return;
-    if (bulkDeleting || bulkUpdating || bulkSummarizing) return;
+    if (bulkDeleting || bulkUpdating || bulkAiBusy) return;
 
     setRowActionLoadingId(documentId);
     setBulkDeleteResult(null);
     setBulkUpdateResult(null);
     setBulkSummarizeResult(null);
+    setBulkSteeringResult(null);
 
     try {
       const res = await fetch(`/api/documents/${documentId}`, {
@@ -283,7 +323,7 @@ export default function DocumentsPage() {
 
   const handleRowDelete = async (documentId: string) => {
     if (rowActionLoadingId) return;
-    if (bulkDeleting || bulkUpdating || bulkSummarizing) return;
+    if (bulkDeleting || bulkUpdating || bulkAiBusy) return;
 
     const title = docs.find((d) => d.id === documentId)?.title ?? documentId;
     const ok = window.confirm(`Dokument endgültig löschen?\n\n${title}\n\nDieser Vorgang kann nicht rückgängig gemacht werden.`);
@@ -293,6 +333,7 @@ export default function DocumentsPage() {
     setBulkDeleteResult(null);
     setBulkUpdateResult(null);
     setBulkSummarizeResult(null);
+    setBulkSteeringResult(null);
 
     try {
       const res = await fetch(`/api/documents/${documentId}`, { method: 'DELETE' });
@@ -604,6 +645,7 @@ export default function DocumentsPage() {
     setBulkDeleteResult(null);
     setBulkUpdateResult(null);
     setBulkSummarizeResult(null);
+    setBulkSteeringResult(null);
 
     setBulkSummarizing(true);
     try {
@@ -637,6 +679,64 @@ export default function DocumentsPage() {
       setBulkSummarizeResult(e instanceof Error ? e.message : 'Bulk-Zusammenfassung fehlgeschlagen.');
     } finally {
       setBulkSummarizing(false);
+    }
+  };
+
+  const handleBulkGenerateSteeringAnalyses = async () => {
+    if (selectedIds.length === 0) return;
+    if (!bulkSteeringArmed) return;
+    const ids = editableSelectedIds.length > 0 ? [...editableSelectedIds] : [...selectedIds];
+    if (ids.length === 0) return;
+
+    const ok = window.confirm(
+      `KI-Steuerungsanalyse für ${ids.length} Dokument(e) erzeugen?\n\nDas kann je nach Dokumentenlänge dauern.`
+    );
+    if (!ok) return;
+
+    setBulkDeleteResult(null);
+    setBulkUpdateResult(null);
+    setBulkSummarizeResult(null);
+    setBulkSteeringResult(null);
+
+    setBulkSteeringAnalyzing(true);
+    try {
+      loadSeqRef.current += 1;
+      const results = await Promise.allSettled(
+        ids.map(async (id) => {
+          const res = await fetch(`/api/documents/${id}/steering-analysis`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ force: true }),
+          });
+          const data = (await res.json()) as { error?: string };
+          if (!res.ok) throw new Error(data.error ?? 'Fehler bei der Steuerungsanalyse.');
+          return true;
+        })
+      );
+
+      const okCount = results.filter((r) => r.status === 'fulfilled').length;
+      const failCount = results.length - okCount;
+      const skippedCount = selectedIds.length - ids.length;
+      const firstFailReason = results.find((r) => r.status === 'rejected');
+      const failText =
+        firstFailReason && firstFailReason.status === 'rejected'
+          ? firstFailReason.reason instanceof Error
+            ? firstFailReason.reason.message
+            : String(firstFailReason.reason)
+          : null;
+      setBulkSteeringResult(
+        failCount === 0
+          ? `${okCount}/${ids.length} Dokument(e) aktualisiert (Steuerungsanalyse)${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.`
+          : `${okCount}/${ids.length} aktualisiert (Steuerungsanalyse), ${failCount} fehlgeschlagen${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.${failText ? ` Grund: ${failText}` : ''}`
+      );
+
+      setBulkSteeringArmed(false);
+      setSelectedIds([]);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setBulkSteeringResult(e instanceof Error ? e.message : 'Bulk-Steuerungsanalyse fehlgeschlagen.');
+    } finally {
+      setBulkSteeringAnalyzing(false);
     }
   };
 
@@ -934,10 +1034,10 @@ export default function DocumentsPage() {
         )}
 
         {/* Ergebnis-Hinweis (bleibt sichtbar auch wenn Auswahl zurückgesetzt wird) */}
-        {!loading && !error && (bulkDeleteResult || bulkUpdateResult || bulkSummarizeResult) && (
+        {!loading && !error && (bulkDeleteResult || bulkUpdateResult || bulkSummarizeResult || bulkSteeringResult) && (
           <section className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <span className="text-zinc-600 dark:text-zinc-300">
-              {bulkDeleteResult ?? bulkUpdateResult ?? bulkSummarizeResult}
+              {bulkDeleteResult ?? bulkUpdateResult ?? bulkSummarizeResult ?? bulkSteeringResult}
             </span>
           </section>
         )}
@@ -983,8 +1083,8 @@ export default function DocumentsPage() {
 
         {/* Bulk-Aktionen: nur bei Mehrfachauswahl */}
         {!loading && !error && docs.length > 0 && selectedIds.length > 1 && (
-          <section className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="flex flex-1 items-center gap-3 flex-wrap">
+          <section className="space-y-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="text-zinc-600 dark:text-zinc-300">
                 Ausgewählt: <span className="font-semibold">{selectedIds.length}</span>
               </span>
@@ -1004,12 +1104,13 @@ export default function DocumentsPage() {
             </div>
 
             {!bulkCapabilitiesLoading && blockedSelectedIds.length > 0 && (
-              <p className="w-full rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+              <p className="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
                 Hinweis: Ein Teil der Auswahl ist nicht änderbar (z. B. wegen Rolle/Verantwortlich/Schutzklasse).
               </p>
             )}
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+              <span className="w-28 shrink-0 text-zinc-600 dark:text-zinc-300">Aktionen</span>
               <button
                 type="button"
                 onClick={() => void handleBulkDelete()}
@@ -1019,15 +1120,16 @@ export default function DocumentsPage() {
                   editableSelectedIds.length === 0 ||
                   bulkDeleting ||
                   bulkUpdating ||
-                  bulkSummarizing
+                  bulkAiBusy
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
                 {bulkDeleting ? 'Lösche…' : 'Ausgewählte löschen'}
               </button>
+            </div>
 
-              <span className="mx-1 h-5 border-l border-zinc-200 dark:border-zinc-800" />
-
+            <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+              <span className="w-28 shrink-0 text-zinc-600 dark:text-zinc-300">Status</span>
               <button
                 type="button"
                 onClick={() => void handleBulkSetStatus('ENTWURF')}
@@ -1037,11 +1139,11 @@ export default function DocumentsPage() {
                   editableSelectedIds.length === 0 ||
                   bulkDeleting ||
                   bulkUpdating ||
-                  bulkSummarizing
+                  bulkAiBusy
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
-                {bulkUpdating ? '…' : 'Status -> Entwurf'}
+                {bulkUpdating ? '…' : 'Entwurf'}
               </button>
               <button
                 type="button"
@@ -1052,11 +1154,11 @@ export default function DocumentsPage() {
                   editableSelectedIds.length === 0 ||
                   bulkDeleting ||
                   bulkUpdating ||
-                  bulkSummarizing
+                  bulkAiBusy
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
-                {bulkUpdating ? '…' : 'Status -> Freigegeben'}
+                {bulkUpdating ? '…' : 'Freigegeben'}
               </button>
               <button
                 type="button"
@@ -1067,15 +1169,16 @@ export default function DocumentsPage() {
                   editableSelectedIds.length === 0 ||
                   bulkDeleting ||
                   bulkUpdating ||
-                  bulkSummarizing
+                  bulkAiBusy
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
-                {bulkUpdating ? '…' : 'Status -> Veröffentlicht'}
+                {bulkUpdating ? '…' : 'Veröffentlicht'}
               </button>
+            </div>
 
-              <span className="mx-1 h-5 border-l border-zinc-200 dark:border-zinc-800" />
-
+            <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+              <span className="w-28 shrink-0 text-zinc-600 dark:text-zinc-300">Schutzklasse</span>
               <button
                 type="button"
                 onClick={() => void handleBulkSetProtectionClass(1)}
@@ -1085,11 +1188,11 @@ export default function DocumentsPage() {
                   editableSelectedIds.length === 0 ||
                   bulkDeleting ||
                   bulkUpdating ||
-                  bulkSummarizing
+                  bulkAiBusy
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
-                {bulkUpdating ? '…' : 'Schutzklasse -> 1'}
+                {bulkUpdating ? '…' : '1'}
               </button>
               <button
                 type="button"
@@ -1100,11 +1203,11 @@ export default function DocumentsPage() {
                   editableSelectedIds.length === 0 ||
                   bulkDeleting ||
                   bulkUpdating ||
-                  bulkSummarizing
+                  bulkAiBusy
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
-                {bulkUpdating ? '…' : 'Schutzklasse -> 2'}
+                {bulkUpdating ? '…' : '2'}
               </button>
               <button
                 type="button"
@@ -1115,15 +1218,16 @@ export default function DocumentsPage() {
                   editableSelectedIds.length === 0 ||
                   bulkDeleting ||
                   bulkUpdating ||
-                  bulkSummarizing
+                  bulkAiBusy
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
-                {bulkUpdating ? '…' : 'Schutzklasse -> 3'}
+                {bulkUpdating ? '…' : '3'}
               </button>
+            </div>
 
-              <span className="mx-1 h-5 border-l border-zinc-200 dark:border-zinc-800" />
-
+            <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+              <span className="w-28 shrink-0 text-zinc-600 dark:text-zinc-300">Reichweite</span>
               <button
                 type="button"
                 onClick={() => void handleBulkSetReachScope('intern')}
@@ -1133,11 +1237,11 @@ export default function DocumentsPage() {
                   editableSelectedIds.length === 0 ||
                   bulkDeleting ||
                   bulkUpdating ||
-                  bulkSummarizing
+                  bulkAiBusy
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
-                {bulkUpdating ? '…' : 'Reichweite -> intern'}
+                {bulkUpdating ? '…' : 'intern'}
               </button>
               <button
                 type="button"
@@ -1148,15 +1252,16 @@ export default function DocumentsPage() {
                   editableSelectedIds.length === 0 ||
                   bulkDeleting ||
                   bulkUpdating ||
-                  bulkSummarizing
+                  bulkAiBusy
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
-                {bulkUpdating ? '…' : 'Reichweite -> extern'}
+                {bulkUpdating ? '…' : 'extern'}
               </button>
+            </div>
 
-              <span className="mx-1 h-5 border-l border-zinc-200 dark:border-zinc-800" />
-
+            <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+              <span className="w-28 shrink-0 text-zinc-600 dark:text-zinc-300">KI</span>
               <label className="inline-flex cursor-pointer items-center gap-2 text-zinc-600 dark:text-zinc-300">
                 <input
                   type="checkbox"
@@ -1168,13 +1273,12 @@ export default function DocumentsPage() {
                     editableSelectedIds.length === 0 ||
                     bulkDeleting ||
                     bulkUpdating ||
-                    bulkSummarizing
+                    bulkAiBusy
                   }
                   className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-zinc-600"
                 />
-                <span className="text-[11px] font-medium">KI-Zusammenfassung (Batch)</span>
+                <span className="text-[11px] font-medium">Zusammenfassung (Batch)</span>
               </label>
-
               <button
                 type="button"
                 onClick={() => void handleBulkGenerateSummaries()}
@@ -1185,11 +1289,44 @@ export default function DocumentsPage() {
                   !bulkSummariesArmed ||
                   bulkDeleting ||
                   bulkUpdating ||
-                  bulkSummarizing
+                  bulkAiBusy
                 }
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
-                {bulkSummarizing ? 'KI fasst zusammen…' : 'Zusammenfassung für ausgewählte Dokumente erzeugen'}
+                {bulkSummarizing ? 'KI fasst zusammen…' : 'Zusammenfassungen erzeugen'}
+              </button>
+              <label className="inline-flex cursor-pointer items-center gap-2 text-zinc-600 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={bulkSteeringArmed}
+                  onChange={(e) => setBulkSteeringArmed(e.target.checked)}
+                  disabled={
+                    selectedIds.length === 0 ||
+                    bulkCapabilitiesLoading ||
+                    editableSelectedIds.length === 0 ||
+                    bulkDeleting ||
+                    bulkUpdating ||
+                    bulkAiBusy
+                  }
+                  className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-zinc-600"
+                />
+                <span className="text-[11px] font-medium">Steuerungsanalyse (Batch)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => void handleBulkGenerateSteeringAnalyses()}
+                disabled={
+                  selectedIds.length === 0 ||
+                  bulkCapabilitiesLoading ||
+                  editableSelectedIds.length === 0 ||
+                  !bulkSteeringArmed ||
+                  bulkDeleting ||
+                  bulkUpdating ||
+                  bulkAiBusy
+                }
+                className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
+              >
+                {bulkSteeringAnalyzing ? 'KI analysiert…' : 'Steuerungsanalysen erzeugen'}
               </button>
             </div>
           </section>
@@ -1382,7 +1519,7 @@ export default function DocumentsPage() {
                       )}
                     </button>
                   </th>
-                  <th className="px-3 py-2 text-left">KI-Zusammenfassung vorhanden</th>
+                  <th className="px-3 py-2 text-left">KI-Status</th>
                   <th className="px-3 py-2 text-left">Beschlussgremium</th>
                   <th className="px-3 py-2 text-left">Verantwortlich</th>
                   <th className="px-3 py-2 text-left">Reichweite</th>
@@ -1421,7 +1558,7 @@ export default function DocumentsPage() {
                         <button
                           type="button"
                           onClick={() => void handleRowDelete(doc.id)}
-                          disabled={rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkSummarizing}
+                          disabled={rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy}
                           className="inline-flex items-center justify-center rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
                         >
                           Löschen
@@ -1444,7 +1581,7 @@ export default function DocumentsPage() {
                               rowActionLoadingId === doc.id ||
                               bulkDeleting ||
                               bulkUpdating ||
-                              bulkSummarizing
+                              bulkAiBusy
                             }
                             className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
                           >
@@ -1469,6 +1606,7 @@ export default function DocumentsPage() {
                       )}
                     </td>
                     <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5">
                       {doc.summary && doc.summary.trim().length > 0 ? (
                         <Link
                           href={`/documents/${doc.id}?focus=summary`}
@@ -1507,6 +1645,26 @@ export default function DocumentsPage() {
                           </svg>
                         </Link>
                       )}
+                      <Link
+                        href={`/documents/${doc.id}?focus=steering`}
+                        aria-label="Zur Steuerungsanalyse springen"
+                        title={steeringIconTitle(doc)}
+                        className={`inline-flex items-center justify-center rounded border p-1 transition ${steeringIconTone(doc)}`}
+                      >
+                        {steeringNeedScore(doc) ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="6" r="2.3" fill="currentColor" />
+                            <circle cx="12" cy="12" r="2.3" fill="currentColor" opacity="0.55" />
+                            <circle cx="12" cy="18" r="2.3" fill="currentColor" opacity="0.25" />
+                          </svg>
+                        ) : (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 8V12L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" />
+                          </svg>
+                        )}
+                      </Link>
+                      </div>
                     </td>
                     <td className="px-3 py-2">{doc.gremium ?? '—'}</td>
                     <td className="px-3 py-2">{doc.responsible_unit}</td>
@@ -1564,7 +1722,7 @@ export default function DocumentsPage() {
                   <button
                     type="button"
                     onClick={() => void handleRowDelete(doc.id)}
-                    disabled={rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkSummarizing}
+                    disabled={rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy}
                     className="inline-flex items-center justify-center rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
                   >
                     Löschen
@@ -1595,7 +1753,7 @@ export default function DocumentsPage() {
                         void handleRowWorkflowStep(doc.id, getWorkflowNext(doc.status)!.next)
                       }
                       disabled={
-                        rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkSummarizing
+                        rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy
                       }
                       className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
                     >
@@ -1648,6 +1806,25 @@ export default function DocumentsPage() {
                     {doc.summary && doc.summary.trim().length > 0 ? (
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 8V12L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" />
+                      </svg>
+                    )}
+                  </Link>
+                  <Link
+                    href={`/documents/${doc.id}?focus=steering`}
+                    aria-label="Zur Steuerungsanalyse springen"
+                    title={steeringIconTitle(doc)}
+                    className={`inline-flex items-center justify-center rounded border p-1 transition ${steeringIconTone(doc)}`}
+                  >
+                    {steeringNeedScore(doc) ? (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="6" r="2.3" fill="currentColor" />
+                        <circle cx="12" cy="12" r="2.3" fill="currentColor" opacity="0.55" />
+                        <circle cx="12" cy="18" r="2.3" fill="currentColor" opacity="0.25" />
                       </svg>
                     ) : (
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1736,7 +1913,7 @@ export default function DocumentsPage() {
                             void handleRowWorkflowStep(doc.id, getWorkflowNext(doc.status)!.next)
                           }
                           disabled={
-                            rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkSummarizing
+                            rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy
                           }
                           className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
                         >
@@ -1763,10 +1940,29 @@ export default function DocumentsPage() {
                           </svg>
                         )}
                       </Link>
+                      <Link
+                        href={`/documents/${doc.id}?focus=steering`}
+                        aria-label="Zur Steuerungsanalyse springen"
+                        className={`inline-flex items-center justify-center rounded border p-1 transition ${steeringIconTone(doc)}`}
+                        title={steeringIconTitle(doc)}
+                      >
+                        {steeringNeedScore(doc) ? (
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="6" r="2.2" fill="currentColor" />
+                            <circle cx="12" cy="12" r="2.2" fill="currentColor" opacity="0.55" />
+                            <circle cx="12" cy="18" r="2.2" fill="currentColor" opacity="0.25" />
+                          </svg>
+                        ) : (
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 8V12L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2" />
+                          </svg>
+                        )}
+                      </Link>
                       <button
                         type="button"
                         onClick={() => void handleRowDelete(doc.id)}
-                        disabled={rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkSummarizing}
+                        disabled={rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy}
                         className="inline-flex items-center justify-center rounded border border-red-300 bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
                       >
                         Löschen

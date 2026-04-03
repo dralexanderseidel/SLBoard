@@ -7,14 +7,13 @@ import { canAccessSchool, getUserAccessContext } from '../../../lib/documentAcce
 import { apiError } from '../../../lib/apiError';
 import { getAiSettingsForSchool } from '../../../lib/aiSettings';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../lib/aiQueryDebugLog';
+import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../lib/aiPromptTemplates';
 
 export const runtime = 'nodejs';
 
 type SummarizeBatchPayload = {
   documentIds: string[];
 };
-
-const systemPrompt = 'Du bist ein deutscher Assistent für schulische Verwaltungsdokumente.';
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,6 +36,9 @@ export async function POST(req: NextRequest) {
     const supabase = supabaseServer();
     const access = await getUserAccessContext(user.email, supabase);
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
+    const promptTemplate = await getSchoolPromptTemplate(access.schoolNumber ?? '000000', 'summary');
+    const systemPrompt = [promptTemplate.system_locked, promptTemplate.system_editable].filter(Boolean).join('\n\n').trim();
+    const userPromptTemplate = [promptTemplate.user_locked, promptTemplate.user_editable].filter(Boolean).join('\n\n').trim();
     const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
 
     if (!supabase) {
@@ -84,13 +86,11 @@ export async function POST(req: NextRequest) {
           .join(' · ');
 
         const fullContent = `${header}\n\n${basisText}`.trim();
-        const userPrompt = `
-Fasse den folgenden Inhalt in 4–7 klaren, gut lesbaren Sätzen zusammen.
-Nenne wichtige Regelungen, Beschlüsse und Zuständigkeiten in neutraler Verwaltungssprache.
-
-Inhalt:
-${fullContent}
-`.trim();
+        const userPrompt = renderPromptTemplate(userPromptTemplate, {
+          school_profile_block: '',
+          document_title: doc.title ?? 'Unbenanntes Dokument',
+          document_text: fullContent,
+        });
 
         const summary = await callLlm(systemPrompt, userPrompt, {
           timeoutMs: aiSettings.llm_timeout_ms,
@@ -108,6 +108,7 @@ ${fullContent}
               inputTextLength: basisText.length,
               fullContentLength: fullContent.length,
               timeoutMs: aiSettings.llm_timeout_ms,
+              promptTemplateVersion: promptTemplate.version,
               systemPrompt,
               userPrompt,
               summaryLength: summaryText.length,

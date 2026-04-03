@@ -9,6 +9,7 @@ import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../../lib/aiQueryDebugLog';
 import { apiError } from '../../../../../lib/apiError';
 import { chunkTextByParagraphs } from '../../../../../lib/chunkingOnTheFly';
+import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../../../lib/aiPromptTemplates';
 
 export const runtime = 'nodejs';
 
@@ -168,73 +169,21 @@ export async function POST(
       steeringChunkParams.maxChunks
     );
 
-    const systemPrompt = `Du bist ein Experte für Schulorganisation und institutionelle Steuerung im deutschen Schulsystem.
-
-Du analysierst schulische Dokumente nicht inhaltlich, sondern strukturell entlang eines Steuerungsmodells.
-
-Das Modell umfasst vier Dimensionen:
-
-1. Tragfähigkeit (Organisation)
-→ Was kann die Schule aktuell leisten?
-
-2. Belastungsgrad (Dokument)
-→ Wie stark fordert das Dokument die Organisation heraus?
-
-3. Entscheidungsstruktur
-→ Ist klar geregelt, wer wann entscheidet und wie?
-
-4. Verbindlichkeit
-→ Wie klar und stabil sind die Regelungen formuliert?
-
-Arbeite mit folgender Evidenz-Logik:
-- Für Tragfähigkeit: beziehe den Schul-Steckbrief (falls vorhanden) zwingend mit ein.
-- Für Belastungsgrad, Entscheidungsstruktur und Verbindlichkeit: verwende ausschließlich den Dokumenttext.
-- Wenn eine Dimension im Dokument nicht ausreichend belegt ist, benenne das explizit und bewerte konservativ.
-- Keine Annahmen außerhalb des Dokuments
-- Keine Interpretation von Intentionen ohne Textbeleg
-- Präzise, kurze Begründungen
-- Jede Begründung muss sich auf konkrete Aussagen oder klar benannte Lücken im Dokument beziehen.
-- Gib keine allgemeinen Schul-Empfehlungen; analysiere nur das vorliegende Dokument.
-
-Nutze ausschließlich diese Skala:
-- niedrig
-- mittel
-- hoch
-Bestimme zusätzlich die PASSUNG:
-
-- gut → Tragfähigkeit ≥ Belastungsgrad
-- kritisch → Tragfähigkeit < Belastungsgrad
-
-Leite daraus eine Gesamtbewertung ab:
-
-- niedriger Steuerungsbedarf
-- mittlerer Steuerungsbedarf
-- hoher Steuerungsbedarf
-`;
-
+    const promptTemplate = await getSchoolPromptTemplate(access.schoolNumber, 'steering');
+    const systemPrompt = [promptTemplate.system_locked, promptTemplate.system_editable]
+      .filter(Boolean)
+      .join('\n\n')
+      .trim();
     const schoolContextBlock = schoolProfile ? `Schul-Steckbrief:\n${schoolProfile}\n\n` : '';
-
-    const userPrompt = `Analysiere das folgende Dokument anhand der vier Dimensionen.
-
-Dokumenttitel: ${doc.title}
-
-${schoolContextBlock}Dokumenttext:
-${basisText}
-
-Wichtig:
-- Analysiere das konkrete Dokument, nicht die Schule im Allgemeinen.
-- Falls Schul-Steckbrief und Dokumenttext widersprüchlich sind, hat der Dokumenttext Vorrang.
-- Begründe jede Bewertung mit expliziten Textsignalen oder klar benannten fehlenden Textsignalen im Dokument.
-
-Antwortformat:
-{
-  "tragfaehigkeit": { "score": "", "begruendung": "" },
-  "belastungsgrad": { "score": "", "begruendung": "" },
-  "entscheidungsstruktur": { "score": "", "begruendung": "" },
-  "verbindlichkeit": { "score": "", "begruendung": "" },
-  "passung": { "score": "", "begruendung": "" },
-  "gesamtbewertung": { "score": "", "begruendung": "" }
-}`;
+    const userPromptTemplate = [promptTemplate.user_locked, promptTemplate.user_editable]
+      .filter(Boolean)
+      .join('\n\n')
+      .trim();
+    const userPrompt = renderPromptTemplate(userPromptTemplate, {
+      document_title: doc.title,
+      school_profile_block: schoolContextBlock,
+      document_text: basisText,
+    });
 
     if (debugEnabled) {
       void appendAiDebugEvent(
@@ -246,6 +195,7 @@ Antwortformat:
           basisTextLength: basisText.length,
           chunkParams: steeringChunkParams,
           selectedChunks: steeringChunks,
+          promptTemplateVersion: promptTemplate.version,
           systemPrompt,
           userPrompt,
         },

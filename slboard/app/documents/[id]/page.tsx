@@ -124,11 +124,11 @@ export default function DocumentDetailPage() {
 
   useEffect(() => {
     const focus = searchParams.get('focus');
-    if (focus !== 'summary') return;
+    if (focus !== 'summary' && focus !== 'steering') return;
     if (!doc) return;
 
     const t = window.setTimeout(() => {
-      const el = document.getElementById('summary-section');
+      const el = document.getElementById(focus === 'steering' ? 'steering-section' : 'summary-section');
       el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 80);
 
@@ -987,7 +987,7 @@ export default function DocumentDetailPage() {
                   </div>
                 )}
 
-                <div className="mt-3 border-t border-zinc-200 pt-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
+                <div id="steering-section" className="mt-3 border-t border-zinc-200 pt-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">
                   <button
                     type="button"
                     onClick={() => void handleSteeringAnalysis(Boolean(steeringAnalysis))}
