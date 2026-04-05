@@ -16,7 +16,7 @@ function usernameFromEmail(email: string): string {
 
 const DEFAULT_DOC_TYPES: Array<{ code: string; label: string; sort_order: number }> = [
   { code: 'PROTOKOLL', label: 'Protokoll', sort_order: 10 },
-  { code: 'BESCHLUSS', label: 'Beschluss', sort_order: 20 },
+  { code: 'BESCHLUSSVORLAGE', label: 'Beschlussvorlage', sort_order: 20 },
   { code: 'KONZEPT', label: 'Konzept', sort_order: 30 },
   { code: 'CURRICULUM', label: 'Curriculum', sort_order: 40 },
   { code: 'VEREINBARUNG', label: 'Vereinbarung', sort_order: 50 },
@@ -139,6 +139,12 @@ export async function POST(req: NextRequest) {
         .from('user_roles')
         .insert({ user_id: appUser.id, role_code: 'SCHULLEITUNG' });
       if (roleError) throw new Error(roleError.message);
+
+      const { error: initialAdminError } = await supabase
+        .from('schools')
+        .update({ initial_admin_app_user_id: appUser.id })
+        .eq('school_number', schoolNumber);
+      if (initialAdminError) throw new Error(initialAdminError.message);
     } catch (e) {
       await supabase.auth.admin.deleteUser(createdAuth.user.id).catch(() => {});
       return apiError(500, 'INTERNAL_ERROR', e instanceof Error ? e.message : 'Schule konnte nicht registriert werden.');

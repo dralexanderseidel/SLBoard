@@ -2,6 +2,12 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import {
+  getNextWorkflowTransition,
+  statusLabelDe,
+  workflowStatusBadgeClass,
+  type WorkflowStatus,
+} from '@/lib/documentWorkflow';
 
 type DocumentListItem = {
   id: string;
@@ -46,14 +52,14 @@ export default function DocumentsPage() {
   const bulkCapabilitiesSeqRef = useRef(0);
   const [typeFilter, setTypeFilter] = useState<string>(''); // z.B. ELTERNBRIEF, KONZEPT ...
   const [responsibleUnitFilter, setResponsibleUnitFilter] = useState<string>(''); // Verantwortlich
-  const [statusFilters, setStatusFilters] = useState<string[]>([]); // ENTWURF, FREIGEGEBEN, VEROEFFENTLICHT (multi)
+  const [statusFilters, setStatusFilters] = useState<string[]>([]); // Workflow-Status (multi)
   const [protectionFilter, setProtectionFilter] = useState<string>(''); // "1", "2" oder leer
   const [reachScopeFilters, setReachScopeFilters] = useState<Array<'intern' | 'extern'>>([]);
   const [participationFilter, setParticipationFilter] = useState<string>(''); // Beteiligung enthält Gruppe X (comma-sep möglich)
   const [gremiumFilter, setGremiumFilter] = useState<string>(''); // Beschlussgremium (Freitext)
   const [reviewFilter, setReviewFilter] = useState<string>(''); // overdue|set|empty
   const [summaryFilter, setSummaryFilter] = useState<string>(''); // has|missing
-  const [steeringFilter, setSteeringFilter] = useState<string>(''); // has|missing
+  const [steeringFilter, setSteeringFilter] = useState<string>(''); // has|missing|low|medium|high
   const [searchInput, setSearchInput] = useState<string>(''); // aktueller Texteingabe-Wert
   const [searchQuery, setSearchQuery] = useState<string>(''); // tatsächlich angewendete Suche
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -205,13 +211,6 @@ export default function DocumentsPage() {
     void run();
   }, [selectedIds]);
 
-  const statusLabel = (s: string) => {
-    if (s === 'ENTWURF') return 'Entwurf';
-    if (s === 'FREIGEGEBEN') return 'Freigegeben';
-    if (s === 'VEROEFFENTLICHT') return 'Veröffentlicht';
-    return s;
-  };
-
   const toggleReachScopeChip = (scope: 'intern' | 'extern') => {
     setReachScopeFilters((prev) => (prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]));
   };
@@ -280,7 +279,7 @@ export default function DocumentsPage() {
     const fromOptions = typeOptions.find((t) => t.code === code)?.label;
     if (fromOptions) return fromOptions;
     if (code === 'PROTOKOLL') return 'Protokoll';
-    if (code === 'BESCHLUSS') return 'Beschluss';
+    if (code === 'BESCHLUSSVORLAGE') return 'Beschlussvorlage';
     if (code === 'KONZEPT') return 'Konzept';
     if (code === 'CURRICULUM') return 'Curriculum';
     if (code === 'VEREINBARUNG') return 'Vereinbarung';
@@ -288,12 +287,6 @@ export default function DocumentsPage() {
     if (code === 'RUNDSCHREIBEN') return 'Rundschreiben';
     if (code === 'SITUATIVE_REGELUNG') return 'Situative Regelung';
     return code;
-  };
-
-  const getWorkflowNext = (currentStatus: string) => {
-    if (currentStatus === 'ENTWURF') return { next: 'FREIGEGEBEN', label: '→ Freigeben' };
-    if (currentStatus === 'FREIGEGEBEN') return { next: 'VEROEFFENTLICHT', label: '→ Veröffentlichen' };
-    return null;
   };
 
   const handleRowWorkflowStep = async (documentId: string, newStatus: string) => {
@@ -411,6 +404,7 @@ export default function DocumentsPage() {
   const STATUS_CHIPS: Array<{ value: string; label: string }> = [
     { value: 'ENTWURF', label: 'Entwurf' },
     { value: 'FREIGEGEBEN', label: 'Freigegeben' },
+    { value: 'BESCHLUSS', label: 'Beschluss' },
     { value: 'VEROEFFENTLICHT', label: 'Veröffentlicht' },
   ];
 
@@ -486,7 +480,7 @@ export default function DocumentsPage() {
     }
   };
 
-  const handleBulkSetStatus = async (targetStatus: 'ENTWURF' | 'FREIGEGEBEN' | 'VEROEFFENTLICHT') => {
+  const handleBulkSetStatus = async (targetStatus: WorkflowStatus) => {
     if (selectedIds.length === 0) return;
     setBulkDeleteResult(null);
     setBulkUpdateResult(null);
@@ -817,7 +811,7 @@ export default function DocumentsPage() {
                 ? typeOptions
                 : [
                     { code: 'PROTOKOLL', label: 'Protokoll' },
-                    { code: 'BESCHLUSS', label: 'Beschluss' },
+                    { code: 'BESCHLUSSVORLAGE', label: 'Beschlussvorlage' },
                     { code: 'KONZEPT', label: 'Konzept' },
                     { code: 'CURRICULUM', label: 'Curriculum' },
                     { code: 'VEREINBARUNG', label: 'Vereinbarung' },
@@ -1041,11 +1035,14 @@ export default function DocumentsPage() {
                 <select
                   value={steeringFilter}
                   onChange={(e) => setSteeringFilter(e.target.value)}
-                  className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                  className="h-8 min-w-[220px] rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                 >
                   <option value="">Alle</option>
                   <option value="has">vorhanden</option>
                   <option value="missing">fehlt</option>
+                  <option value="low">niedrig (Ampel grün)</option>
+                  <option value="medium">mittel (Ampel gelb)</option>
+                  <option value="high">hoch (Ampel rot)</option>
                 </select>
               </div>
             </div>
@@ -1178,6 +1175,21 @@ export default function DocumentsPage() {
                 className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
               >
                 {bulkUpdating ? '…' : 'Freigegeben'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleBulkSetStatus('BESCHLUSS')}
+                disabled={
+                  selectedIds.length === 0 ||
+                  bulkCapabilitiesLoading ||
+                  editableSelectedIds.length === 0 ||
+                  bulkDeleting ||
+                  bulkUpdating ||
+                  bulkAiBusy
+                }
+                className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
+              >
+                {bulkUpdating ? '…' : 'Beschluss'}
               </button>
               <button
                 type="button"
@@ -1587,14 +1599,16 @@ export default function DocumentsPage() {
                     <td className="px-3 py-2">{docTypeLabel(doc.document_type_code)}</td>
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-medium text-zinc-900 dark:text-zinc-100">
-                          {statusLabel(doc.status)}
+                        <span
+                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${workflowStatusBadgeClass(doc.status)}`}
+                        >
+                          {statusLabelDe(doc.status)}
                         </span>
-                        {getWorkflowNext(doc.status) && (
+                        {getNextWorkflowTransition(doc.status) && (
                           <button
                             type="button"
                             onClick={() =>
-                              void handleRowWorkflowStep(doc.id, getWorkflowNext(doc.status)!.next)
+                              void handleRowWorkflowStep(doc.id, getNextWorkflowTransition(doc.status)!.next)
                             }
                             disabled={
                               rowActionLoadingId === doc.id ||
@@ -1604,7 +1618,7 @@ export default function DocumentsPage() {
                             }
                             className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
                           >
-                            {getWorkflowNext(doc.status)!.label}
+                            {getNextWorkflowTransition(doc.status)!.label}
                           </button>
                         )}
                       </div>
@@ -1755,28 +1769,22 @@ export default function DocumentsPage() {
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span
-                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                      doc.status === 'ENTWURF'
-                        ? 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
-                        : doc.status === 'FREIGEGEBEN'
-                          ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200'
-                          : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200'
-                    }`}
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${workflowStatusBadgeClass(doc.status)}`}
                   >
-                    {statusLabel(doc.status)}
+                    {statusLabelDe(doc.status)}
                   </span>
-                  {getWorkflowNext(doc.status) && (
+                  {getNextWorkflowTransition(doc.status) && (
                     <button
                       type="button"
                       onClick={() =>
-                        void handleRowWorkflowStep(doc.id, getWorkflowNext(doc.status)!.next)
+                        void handleRowWorkflowStep(doc.id, getNextWorkflowTransition(doc.status)!.next)
                       }
                       disabled={
                         rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy
                       }
                       className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
                     >
-                      {getWorkflowNext(doc.status)!.label}
+                      {getNextWorkflowTransition(doc.status)!.label}
                     </button>
                   )}
                 </div>
@@ -1889,15 +1897,9 @@ export default function DocumentsPage() {
                         </p>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5">
                           <span
-                            className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${
-                              doc.status === 'ENTWURF'
-                                ? 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
-                                : doc.status === 'FREIGEGEBEN'
-                                  ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200'
-                                  : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200'
-                            }`}
+                            className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${workflowStatusBadgeClass(doc.status)}`}
                           >
-                            {statusLabel(doc.status)}
+                            {statusLabelDe(doc.status)}
                           </span>
                           <span className="inline-flex items-center rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[10px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
                             {new Date(doc.created_at).toLocaleDateString('de-DE')}
@@ -1925,18 +1927,18 @@ export default function DocumentsPage() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1">
-                      {getWorkflowNext(doc.status) && (
+                      {getNextWorkflowTransition(doc.status) && (
                         <button
                           type="button"
                           onClick={() =>
-                            void handleRowWorkflowStep(doc.id, getWorkflowNext(doc.status)!.next)
+                            void handleRowWorkflowStep(doc.id, getNextWorkflowTransition(doc.status)!.next)
                           }
                           disabled={
                             rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy
                           }
                           className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
                         >
-                          {getWorkflowNext(doc.status)!.label}
+                          {getNextWorkflowTransition(doc.status)!.label}
                         </button>
                       )}
                       <Link

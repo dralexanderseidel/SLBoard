@@ -67,7 +67,7 @@ function DraftAssistantContent() {
       let q = supabase
         .from('documents')
         .select('id, title, created_at, document_type_code')
-        .in('status', ['FREIGEGEBEN', 'VEROEFFENTLICHT'])
+        .in('status', ['FREIGEGEBEN', 'BESCHLUSS', 'VEROEFFENTLICHT'])
         .order('created_at', { ascending: false });
 
       if (meAccess?.schoolNumber) {
@@ -434,7 +434,7 @@ function DraftAssistantContent() {
                   <option value="RUNDSCHREIBEN">Rundschreiben</option>
                   <option value="KONZEPT">Konzept</option>
                   <option value="PROTOKOLL">Protokoll</option>
-                  <option value="BESCHLUSS">Beschluss</option>
+                  <option value="BESCHLUSSVORLAGE">Beschlussvorlage</option>
                   <option value="CURRICULUM">Curriculum</option>
                   <option value="VEREINBARUNG">Vereinbarung</option>
                   <option value="SITUATIVE_REGELUNG">Situative Regelung</option>

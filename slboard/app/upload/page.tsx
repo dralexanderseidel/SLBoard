@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 
-type Status = 'ENTWURF' | 'FREIGEGEBEN' | 'VEROEFFENTLICHT';
+type Status = 'ENTWURF' | 'FREIGEGEBEN' | 'BESCHLUSS' | 'VEROEFFENTLICHT';
 type ReachScope = 'intern' | 'extern';
 
 type UploadItem = {
@@ -174,7 +174,7 @@ export default function UploadPage() {
                   ? typeOptions
                   : [
                       { code: 'PROTOKOLL', label: 'Protokoll' },
-                      { code: 'BESCHLUSS', label: 'Beschluss' },
+                      { code: 'BESCHLUSSVORLAGE', label: 'Beschlussvorlage' },
                       { code: 'KONZEPT', label: 'Konzept' },
                       { code: 'CURRICULUM', label: 'Curriculum' },
                       { code: 'VEREINBARUNG', label: 'Vereinbarung' },
@@ -216,6 +216,7 @@ export default function UploadPage() {
               >
                 <option value="ENTWURF">Entwurf</option>
                 <option value="FREIGEGEBEN">Freigegeben</option>
+                <option value="BESCHLUSS">Beschluss</option>
                 <option value="VEROEFFENTLICHT">Veröffentlicht</option>
               </select>
             </div>

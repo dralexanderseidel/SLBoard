@@ -36,6 +36,23 @@ export async function GET() {
       return apiError(500, 'INTERNAL_ERROR', error.message);
     }
 
+    const schoolNumbers = [
+      ...new Set((users ?? []).map((u) => u.school_number).filter((sn): sn is string => Boolean(sn))),
+    ];
+    let initialBySchool = new Map<string, string | null>();
+    if (schoolNumbers.length > 0) {
+      const { data: schoolRows } = await supabase
+        .from('schools')
+        .select('school_number, initial_admin_app_user_id')
+        .in('school_number', schoolNumbers);
+      initialBySchool = new Map(
+        (schoolRows ?? []).map((s) => [
+          s.school_number as string,
+          (s as { initial_admin_app_user_id?: string | null }).initial_admin_app_user_id ?? null,
+        ])
+      );
+    }
+
     // Rollen pro Nutzer laden
     const { data: allRoles } = await supabase
       .from('user_roles')
@@ -46,10 +63,15 @@ export async function GET() {
       return acc;
     }, {});
 
-    const usersWithRoles = (users ?? []).map((u) => ({
-      ...u,
-      roles: rolesByUser[u.id] ?? [],
-    }));
+    const usersWithRoles = (users ?? []).map((u) => {
+      const initialId = u.school_number ? initialBySchool.get(u.school_number) : null;
+      const isInitialSchoolAdmin = Boolean(u.school_number && initialId === u.id);
+      return {
+        ...u,
+        roles: rolesByUser[u.id] ?? [],
+        deletable: !isInitialSchoolAdmin,
+      };
+    });
 
     return NextResponse.json({ users: usersWithRoles });
   } catch (err) {
@@ -107,7 +129,7 @@ export async function POST(req: NextRequest) {
       return apiError(500, 'INTERNAL_ERROR', error.message);
     }
 
-    return NextResponse.json({ user: { ...newUser, roles: [] } });
+    return NextResponse.json({ user: { ...newUser, roles: [], deletable: true } });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return apiError(500, 'INTERNAL_ERROR', msg);

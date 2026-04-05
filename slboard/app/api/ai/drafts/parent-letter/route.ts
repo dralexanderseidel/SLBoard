@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
         .from('documents')
         .select('id, title, summary')
         .eq('document_type_code', 'ELTERNBRIEF')
-        .in('status', ['FREIGEGEBEN', 'VEROEFFENTLICHT'])
+        .in('status', ['FREIGEGEBEN', 'BESCHLUSS', 'VEROEFFENTLICHT'])
         .order('created_at', { ascending: false })
         .limit(5);
       if (access.schoolNumber) fallbackDocsQuery = fallbackDocsQuery.eq('school_number', access.schoolNumber);

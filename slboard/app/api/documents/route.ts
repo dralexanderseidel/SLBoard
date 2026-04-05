@@ -4,14 +4,25 @@ import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
 
+const STEERING_GESAMT_BY_LEVEL: Record<'low' | 'medium' | 'high', string> = {
+  low: 'niedriger Steuerungsbedarf',
+  medium: 'mittlerer Steuerungsbedarf',
+  high: 'hoher Steuerungsbedarf',
+};
+
 /** Entspricht der Anzeige-Logik in app/documents/page.tsx (steeringNeedScore). */
-function isSteeringAnalysisPresent(steering_analysis: unknown): boolean {
+function steeringGesamtScore(steering_analysis: unknown): string | undefined {
   const score =
     steering_analysis &&
     typeof steering_analysis === 'object' &&
     'gesamtbewertung' in steering_analysis
       ? (steering_analysis as { gesamtbewertung?: { score?: string } }).gesamtbewertung?.score
       : undefined;
+  return typeof score === 'string' ? score : undefined;
+}
+
+function isSteeringAnalysisPresent(steering_analysis: unknown): boolean {
+  const score = steeringGesamtScore(steering_analysis);
   return (
     score === 'niedriger Steuerungsbedarf' ||
     score === 'mittlerer Steuerungsbedarf' ||
@@ -28,7 +39,7 @@ function isSteeringAnalysisPresent(steering_analysis: unknown): boolean {
  * - gremium (Freitext, ilike)
  * - review (overdue|set|empty)
  * - summary (has|missing)
- * - steering (has|missing) — Steuerungsanalyse (nur „vorhanden“, wenn gesamtbewertung.score gesetzt ist, nicht nur jsonb ≠ null)
+ * - steering (has|missing|low|medium|high) — Steuerungsanalyse; low/medium/high = Ampel (Gesamtbewertung)
  * - status kann als einzelne Statuskennung oder als kommaseparierte Liste kommen
  */
 export async function GET(req: NextRequest) {
@@ -94,7 +105,7 @@ export async function GET(req: NextRequest) {
     }
 
     if (statusFilterRaw) {
-      const ALLOWED_STATUSES = ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT'] as const;
+      const ALLOWED_STATUSES = ['ENTWURF', 'FREIGEGEBEN', 'BESCHLUSS', 'VEROEFFENTLICHT'] as const;
       const statusList = statusFilterRaw
         .split(',')
         .map((s) => s.trim())
@@ -180,6 +191,13 @@ export async function GET(req: NextRequest) {
       filtered = filtered.filter((d) => isSteeringAnalysisPresent(d.steering_analysis));
     } else if (steeringFilter === 'missing') {
       filtered = filtered.filter((d) => !isSteeringAnalysisPresent(d.steering_analysis));
+    } else if (
+      steeringFilter === 'low' ||
+      steeringFilter === 'medium' ||
+      steeringFilter === 'high'
+    ) {
+      const expected = STEERING_GESAMT_BY_LEVEL[steeringFilter];
+      filtered = filtered.filter((d) => steeringGesamtScore(d.steering_analysis) === expected);
     }
 
     return NextResponse.json({ data: filtered });

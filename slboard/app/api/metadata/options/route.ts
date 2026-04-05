@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 
 const DEFAULT_TYPES: Array<{ code: string; label: string; sort_order: number }> = [
   { code: 'PROTOKOLL', label: 'Protokoll', sort_order: 10 },
-  { code: 'BESCHLUSS', label: 'Beschluss', sort_order: 20 },
+  { code: 'BESCHLUSSVORLAGE', label: 'Beschlussvorlage', sort_order: 20 },
   { code: 'KONZEPT', label: 'Konzept', sort_order: 30 },
   { code: 'CURRICULUM', label: 'Curriculum', sort_order: 40 },
   { code: 'VEREINBARUNG', label: 'Vereinbarung', sort_order: 50 },

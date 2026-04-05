@@ -4,6 +4,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabaseClient';
+import {
+  WORKFLOW_STATUS_ORDER,
+  getNextWorkflowTransition,
+  statusLabelDe,
+  workflowPrimaryButtonLabel,
+  workflowStatusBadgeClass,
+  type WorkflowStatus,
+} from '@/lib/documentWorkflow';
 
 type DocumentDetail = {
   id: string;
@@ -46,7 +54,7 @@ type SteeringAnalysis = {
 
 const DOC_TYPES = [
   'PROTOKOLL',
-  'BESCHLUSS',
+  'BESCHLUSSVORLAGE',
   'KONZEPT',
   'CURRICULUM',
   'VEREINBARUNG',
@@ -64,13 +72,6 @@ const PARTICIPATION_GROUP_OPTIONS = [
   'Steuergruppe',
   'Ganztagsteam',
 ];
-
-/** Workflow: erlaubte nächste Schritte */
-const WORKFLOW_NEXT: Record<string, { label: string; value: string } | null> = {
-  ENTWURF: { label: 'Freigeben', value: 'FREIGEGEBEN' },
-  FREIGEGEBEN: { label: 'Veröffentlichen', value: 'VEROEFFENTLICHT' },
-  VEROEFFENTLICHT: null,
-};
 
 export default function DocumentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -579,7 +580,7 @@ export default function DocumentDetailPage() {
 
   const docTypeLabel = (code: string) => {
     if (code === 'PROTOKOLL') return 'Protokoll';
-    if (code === 'BESCHLUSS') return 'Beschluss';
+    if (code === 'BESCHLUSSVORLAGE') return 'Beschlussvorlage';
     if (code === 'ELTERNBRIEF') return 'Elternbrief';
     if (code === 'KONZEPT') return 'Konzept';
     if (code === 'CURRICULUM') return 'Curriculum';
@@ -587,13 +588,6 @@ export default function DocumentDetailPage() {
     if (code === 'VEREINBARUNG') return 'Vereinbarung';
     if (code === 'SITUATIVE_REGELUNG') return 'Situative Regelung';
     return code;
-  };
-
-  const statusLabel = (s: string) => {
-    if (s === 'ENTWURF') return 'Entwurf';
-    if (s === 'FREIGEGEBEN') return 'Freigegeben';
-    if (s === 'VEROEFFENTLICHT') return 'Veröffentlicht';
-    return s;
   };
 
   const whoLabel = (email: string) => {
@@ -641,8 +635,8 @@ export default function DocumentDetailPage() {
       const changes: string[] = [];
 
       if (Object.prototype.hasOwnProperty.call(newVals, 'status')) {
-        const from = typeof oldVals.status === 'string' ? statusLabel(oldVals.status) : '—';
-        const to = typeof newVals.status === 'string' ? statusLabel(newVals.status) : '—';
+        const from = typeof oldVals.status === 'string' ? statusLabelDe(oldVals.status) : '—';
+        const to = typeof newVals.status === 'string' ? statusLabelDe(newVals.status) : '—';
         changes.push(`Status von „${from}“ zu „${to}“ geändert`);
       }
 
@@ -676,15 +670,9 @@ export default function DocumentDetailPage() {
                 <h1 className="min-w-0 truncate text-xl font-semibold">{doc ? doc.title : 'Dokumentansicht'}</h1>
                 {doc && (
                   <span
-                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                      doc.status === 'ENTWURF'
-                        ? 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
-                        : doc.status === 'FREIGEGEBEN'
-                          ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200'
-                          : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200'
-                    }`}
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${workflowStatusBadgeClass(doc.status)}`}
                   >
-                    {statusLabel(doc.status)}
+                    {statusLabelDe(doc.status)}
                   </span>
                 )}
               </div>
@@ -1108,43 +1096,34 @@ export default function DocumentDetailPage() {
                 )}
               </div>
               {saveError && <p className="mb-2 text-[11px] text-red-500">{saveError}</p>}
-              {/* Status & Workflow: Entwurf → Freigegeben → Veröffentlicht */}
+              {/* Status & Workflow: Entwurf → Freigegeben → Beschluss → Veröffentlicht */}
               {doc && (
                 <div className="mb-3 rounded border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-800/50">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <span className="text-[11px] text-zinc-500">Status & Workflow</span>
                     <span
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                        doc.status === 'ENTWURF'
-                          ? 'border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200'
-                          : doc.status === 'FREIGEGEBEN'
-                            ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200'
-                            : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200'
-                      }`}
+                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${workflowStatusBadgeClass(doc.status)}`}
                     >
-                      {statusLabel(doc.status)}
+                      {statusLabelDe(doc.status)}
                     </span>
                   </div>
 
-                  {/* Schritt-Leiste */}
                   <div className="mb-3">
-                    <div className="flex items-center justify-between gap-2">
-                      {['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT'].map((step, idx, arr) => {
+                    <div className="grid grid-cols-4 gap-x-1 gap-y-1 sm:gap-x-2">
+                      {WORKFLOW_STATUS_ORDER.map((step, idx) => {
+                        const stepIdx = WORKFLOW_STATUS_ORDER.indexOf(doc.status as WorkflowStatus);
+                        const currentIdx = stepIdx >= 0 ? stepIdx : -1;
                         const isActive = doc.status === step;
-                        const isDone =
-                          (doc.status === 'FREIGEGEBEN' && step === 'ENTWURF') ||
-                          (doc.status === 'VEROEFFENTLICHT' &&
-                            (step === 'ENTWURF' || step === 'FREIGEGEBEN'));
-                        const baseClass =
-                          'flex items-center gap-1 text-[11px]';
+                        const isDone = currentIdx > idx;
                         const circleBase =
-                          'flex h-4 w-4 items-center justify-center rounded-full border text-[9px]';
-                        const activeColor =
-                          step === 'ENTWURF'
-                            ? 'border-zinc-500 bg-zinc-700 text-white'
-                            : step === 'FREIGEGEBEN'
-                              ? 'border-blue-500 bg-blue-600 text-white'
-                              : 'border-emerald-500 bg-emerald-600 text-white';
+                          'mx-auto flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[9px] leading-none';
+                        const activeColors = [
+                          'border-zinc-500 bg-zinc-700 text-white',
+                          'border-blue-500 bg-blue-600 text-white',
+                          'border-amber-500 bg-amber-600 text-white',
+                          'border-emerald-500 bg-emerald-600 text-white',
+                        ];
+                        const activeColor = activeColors[idx] ?? activeColors[0];
                         const doneColor =
                           'border-emerald-400 bg-emerald-500 text-white dark:border-emerald-700 dark:bg-emerald-800';
                         const idleColor =
@@ -1157,42 +1136,38 @@ export default function DocumentDetailPage() {
                             : `${circleBase} ${idleColor}`;
 
                         return (
-                          <div key={step} className="flex flex-1 items-center gap-2">
-                            <div className={baseClass}>
-                              <span className={circleClass}>{idx + 1}</span>
-                              <span
-                                className={
-                                  isActive
-                                    ? 'font-medium text-zinc-900 dark:text-zinc-50'
-                                    : 'text-zinc-500 dark:text-zinc-400'
-                                }
-                              >
-                                {statusLabel(step)}
-                              </span>
-                            </div>
-                            {idx < arr.length - 1 && (
-                              <div className="h-px flex-1 bg-gradient-to-r from-zinc-300 to-zinc-200 dark:from-zinc-700 dark:to-zinc-600" />
-                            )}
+                          <div key={step} className="min-w-0 px-0.5 text-center sm:px-1">
+                            <span className={circleClass}>{idx + 1}</span>
+                            <span
+                              className={`mt-1 block text-balance text-[10px] leading-tight sm:text-[11px] ${
+                                isActive
+                                  ? 'font-medium text-zinc-900 dark:text-zinc-50'
+                                  : 'text-zinc-500 dark:text-zinc-400'
+                              }`}
+                            >
+                              {statusLabelDe(step)}
+                            </span>
                           </div>
                         );
                       })}
                     </div>
                   </div>
 
-                  {/* Nächster Schritt */}
-                  {WORKFLOW_NEXT[doc.status] ? (
+                  {workflowPrimaryButtonLabel(doc.status) && getNextWorkflowTransition(doc.status) ? (
                     <>
                       <button
                         type="button"
-                        onClick={() => handleWorkflowStep(WORKFLOW_NEXT[doc.status]!.value)}
+                        onClick={() =>
+                          handleWorkflowStep(getNextWorkflowTransition(doc.status)!.next)
+                        }
                         disabled={workflowLoading}
                         className="w-full rounded bg-blue-600 px-2 py-1.5 text-[11px] font-medium text-white hover:bg-blue-700 disabled:opacity-60"
                       >
-                        {workflowLoading ? '…' : WORKFLOW_NEXT[doc.status]!.label}
+                        {workflowLoading ? '…' : workflowPrimaryButtonLabel(doc.status)}
                       </button>
                       <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
-                        Der Status wird gemäß definiertem Workflow geändert. Verfügbare Schritte:
-                        Entwurf → Freigegeben → Veröffentlicht.
+                        Der Status wird gemäß definiertem Workflow geändert. Reihenfolge: Entwurf →
+                        Freigegeben → Beschluss → Veröffentlicht.
                       </p>
                     </>
                   ) : (
@@ -1231,7 +1206,7 @@ export default function DocumentDetailPage() {
                         ? documentTypeOptions
                         : [
                             { code: 'PROTOKOLL', label: 'Protokoll' },
-                            { code: 'BESCHLUSS', label: 'Beschluss' },
+                            { code: 'BESCHLUSSVORLAGE', label: 'Beschlussvorlage' },
                             { code: 'KONZEPT', label: 'Konzept' },
                             { code: 'CURRICULUM', label: 'Curriculum' },
                             { code: 'VEREINBARUNG', label: 'Vereinbarung' },
@@ -1456,11 +1431,7 @@ export default function DocumentDetailPage() {
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-zinc-500">Status</dt>
-                    <dd>
-                      {doc.status === 'ENTWURF' && 'Entwurf'}
-                      {doc.status === 'FREIGEGEBEN' && 'Freigegeben'}
-                      {doc.status === 'VEROEFFENTLICHT' && 'Veröffentlicht'}
-                    </dd>
+                    <dd>{statusLabelDe(doc.status)}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
                     <dt className="text-zinc-500">Schutzklasse</dt>

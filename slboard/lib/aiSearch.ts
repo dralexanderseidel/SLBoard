@@ -2,6 +2,7 @@
  * Gemeinsame Suchlogik für KI: Keyword-Extraktion, Relevanz-Score, Dokumentenliste.
  */
 import { supabaseServer } from './supabaseServer';
+import { WORKFLOW_STATUS_ORDER } from './documentWorkflow';
 
 export const SEARCH_POOL = 25;
 export const MAX_DOCS = 8;
@@ -105,7 +106,7 @@ export async function getSuggestedDocuments(question: string, schoolNumber?: str
       .select(
         'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
       )
-      .in('status', ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT'])
+      .in('status', [...WORKFLOW_STATUS_ORDER])
       .or(orParts.join(','))
       .order('created_at', { ascending: false })
       .limit(SEARCH_POOL);
@@ -124,7 +125,7 @@ export async function getSuggestedDocuments(question: string, schoolNumber?: str
       .select(
         'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
       )
-      .in('status', ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT'])
+      .in('status', [...WORKFLOW_STATUS_ORDER])
       .order('created_at', { ascending: false })
       .limit(MAX_DOCS);
     if (schoolNumber) fallbackQuery = fallbackQuery.eq('school_number', schoolNumber);
@@ -148,7 +149,7 @@ export async function getDocumentsByIds(ids: string[], schoolNumber?: string | n
       'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
     )
     .in('id', ids)
-    .in('status', ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT']);
+    .in('status', [...WORKFLOW_STATUS_ORDER]);
   if (schoolNumber) byIdsQuery = byIdsQuery.eq('school_number', schoolNumber);
   const { data } = await byIdsQuery;
 

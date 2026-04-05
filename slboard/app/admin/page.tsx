@@ -13,6 +13,8 @@ type AppUser = {
   school_number: string | null;
   created_at: string;
   roles: string[];
+  /** false = bei Schulregistrierung angelegter Admin (nicht löschbar) */
+  deletable?: boolean;
 };
 
 const AVAILABLE_ROLES = [
@@ -451,6 +453,30 @@ export default function AdminPage() {
     }
   };
 
+  const handleDeleteUser = async (u: AppUser) => {
+    if (u.deletable === false) return;
+    const ok = window.confirm(
+      `Nutzer „${u.full_name}“ (${u.email}) wirklich löschen?\n\n` +
+        'Der Eintrag in app_users wird entfernt; der zugehörige Supabase-Auth-User wird ebenfalls gelöscht, falls vorhanden.'
+    );
+    if (!ok) return;
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch(`/api/admin/users/${u.id}`, { method: 'DELETE', credentials: 'include' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Löschen fehlgeschlagen.');
+      setUsers((prev) => prev.filter((x) => x.id !== u.id));
+      if (editingId === u.id) setEditingId(null);
+      setMessage('Nutzer gelöscht.');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Löschen fehlgeschlagen.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createForm.username.trim() || !createForm.full_name.trim() || !createForm.email.trim()) {
@@ -802,13 +828,28 @@ export default function AdminPage() {
                                 </button>
                               </div>
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleEdit(u)}
-                                className="rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
-                              >
-                                Bearbeiten
-                              </button>
+                              <div className="flex flex-wrap gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleEdit(u)}
+                                  className="rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                                >
+                                  Bearbeiten
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDeleteUser(u)}
+                                  disabled={saving || u.deletable === false}
+                                  title={
+                                    u.deletable === false
+                                      ? 'Der bei der Schulregistrierung angelegte Admin-Account kann nicht gelöscht werden.'
+                                      : 'Nutzer löschen'
+                                  }
+                                  className="rounded border border-red-300 px-2 py-1 text-[11px] text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40"
+                                >
+                                  Löschen
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -819,9 +860,10 @@ export default function AdminPage() {
               )}
 
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                Hinweis: Diese Oberfläche verwaltet die Tabelle app_users. Nutzer für Supabase Auth
-                (Login) müssen separat im Supabase-Dashboard unter Authentication → Users angelegt werden.
-                Die E-Mail sollte mit app_users übereinstimmen.
+                Hinweis: Nutzer werden in app_users geführt. Beim Löschen wird der passende Eintrag in
+                Supabase Auth mit entfernt, sofern die E-Mail übereinstimmt. Der bei der
+                Schulregistrierung angelegte erste Admin pro Schule kann nicht gelöscht werden.
+                Weitere Logins können weiterhin manuell unter Authentication → Users angelegt werden.
               </p>
             </div>
           )}

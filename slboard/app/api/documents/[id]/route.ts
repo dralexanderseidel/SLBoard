@@ -5,13 +5,7 @@ import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../..
 import { apiError } from '../../../../lib/apiError';
 import { getDocumentText } from '../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../lib/indexing';
-
-/** Erlaubte Workflow-Übergänge: Entwurf → Freigegeben → Veröffentlicht */
-const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
-  ENTWURF: ['FREIGEGEBEN'],
-  FREIGEGEBEN: ['VEROEFFENTLICHT'],
-  VEROEFFENTLICHT: [],
-};
+import { allowedNextStatuses, isValidWorkflowStatus } from '../../../../lib/documentWorkflow';
 
 /**
  * PATCH: Metadaten eines Dokuments aktualisieren (Titel, Status, Rechtsbezug, etc.)
@@ -67,19 +61,23 @@ export async function PATCH(
     if (typeof body.title === 'string' && body.title.trim()) {
       updates.title = body.title.trim();
     }
-    if (typeof body.status === 'string' && ['ENTWURF', 'FREIGEGEBEN', 'VEROEFFENTLICHT'].includes(body.status)) {
+    if (typeof body.status === 'string') {
+      const nextStatus = body.status.trim();
+      if (!isValidWorkflowStatus(nextStatus)) {
+        return apiError(400, 'VALIDATION_ERROR', 'Ungültiger Status.');
+      }
       const currentStatus = (doc as { status?: string }).status ?? 'ENTWURF';
-      const allowed = ALLOWED_STATUS_TRANSITIONS[currentStatus] ?? [];
-      if (!allowed.includes(body.status)) {
+      const allowed = allowedNextStatuses(currentStatus);
+      if (!allowed.includes(nextStatus)) {
         return apiError(
           400,
           'VALIDATION_ERROR',
           currentStatus === 'VEROEFFENTLICHT'
             ? 'Veröffentlichte Dokumente können nicht mehr geändert werden.'
-            : `Status-Wechsel von "${currentStatus}" zu "${body.status}" ist nicht erlaubt. Nächster Schritt: ${allowed.join(' oder ') || 'keiner'}.`
+            : `Status-Wechsel von "${currentStatus}" zu "${nextStatus}" ist nicht erlaubt. Nächster Schritt: ${allowed.join(' oder ') || 'keiner'}.`
         );
       }
-      updates.status = body.status;
+      updates.status = nextStatus;
     }
     if (typeof body.legal_reference === 'string') {
       updates.legal_reference = body.legal_reference.trim() || null;

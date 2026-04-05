@@ -4,7 +4,7 @@
 insert into public.document_types (code, label, default_protection_class)
 values
   ('PROTOKOLL', 'Protokoll', 1),
-  ('BESCHLUSS', 'Beschluss', 2),
+  ('BESCHLUSSVORLAGE', 'Beschlussvorlage', 2),
   ('KONZEPT', 'Konzept', 1),
   ('CURRICULUM', 'Curriculum', 1),
   ('VEREINBARUNG', 'Vereinbarung', 2),

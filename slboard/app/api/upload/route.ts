@@ -5,6 +5,7 @@ import { getDocumentText } from '../../../lib/documentText';
 import { buildSearchIndex } from '../../../lib/indexing';
 import { getUserAccessContext } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
+import { WORKFLOW_STATUS_ORDER } from '../../../lib/documentWorkflow';
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const ALLOWED_MIME_TYPES = [
@@ -77,6 +78,10 @@ export async function POST(req: NextRequest) {
     }
     if (!date) {
       return apiError(400, 'VALIDATION_ERROR', 'Datum ist ein Pflichtfeld.');
+    }
+
+    if (!(WORKFLOW_STATUS_ORDER as readonly string[]).includes(status)) {
+      return apiError(400, 'VALIDATION_ERROR', 'Ungültiger Status.');
     }
 
     if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -159,7 +164,7 @@ export async function POST(req: NextRequest) {
         comment: 'Erstfassung',
         file_uri: filePath,
         mime_type: mimeType,
-        is_published: status === 'FREIGEGEBEN',
+        is_published: status === 'VEROEFFENTLICHT',
       })
       .select('id')
       .single();

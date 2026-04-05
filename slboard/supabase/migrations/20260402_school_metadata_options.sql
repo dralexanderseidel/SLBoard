@@ -30,7 +30,7 @@ begin
   cross join (
     values
       ('PROTOKOLL', 'Protokoll', 10),
-      ('BESCHLUSS', 'Beschluss', 20),
+      ('BESCHLUSSVORLAGE', 'Beschlussvorlage', 20),
       ('KONZEPT', 'Konzept', 30),
       ('CURRICULUM', 'Curriculum', 40),
       ('VEREINBARUNG', 'Vereinbarung', 50),
