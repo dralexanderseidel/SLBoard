@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
-import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
 
 const STEERING_GESAMT_BY_LEVEL: Record<'low' | 'medium' | 'high', string> = {
@@ -40,6 +40,7 @@ function isSteeringAnalysisPresent(steering_analysis: unknown): boolean {
  * - review (overdue|set|empty)
  * - summary (has|missing)
  * - steering (has|missing|low|medium|high) — Steuerungsanalyse; low/medium/high = Ampel (Gesamtbewertung)
+ * - archive=1 — nur archivierte Dokumente; sonst nur aktive (archived_at IS NULL)
  * - status kann als einzelne Statuskennung oder als kommaseparierte Liste kommen
  */
 export async function GET(req: NextRequest) {
@@ -55,7 +56,7 @@ export async function GET(req: NextRequest) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     const { searchParams } = new URL(req.url);
     const typeFilter = searchParams.get('type') ?? '';
@@ -69,16 +70,23 @@ export async function GET(req: NextRequest) {
     const reviewFilter = searchParams.get('review') ?? '';
     const summaryFilter = searchParams.get('summary') ?? '';
     const steeringFilter = searchParams.get('steering') ?? '';
+    const archiveParam = searchParams.get('archive') ?? '';
 
     let query = supabase
       .from('documents')
       .select(
-        'id, title, document_type_code, created_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, summary, steering_analysis, school_number'
+        'id, title, document_type_code, created_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, summary, steering_analysis, school_number, archived_at'
       )
       .order('created_at', { ascending: false });
 
     if (access.schoolNumber) {
       query = query.eq('school_number', access.schoolNumber);
+    }
+
+    if (archiveParam === '1') {
+      query = query.not('archived_at', 'is', null);
+    } else {
+      query = query.is('archived_at', null);
     }
 
     if (searchQuery.trim()) {

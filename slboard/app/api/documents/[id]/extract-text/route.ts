@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
-import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../../lib/documentAccess';
 import { getDocumentTextDiagnostics } from '../../../../../lib/documentText';
 import { apiError } from '../../../../../lib/apiError';
 
@@ -33,7 +33,7 @@ export async function GET(
     const { id: documentId } = await params;
     const verbose = req.nextUrl.searchParams.get('verbose') === '1';
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     const { data: doc, error: docError } = await supabase
       .from('documents')

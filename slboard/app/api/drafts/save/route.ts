@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
-import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
 
 const createdById = '00000000-0000-0000-0000-000000000001';
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     if (!supabase) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
 
     const body = await req.json();

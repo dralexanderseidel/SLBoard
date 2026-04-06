@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { isAdmin } from '../../../../lib/adminAuth';
-import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
 
 export const runtime = 'nodejs';
@@ -22,7 +22,7 @@ export async function GET() {
     if (!supabase) return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     if (!(await isAdmin(user.email, supabase))) return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
 
     const [typesRes, unitsRes] = await Promise.all([
@@ -59,7 +59,7 @@ export async function PUT(req: NextRequest) {
     if (!supabase) return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     if (!(await isAdmin(user.email, supabase))) return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
 
     const body = (await req.json().catch(() => ({}))) as UpdatePayload;

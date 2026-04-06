@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { supabaseServer } from '../../../../lib/supabaseServer';
-import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
 
 export const runtime = 'nodejs';
@@ -36,7 +36,7 @@ export async function GET() {
     const supabase = supabaseServer();
     if (!supabase) return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
 
     const [typesRes, unitsRes] = await Promise.all([

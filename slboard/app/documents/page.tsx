@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   getNextWorkflowTransition,
   statusLabelDe,
@@ -34,6 +35,7 @@ export default function DocumentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkArchiving, setBulkArchiving] = useState(false);
   const [bulkDeleteResult, setBulkDeleteResult] = useState<string | null>(null);
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [bulkUpdateResult, setBulkUpdateResult] = useState<string | null>(null);
@@ -74,6 +76,10 @@ export default function DocumentsPage() {
   const [responsibleUnitOptions, setResponsibleUnitOptions] = useState<string[]>([]);
   const bulkAiBusy = bulkSummarizing || bulkSteeringAnalyzing;
 
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const archiveView = searchParams.get('archive') === '1';
+
   useEffect(() => {
     const load = async () => {
       const seq = ++loadSeqRef.current;
@@ -93,6 +99,7 @@ export default function DocumentsPage() {
       if (summaryFilter) params.set('summary', summaryFilter);
       if (steeringFilter) params.set('steering', steeringFilter);
       if (searchQuery.trim()) params.set('search', searchQuery.trim());
+      if (archiveView) params.set('archive', '1');
 
       const url = `/api/documents${params.toString() ? `?${params.toString()}` : ''}`;
       let res: Response;
@@ -133,6 +140,7 @@ export default function DocumentsPage() {
     summaryFilter,
     steeringFilter,
     searchQuery,
+    archiveView,
     reloadKey,
   ]);
 
@@ -290,8 +298,9 @@ export default function DocumentsPage() {
   };
 
   const handleRowWorkflowStep = async (documentId: string, newStatus: string) => {
+    if (archiveView) return;
     if (rowActionLoadingId) return;
-    if (bulkDeleting || bulkUpdating || bulkAiBusy) return;
+    if (bulkDeleting || bulkUpdating || bulkAiBusy || bulkArchiving) return;
 
     setRowActionLoadingId(documentId);
     setBulkDeleteResult(null);
@@ -319,10 +328,12 @@ export default function DocumentsPage() {
 
   const handleRowDelete = async (documentId: string) => {
     if (rowActionLoadingId) return;
-    if (bulkDeleting || bulkUpdating || bulkAiBusy) return;
+    if (bulkDeleting || bulkUpdating || bulkAiBusy || bulkArchiving) return;
 
     const title = docs.find((d) => d.id === documentId)?.title ?? documentId;
-    const ok = window.confirm(`Dokument endgültig löschen?\n\n${title}\n\nDieser Vorgang kann nicht rückgängig gemacht werden.`);
+    const ok = window.confirm(
+      `Dokument endgültig löschen?\n\n${title}\n\nDateien und gespeicherte KI-Anfragen, die nur dieses Dokument betreffen, werden entfernt. Dieser Vorgang kann nicht rückgängig gemacht werden.`,
+    );
     if (!ok) return;
 
     setRowActionLoadingId(documentId);
@@ -340,6 +351,72 @@ export default function DocumentsPage() {
       setReloadKey((k) => k + 1);
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'Fehler beim Löschen.');
+    } finally {
+      setRowActionLoadingId(null);
+    }
+  };
+
+  const handleRowArchive = async (documentId: string) => {
+    if (rowActionLoadingId) return;
+    if (bulkDeleting || bulkUpdating || bulkAiBusy || bulkArchiving) return;
+
+    const title = docs.find((d) => d.id === documentId)?.title ?? documentId;
+    const ok = window.confirm(
+      `Dokument ins Archiv legen?\n\n${title}\n\nEs erscheint nicht mehr in der normalen Liste. Gespeicherte KI-Anfragen mit Verweis auf dieses Dokument bleiben nutzbar.`,
+    );
+    if (!ok) return;
+
+    setRowActionLoadingId(documentId);
+    setBulkDeleteResult(null);
+    setBulkUpdateResult(null);
+    setBulkSummarizeResult(null);
+    setBulkSteeringResult(null);
+
+    try {
+      const res = await fetch(`/api/documents/${documentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Archivierung fehlgeschlagen.');
+
+      setSelectedIds([]);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Archivierung fehlgeschlagen.');
+    } finally {
+      setRowActionLoadingId(null);
+    }
+  };
+
+  const handleRowRestore = async (documentId: string) => {
+    if (rowActionLoadingId) return;
+    if (bulkDeleting || bulkUpdating || bulkAiBusy || bulkArchiving) return;
+
+    const title = docs.find((d) => d.id === documentId)?.title ?? documentId;
+    const ok = window.confirm(`Dokument aus dem Archiv wiederherstellen?\n\n${title}`);
+    if (!ok) return;
+
+    setRowActionLoadingId(documentId);
+    setBulkDeleteResult(null);
+    setBulkUpdateResult(null);
+    setBulkSummarizeResult(null);
+    setBulkSteeringResult(null);
+
+    try {
+      const res = await fetch(`/api/documents/${documentId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: false }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Wiederherstellen fehlgeschlagen.');
+
+      setSelectedIds([]);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : 'Wiederherstellen fehlgeschlagen.');
     } finally {
       setRowActionLoadingId(null);
     }
@@ -477,6 +554,116 @@ export default function DocumentsPage() {
       setBulkDeleteResult(e instanceof Error ? e.message : 'Bulk-Löschen fehlgeschlagen.');
     } finally {
       setBulkDeleting(false);
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    if (selectedIds.length === 0) return;
+    const ids = editableSelectedIds.length > 0 ? [...editableSelectedIds] : [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkUpdateResult(null);
+    const ok = window.confirm(
+      ids.length === 1
+        ? `Ausgewähltes Dokument ins Archiv legen?\n\n${docs.find((d) => d.id === ids[0])?.title ?? ids[0]}`
+        : `${ids.length} Dokumente ins Archiv legen?\n\nSie erscheinen nicht mehr in der normalen Liste; KI-Verweise bleiben gültig.`,
+    );
+    if (!ok) return;
+
+    setBulkArchiving(true);
+    setBulkDeleteResult(null);
+    try {
+      loadSeqRef.current += 1;
+      const results = await Promise.allSettled(
+        ids.map(async (id) => {
+          const res = await fetch(`/api/documents/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ archived: true }),
+          });
+          const data = (await res.json()) as { error?: string };
+          if (!res.ok) throw new Error(data.error ?? 'Archivierung fehlgeschlagen.');
+          return true;
+        }),
+      );
+
+      const okCount = results.filter((r) => r.status === 'fulfilled').length;
+      const failCount = results.length - okCount;
+      const skippedCount = selectedIds.length - ids.length;
+      const firstFailReason = results.find((r) => r.status === 'rejected');
+      const failText =
+        firstFailReason && firstFailReason.status === 'rejected'
+          ? firstFailReason.reason instanceof Error
+            ? firstFailReason.reason.message
+            : String(firstFailReason.reason)
+          : null;
+      setBulkDeleteResult(
+        failCount === 0
+          ? `${okCount}/${results.length} ins Archiv gelegt${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.`
+          : `${okCount}/${results.length} archiviert, ${failCount} fehlgeschlagen${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.${failText ? ` Grund: ${failText}` : ''}`,
+      );
+
+      setDocs((prev) => prev.filter((d) => !ids.includes(d.id)));
+      setSelectedIds([]);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setBulkDeleteResult(e instanceof Error ? e.message : 'Bulk-Archivierung fehlgeschlagen.');
+    } finally {
+      setBulkArchiving(false);
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    if (selectedIds.length === 0) return;
+    const ids = editableSelectedIds.length > 0 ? [...editableSelectedIds] : [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkUpdateResult(null);
+    const ok = window.confirm(
+      ids.length === 1
+        ? `Dokument aus dem Archiv wiederherstellen?\n\n${docs.find((d) => d.id === ids[0])?.title ?? ids[0]}`
+        : `${ids.length} Dokumente aus dem Archiv wiederherstellen?`,
+    );
+    if (!ok) return;
+
+    setBulkArchiving(true);
+    setBulkDeleteResult(null);
+    try {
+      loadSeqRef.current += 1;
+      const results = await Promise.allSettled(
+        ids.map(async (id) => {
+          const res = await fetch(`/api/documents/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ archived: false }),
+          });
+          const data = (await res.json()) as { error?: string };
+          if (!res.ok) throw new Error(data.error ?? 'Wiederherstellen fehlgeschlagen.');
+          return true;
+        }),
+      );
+
+      const okCount = results.filter((r) => r.status === 'fulfilled').length;
+      const failCount = results.length - okCount;
+      const skippedCount = selectedIds.length - ids.length;
+      const firstFailReason = results.find((r) => r.status === 'rejected');
+      const failText =
+        firstFailReason && firstFailReason.status === 'rejected'
+          ? firstFailReason.reason instanceof Error
+            ? firstFailReason.reason.message
+            : String(firstFailReason.reason)
+          : null;
+      setBulkDeleteResult(
+        failCount === 0
+          ? `${okCount}/${results.length} wiederhergestellt${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.`
+          : `${okCount}/${results.length} wiederhergestellt, ${failCount} fehlgeschlagen${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.${failText ? ` Grund: ${failText}` : ''}`,
+      );
+
+      setDocs((prev) => prev.filter((d) => !ids.includes(d.id)));
+      setSelectedIds([]);
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      setBulkDeleteResult(e instanceof Error ? e.message : 'Bulk-Wiederherstellen fehlgeschlagen.');
+    } finally {
+      setBulkArchiving(false);
     }
   };
 
@@ -742,18 +929,34 @@ export default function DocumentsPage() {
       <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
         <header className="flex flex-col gap-3 border-b border-zinc-200 pb-3 sm:flex-row sm:items-start sm:justify-between dark:border-zinc-800">
           <div>
-            <h1 className="text-xl font-semibold">Dokumente</h1>
+            <h1 className="text-xl font-semibold">{archiveView ? 'Archiv' : 'Dokumente'}</h1>
             <p className="text-xs text-zinc-600 dark:text-zinc-400">
-              Liste der in der Dokumentenbasis gespeicherten schulischen Dokumente.
+              {archiveView
+                ? 'Archivierte Dokumente — weiterhin unter „Aktuelle Anfragen“ verlinkbar; hier wiederherstellen oder endgültig löschen.'
+                : 'Liste der in der Dokumentenbasis gespeicherten schulischen Dokumente.'}
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-            <Link
-              href="/upload"
-              className="inline-flex h-8 items-center rounded-md bg-blue-600 px-3 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700"
+            <button
+              type="button"
+              onClick={() => {
+                const p = new URLSearchParams(searchParams.toString());
+                if (archiveView) p.delete('archive');
+                else p.set('archive', '1');
+                router.push(`/documents${p.toString() ? `?${p.toString()}` : ''}`);
+              }}
+              className="inline-flex h-8 items-center rounded-md border border-zinc-300 bg-white px-3 text-xs font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
             >
-              Dokumente hochladen
-            </Link>
+              {archiveView ? 'Zur aktiven Liste' : 'Archiv anzeigen'}
+            </button>
+            {!archiveView && (
+              <Link
+                href="/upload"
+                className="inline-flex h-8 items-center rounded-md bg-blue-600 px-3 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700"
+              >
+                Dokumente hochladen
+              </Link>
+            )}
             <Link
               href="/"
               className="text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
@@ -1127,23 +1330,64 @@ export default function DocumentsPage() {
 
             <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
               <span className="w-28 shrink-0 text-zinc-600 dark:text-zinc-300">Aktionen</span>
-              <button
-                type="button"
-                onClick={() => void handleBulkDelete()}
-                disabled={
-                  selectedIds.length === 0 ||
-                  bulkCapabilitiesLoading ||
-                  editableSelectedIds.length === 0 ||
-                  bulkDeleting ||
-                  bulkUpdating ||
-                  bulkAiBusy
-                }
-                className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
-              >
-                {bulkDeleting ? 'Lösche…' : 'Ausgewählte löschen'}
-              </button>
+              {!archiveView && (
+                <button
+                  type="button"
+                  onClick={() => void handleBulkArchive()}
+                  disabled={
+                    selectedIds.length === 0 ||
+                    bulkCapabilitiesLoading ||
+                    editableSelectedIds.length === 0 ||
+                    bulkDeleting ||
+                    bulkArchiving ||
+                    bulkUpdating ||
+                    bulkAiBusy
+                  }
+                  className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-zinc-50 dark:hover:bg-amber-950/40"
+                >
+                  {bulkArchiving ? '…' : 'Ausgewählte ins Archiv'}
+                </button>
+              )}
+              {archiveView && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void handleBulkRestore()}
+                    disabled={
+                      selectedIds.length === 0 ||
+                      bulkCapabilitiesLoading ||
+                      editableSelectedIds.length === 0 ||
+                      bulkDeleting ||
+                      bulkArchiving ||
+                      bulkUpdating ||
+                      bulkAiBusy
+                    }
+                    className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-emerald-100 disabled:opacity-60 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-zinc-50 dark:hover:bg-emerald-950/40"
+                  >
+                    {bulkArchiving ? '…' : 'Ausgewählte wiederherstellen'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleBulkDelete()}
+                    disabled={
+                      selectedIds.length === 0 ||
+                      bulkCapabilitiesLoading ||
+                      editableSelectedIds.length === 0 ||
+                      bulkDeleting ||
+                      bulkArchiving ||
+                      bulkUpdating ||
+                      bulkAiBusy
+                    }
+                    className="rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
+                  >
+                    {bulkDeleting ? 'Lösche…' : 'Endgültig löschen'}
+                  </button>
+                </>
+              )}
             </div>
 
+            {!archiveView && (
+            <>
             <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
               <span className="w-28 shrink-0 text-zinc-600 dark:text-zinc-300">Status</span>
               <button
@@ -1154,6 +1398,7 @@ export default function DocumentsPage() {
                   bulkCapabilitiesLoading ||
                   editableSelectedIds.length === 0 ||
                   bulkDeleting ||
+                  bulkArchiving ||
                   bulkUpdating ||
                   bulkAiBusy
                 }
@@ -1360,6 +1605,8 @@ export default function DocumentsPage() {
                 {bulkSteeringAnalyzing ? 'KI analysiert…' : 'Steuerungsanalysen erzeugen'}
               </button>
             </div>
+            </>
+            )}
           </section>
         )}
 
@@ -1586,14 +1833,55 @@ export default function DocumentsPage() {
                         >
                           {doc.title}
                         </Link>
-                        <button
-                          type="button"
-                          onClick={() => void handleRowDelete(doc.id)}
-                          disabled={rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy}
-                          className="inline-flex items-center justify-center rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
-                        >
-                          Löschen
-                        </button>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {archiveView ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => void handleRowRestore(doc.id)}
+                                disabled={
+                                  rowActionLoadingId === doc.id ||
+                                  bulkDeleting ||
+                                  bulkArchiving ||
+                                  bulkUpdating ||
+                                  bulkAiBusy
+                                }
+                                className="inline-flex items-center justify-center rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-60 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200 dark:hover:bg-emerald-950/40"
+                              >
+                                Wiederherstellen
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleRowDelete(doc.id)}
+                                disabled={
+                                  rowActionLoadingId === doc.id ||
+                                  bulkDeleting ||
+                                  bulkArchiving ||
+                                  bulkUpdating ||
+                                  bulkAiBusy
+                                }
+                                className="inline-flex items-center justify-center rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
+                              >
+                                Löschen
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => void handleRowArchive(doc.id)}
+                              disabled={
+                                rowActionLoadingId === doc.id ||
+                                bulkDeleting ||
+                                bulkArchiving ||
+                                bulkUpdating ||
+                                bulkAiBusy
+                              }
+                              className="inline-flex items-center justify-center rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950/40"
+                            >
+                              Archiv
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="px-3 py-2">{docTypeLabel(doc.document_type_code)}</td>
@@ -1604,7 +1892,8 @@ export default function DocumentsPage() {
                         >
                           {statusLabelDe(doc.status)}
                         </span>
-                        {getNextWorkflowTransition(doc.status) && (
+                        {!archiveView &&
+                          getNextWorkflowTransition(doc.status) && (
                           <button
                             type="button"
                             onClick={() =>
@@ -1613,6 +1902,7 @@ export default function DocumentsPage() {
                             disabled={
                               rowActionLoadingId === doc.id ||
                               bulkDeleting ||
+                              bulkArchiving ||
                               bulkUpdating ||
                               bulkAiBusy
                             }
@@ -1752,14 +2042,55 @@ export default function DocumentsPage() {
                       </Link>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void handleRowDelete(doc.id)}
-                    disabled={rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy}
-                    className="inline-flex items-center justify-center rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
-                  >
-                    Löschen
-                  </button>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    {archiveView ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void handleRowRestore(doc.id)}
+                          disabled={
+                            rowActionLoadingId === doc.id ||
+                            bulkDeleting ||
+                            bulkArchiving ||
+                            bulkUpdating ||
+                            bulkAiBusy
+                          }
+                          className="inline-flex items-center justify-center rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-60 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200 dark:hover:bg-emerald-950/40"
+                        >
+                          Wiederherstellen
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleRowDelete(doc.id)}
+                          disabled={
+                            rowActionLoadingId === doc.id ||
+                            bulkDeleting ||
+                            bulkArchiving ||
+                            bulkUpdating ||
+                            bulkAiBusy
+                          }
+                          className="inline-flex items-center justify-center rounded border border-red-300 bg-red-50 px-2 py-1 text-[11px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
+                        >
+                          Löschen
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void handleRowArchive(doc.id)}
+                        disabled={
+                          rowActionLoadingId === doc.id ||
+                          bulkDeleting ||
+                          bulkArchiving ||
+                          bulkUpdating ||
+                          bulkAiBusy
+                        }
+                        className="inline-flex items-center justify-center rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950/40"
+                      >
+                        Archiv
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
@@ -1773,14 +2104,19 @@ export default function DocumentsPage() {
                   >
                     {statusLabelDe(doc.status)}
                   </span>
-                  {getNextWorkflowTransition(doc.status) && (
+                  {!archiveView &&
+                    getNextWorkflowTransition(doc.status) && (
                     <button
                       type="button"
                       onClick={() =>
                         void handleRowWorkflowStep(doc.id, getNextWorkflowTransition(doc.status)!.next)
                       }
                       disabled={
-                        rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy
+                        rowActionLoadingId === doc.id ||
+                        bulkDeleting ||
+                        bulkArchiving ||
+                        bulkUpdating ||
+                        bulkAiBusy
                       }
                       className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
                     >
@@ -1927,14 +2263,19 @@ export default function DocumentsPage() {
                     </div>
 
                     <div className="flex shrink-0 items-center gap-1">
-                      {getNextWorkflowTransition(doc.status) && (
+                      {!archiveView &&
+                        getNextWorkflowTransition(doc.status) && (
                         <button
                           type="button"
                           onClick={() =>
                             void handleRowWorkflowStep(doc.id, getNextWorkflowTransition(doc.status)!.next)
                           }
                           disabled={
-                            rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy
+                            rowActionLoadingId === doc.id ||
+                            bulkDeleting ||
+                            bulkArchiving ||
+                            bulkUpdating ||
+                            bulkAiBusy
                           }
                           className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950"
                         >
@@ -1980,14 +2321,53 @@ export default function DocumentsPage() {
                           </svg>
                         )}
                       </Link>
-                      <button
-                        type="button"
-                        onClick={() => void handleRowDelete(doc.id)}
-                        disabled={rowActionLoadingId === doc.id || bulkDeleting || bulkUpdating || bulkAiBusy}
-                        className="inline-flex items-center justify-center rounded border border-red-300 bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
-                      >
-                        Löschen
-                      </button>
+                      {archiveView ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void handleRowRestore(doc.id)}
+                            disabled={
+                              rowActionLoadingId === doc.id ||
+                              bulkDeleting ||
+                              bulkArchiving ||
+                              bulkUpdating ||
+                              bulkAiBusy
+                            }
+                            className="inline-flex items-center justify-center rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-60 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200 dark:hover:bg-emerald-950/40"
+                          >
+                            Wiederherst.
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleRowDelete(doc.id)}
+                            disabled={
+                              rowActionLoadingId === doc.id ||
+                              bulkDeleting ||
+                              bulkArchiving ||
+                              bulkUpdating ||
+                              bulkAiBusy
+                            }
+                            className="inline-flex items-center justify-center rounded border border-red-300 bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
+                          >
+                            Löschen
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void handleRowArchive(doc.id)}
+                          disabled={
+                            rowActionLoadingId === doc.id ||
+                            bulkDeleting ||
+                            bulkArchiving ||
+                            bulkUpdating ||
+                            bulkAiBusy
+                          }
+                          className="inline-flex items-center justify-center rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950/40"
+                        >
+                          Archiv
+                        </button>
+                      )}
                     </div>
                   </div>
                 </li>

@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient
 import { isAdmin } from '../../../../lib/adminAuth';
 import { getDocumentText } from '../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../lib/indexing';
-import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
 
 type Payload = {
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     const body = (await req.json().catch(() => ({}))) as Payload;
     const limit = Math.max(1, Math.min(50, Number(body.limit) || 10));

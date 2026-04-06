@@ -1,0 +1,91 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
+import { supabaseServer } from '../../../../lib/supabaseServer';
+import { apiError } from '../../../../lib/apiError';
+import { ACTIVE_SCHOOL_COOKIE, normalizeAuthEmail } from '../../../../lib/schoolSession';
+
+export async function POST(req: NextRequest) {
+  try {
+    const client = await createServerSupabaseClient();
+    const {
+      data: { user },
+    } = (await client?.auth.getUser()) ?? { data: { user: null } };
+    if (!user?.email) {
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
+    }
+
+    const body = (await req.json().catch(() => ({}))) as { schoolNumber?: string };
+    const schoolNumber = String(body.schoolNumber ?? '').trim();
+    if (!/^\d{6}$/.test(schoolNumber)) {
+      return apiError(400, 'VALIDATION_ERROR', 'Schulnummer muss 6-stellig sein.');
+    }
+
+    const supabase = supabaseServer();
+    if (!supabase) {
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
+    }
+
+    const { data: row } = await supabase
+      .from('app_users')
+      .select('id')
+      .eq('email', normalizeAuthEmail(user.email))
+      .eq('school_number', schoolNumber)
+      .maybeSingle();
+
+    if (!row) {
+      return apiError(403, 'FORBIDDEN', 'Kein Benutzerkonto für diese Schulnummer.');
+    }
+
+    const prevMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const { error: updErr } = await supabase.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        ...prevMeta,
+        school_number: schoolNumber,
+      },
+    });
+    if (updErr) {
+      return apiError(500, 'INTERNAL_ERROR', updErr.message);
+    }
+
+    const res = NextResponse.json({ ok: true });
+    res.cookies.set(ACTIVE_SCHOOL_COOKIE, schoolNumber, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 400,
+    });
+    return res;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
+    return apiError(500, 'INTERNAL_ERROR', msg);
+  }
+}
+
+export async function DELETE() {
+  try {
+    const client = await createServerSupabaseClient();
+    const {
+      data: { user },
+    } = (await client?.auth.getUser()) ?? { data: { user: null } };
+    if (!user?.email) {
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
+    }
+
+    const supabase = supabaseServer();
+    if (supabase) {
+      const prevMeta = { ...((user.user_metadata ?? {}) as Record<string, unknown>) };
+      delete prevMeta.school_number;
+      await supabase.auth.admin.updateUserById(user.id, {
+        user_metadata: prevMeta,
+      });
+    }
+
+    const res = NextResponse.json({ ok: true });
+    res.cookies.set(ACTIVE_SCHOOL_COOKIE, '', { maxAge: 0, path: '/' });
+    return res;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
+    return apiError(500, 'INTERNAL_ERROR', msg);
+  }
+}

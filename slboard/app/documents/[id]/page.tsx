@@ -18,6 +18,7 @@ type DocumentDetail = {
   title: string;
   document_type_code: string;
   created_at: string;
+  archived_at?: string | null;
   status: string;
   protection_class_id: number;
   reach_scope: 'intern' | 'extern';
@@ -112,6 +113,7 @@ export default function DocumentDetailPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [archiveLoading, setArchiveLoading] = useState(false);
   const [workflowLoading, setWorkflowLoading] = useState(false);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
   const [allVersions, setAllVersions] = useState<Array<{ id: string; version_number: string; created_at: string; comment: string | null; mime_type: string | null; is_current: boolean }>>([]);
@@ -164,13 +166,19 @@ export default function DocumentDetailPage() {
       const { data, error } = await supabase
         .from('documents')
         .select(
-          'id, title, document_type_code, created_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, legal_reference, summary, summary_updated_at, review_date, current_version_id, steering_analysis, steering_analysis_updated_at',
+          'id, title, document_type_code, created_at, archived_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, legal_reference, summary, summary_updated_at, review_date, current_version_id, steering_analysis, steering_analysis_updated_at',
         )
         .eq('id', params.id)
         .single();
 
       if (error) {
-        setError(error.message);
+        const code = (error as { code?: string }).code;
+        const msg = error.message ?? '';
+        if (code === 'PGRST116' || msg.includes('single JSON object')) {
+          setError('Dieses Dokument ist nicht mehr verfügbar (gelöscht oder nicht gefunden).');
+        } else {
+          setError(msg);
+        }
         setDoc(null);
       } else {
         const typed = data as DocumentDetail & { current_version_id?: string | null };
@@ -276,7 +284,7 @@ export default function DocumentDetailPage() {
   }, [previewUrl, version?.mime_type]);
 
   const handleWorkflowStep = async (newStatus: string) => {
-    if (!params?.id) return;
+    if (!params?.id || doc?.archived_at) return;
     setWorkflowError(null);
     setWorkflowLoading(true);
     try {
@@ -383,6 +391,84 @@ export default function DocumentDetailPage() {
   };
 
   const handleDeleteClick = () => setShowDeleteConfirm(true);
+
+  const handleArchiveToVault = async () => {
+    if (!params?.id || !doc) return;
+    const ok = window.confirm(
+      `Dokument „${doc.title}“ ins Archiv legen?\n\nEs erscheint nicht mehr in der normalen Liste; gespeicherte KI-Anfragen mit Verweis darauf bleiben nutzbar.`,
+    );
+    if (!ok) return;
+    setArchiveLoading(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/documents/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: true }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        document?: { archived_at?: string | null };
+      };
+      if (!res.ok) throw new Error(data.error ?? 'Archivierung fehlgeschlagen.');
+      if (data.document && 'archived_at' in data.document) {
+        setDoc((prev) =>
+          prev ? { ...prev, archived_at: data.document!.archived_at ?? null } : null,
+        );
+      } else {
+        setReloadKey((k) => k + 1);
+      }
+      try {
+        const auditRes = await fetch(`/api/documents/${params.id}/audit`);
+        const auditJson = (await auditRes.json()) as { data?: typeof auditLog };
+        if (auditRes.ok && auditJson.data) setAuditLog(auditJson.data);
+      } catch {
+        // ignore
+      }
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Archivierung fehlgeschlagen.');
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const handleRestoreFromVault = async () => {
+    if (!params?.id || !doc) return;
+    const ok = window.confirm(`Dokument „${doc.title}“ aus dem Archiv wiederherstellen?`);
+    if (!ok) return;
+    setArchiveLoading(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/documents/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived: false }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        document?: { archived_at?: string | null };
+      };
+      if (!res.ok) throw new Error(data.error ?? 'Wiederherstellen fehlgeschlagen.');
+      if (data.document && 'archived_at' in data.document) {
+        setDoc((prev) =>
+          prev ? { ...prev, archived_at: data.document!.archived_at ?? null } : null,
+        );
+      } else {
+        setReloadKey((k) => k + 1);
+      }
+      try {
+        const auditRes = await fetch(`/api/documents/${params.id}/audit`);
+        const auditJson = (await auditRes.json()) as { data?: typeof auditLog };
+        if (auditRes.ok && auditJson.data) setAuditLog(auditJson.data);
+      } catch {
+        // ignore
+      }
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Wiederherstellen fehlgeschlagen.');
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
 
   const handleDeleteConfirm = async () => {
     if (!params?.id) return;
@@ -617,8 +703,11 @@ export default function DocumentDetailPage() {
   const isImportantAuditEntry = (entry: (typeof auditLog)[number]) => {
     if (entry.action === 'version.upload') return false;
     const newVals = entry.new_values ?? {};
-    // Wichtig: Status/Veröffentlichung
-    return Object.prototype.hasOwnProperty.call(newVals, 'status');
+    // Wichtig: Status/Veröffentlichung, Archiv
+    return (
+      Object.prototype.hasOwnProperty.call(newVals, 'status') ||
+      Object.prototype.hasOwnProperty.call(newVals, 'archived_at')
+    );
   };
 
   const formatAuditSummary = (entry: (typeof auditLog)[number]) => {
@@ -646,7 +735,21 @@ export default function DocumentDetailPage() {
         changes.push(`Titel geändert von „${from}“ zu „${to}“`);
       }
 
-      const otherKeys = Object.keys(newVals).filter((k) => k !== 'status' && k !== 'title');
+      if (Object.prototype.hasOwnProperty.call(newVals, 'archived_at')) {
+        const hadArchive = oldVals.archived_at != null && String(oldVals.archived_at).length > 0;
+        const hasArchive = newVals.archived_at != null && String(newVals.archived_at).length > 0;
+        if (hasArchive && !hadArchive) {
+          changes.push('dieses Dokument ins Archiv gelegt');
+        } else if (!hasArchive && hadArchive) {
+          changes.push('dieses Dokument aus dem Archiv wiederhergestellt');
+        } else {
+          changes.push('den Archiv-Status angepasst');
+        }
+      }
+
+      const otherKeys = Object.keys(newVals).filter(
+        (k) => k !== 'status' && k !== 'title' && k !== 'archived_at',
+      );
       if (otherKeys.length > 0) {
         changes.push(`Metadaten angepasst (${otherKeys.join(', ')})`);
       }
@@ -683,20 +786,54 @@ export default function DocumentDetailPage() {
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <a
-                href="#version-upload"
-                className="rounded border border-zinc-300 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              >
-                Neue Version
-              </a>
+              {doc && (
+                <>
+                  <a
+                    href="#version-upload"
+                    className={`rounded border px-3 py-2 text-xs font-medium shadow-sm transition dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 ${
+                      doc.archived_at
+                        ? 'pointer-events-none border-zinc-200 bg-zinc-100 text-zinc-400 opacity-60 dark:bg-zinc-800 dark:text-zinc-500'
+                        : 'border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800'
+                    }`}
+                    aria-disabled={!!doc.archived_at}
+                    onClick={(e) => {
+                      if (doc.archived_at) e.preventDefault();
+                    }}
+                  >
+                    Neue Version
+                  </a>
 
-              <button
-                type="button"
-                onClick={handleDeleteClick}
-                className="rounded border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 shadow-sm transition hover:bg-red-100 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
-              >
-                Löschen
-              </button>
+                  {doc.archived_at ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void handleRestoreFromVault()}
+                        disabled={archiveLoading || deleteLoading}
+                        className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 shadow-sm transition hover:bg-emerald-100 disabled:opacity-60 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200 dark:hover:bg-emerald-950/40"
+                      >
+                        {archiveLoading ? '…' : 'Wiederherstellen'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeleteClick}
+                        disabled={archiveLoading || deleteLoading}
+                        className="rounded border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 shadow-sm transition hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
+                      >
+                        Endgültig löschen
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void handleArchiveToVault()}
+                      disabled={archiveLoading || deleteLoading}
+                      className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 shadow-sm transition hover:bg-amber-100 disabled:opacity-60 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950/40"
+                    >
+                      {archiveLoading ? '…' : 'Ins Archiv legen'}
+                    </button>
+                  )}
+                </>
+              )}
 
               <span className="mx-1 h-6 border-l border-zinc-200 dark:border-zinc-800" />
 
@@ -728,6 +865,13 @@ export default function DocumentDetailPage() {
 
         {doc && (
           <section className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+            {doc.archived_at && (
+              <div className="md:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+                <strong className="font-medium">Archiv:</strong> Dieses Dokument erscheint nicht in der
+                normalen Liste. Verweise aus gespeicherten KI-Anfragen funktionieren weiter. Zum Bearbeiten
+                oder endgültigen Löschen nutzen Sie die Aktionen oben.
+              </div>
+            )}
             {/* Linke Spalte: Inhalt / Vorschau */}
             <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
               <h2 className="mb-2 text-sm font-semibold text-zinc-800 dark:text-zinc-100">
@@ -1153,7 +1297,11 @@ export default function DocumentDetailPage() {
                     </div>
                   </div>
 
-                  {workflowPrimaryButtonLabel(doc.status) && getNextWorkflowTransition(doc.status) ? (
+                  {doc.archived_at ? (
+                    <p className="text-[11px] text-amber-800 dark:text-amber-200">
+                      Archiviert – zum Fortschreiben des Workflows bitte zuerst wiederherstellen.
+                    </p>
+                  ) : workflowPrimaryButtonLabel(doc.status) && getNextWorkflowTransition(doc.status) ? (
                     <>
                       <button
                         type="button"
@@ -1597,15 +1745,37 @@ export default function DocumentDetailPage() {
 
               <div className="mt-4 border-t border-zinc-200 pt-3 text-xs dark:border-zinc-800">
                 <h3 className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
-                  Dokument löschen
+                  Archiv & Löschen
                 </h3>
-                <button
-                  type="button"
-                  onClick={handleDeleteClick}
-                  className="mb-2 w-full rounded border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
-                >
-                  Löschen
-                </button>
+                {doc.archived_at ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => void handleRestoreFromVault()}
+                      disabled={archiveLoading || deleteLoading}
+                      className="mb-2 w-full rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-60 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200 dark:hover:bg-emerald-950/40"
+                    >
+                      {archiveLoading ? '…' : 'Aus Archiv wiederherstellen'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteClick}
+                      disabled={archiveLoading || deleteLoading}
+                      className="mb-2 w-full rounded border border-red-300 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-60 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950"
+                    >
+                      Endgültig löschen
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleArchiveToVault()}
+                    disabled={archiveLoading || deleteLoading}
+                    className="mb-2 w-full rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 hover:bg-amber-100 disabled:opacity-60 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200 dark:hover:bg-amber-950/40"
+                  >
+                    {archiveLoading ? '…' : 'Ins Archiv legen'}
+                  </button>
+                )}
                 {deleteError && <p className="text-[11px] text-red-500">{deleteError}</p>}
               </div>
             </aside>
@@ -1624,7 +1794,8 @@ export default function DocumentDetailPage() {
                 Dokument wirklich löschen?
               </h2>
               <p className="mb-4 text-xs text-zinc-600 dark:text-zinc-400">
-                Diese Aktion kann nicht rückgängig gemacht werden. Das Dokument und alle Versionen werden dauerhaft gelöscht.
+                Das Dokument und alle Versionen werden entfernt. Gespeicherte KI-Anfragen, die darauf
+                verweisen, werden ebenfalls gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.
               </p>
               <div className="flex justify-end gap-2">
                 <button

@@ -3,7 +3,7 @@ import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { getDocumentText } from '../../../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../../../lib/llmClient';
-import { getUserAccessContext } from '../../../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../../../lib/documentAccess';
 import { extractKeywords } from '../../../../../lib/aiSearch';
 import {
   buildPromptSnippetFromChunks,
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
     const schoolProfile = await getSchoolProfileText(access.schoolNumber);
     const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
       let selectedDocsQuery = supabase
         .from('documents')
         .select('id, title, summary')
+        .is('archived_at', null)
         .in('id', sourceIds);
       if (access.schoolNumber) selectedDocsQuery = selectedDocsQuery.eq('school_number', access.schoolNumber);
       const { data } = await selectedDocsQuery;
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest) {
       let fallbackDocsQuery = supabase
         .from('documents')
         .select('id, title, summary')
+        .is('archived_at', null)
         .eq('document_type_code', 'ELTERNBRIEF')
         .in('status', ['FREIGEGEBEN', 'BESCHLUSS', 'VEROEFFENTLICHT'])
         .order('created_at', { ascending: false })

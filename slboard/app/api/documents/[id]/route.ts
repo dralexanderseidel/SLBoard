@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
-import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
 import { getDocumentText } from '../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../lib/indexing';
@@ -27,11 +27,11 @@ export async function PATCH(
     }
 
     const { id: documentId } = await params;
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, responsible_unit, status, protection_class_id, school_number')
+      .select('id, responsible_unit, status, protection_class_id, school_number, archived_at')
       .eq('id', documentId)
       .single();
 
@@ -121,6 +121,9 @@ export async function PATCH(
       const pc = parseInt(body.protection_class_id, 10);
       if ([1, 2, 3].includes(pc)) updates.protection_class_id = pc;
     }
+    if (typeof body.archived === 'boolean') {
+      updates.archived_at = body.archived ? new Date().toISOString() : null;
+    }
 
     if (Object.keys(updates).length === 0) {
       return apiError(400, 'VALIDATION_ERROR', 'Keine gültigen Felder zum Aktualisieren.');
@@ -132,7 +135,9 @@ export async function PATCH(
 
     let updateQuery = supabase.from('documents').update(updates).eq('id', documentId);
     if (docSchool) updateQuery = updateQuery.eq('school_number', docSchool);
-    const { error: updateError } = await updateQuery;
+    const { data: updatedRow, error: updateError } = await updateQuery
+      .select('archived_at')
+      .single();
 
     if (updateError) {
       return apiError(500, 'INTERNAL_ERROR', updateError.message);
@@ -205,7 +210,15 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json({ success: true });
+    const archivedAt =
+      updatedRow && typeof updatedRow === 'object' && 'archived_at' in updatedRow
+        ? (updatedRow as { archived_at: string | null }).archived_at
+        : null;
+
+    return NextResponse.json({
+      success: true,
+      document: { archived_at: archivedAt },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return apiError(500, 'INTERNAL_ERROR', message);
@@ -232,16 +245,25 @@ export async function DELETE(
     }
 
     const { id: documentId } = await params;
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, responsible_unit, protection_class_id, school_number')
+      .select('id, responsible_unit, protection_class_id, school_number, archived_at')
       .eq('id', documentId)
       .single();
 
     if (docError || !doc) {
       return apiError(404, 'NOT_FOUND', 'Dokument nicht gefunden.');
+    }
+
+    const archivedAt = (doc as { archived_at?: string | null }).archived_at ?? null;
+    if (!archivedAt) {
+      return apiError(
+        400,
+        'VALIDATION_ERROR',
+        'Nur archivierte Dokumente können endgültig gelöscht werden. Legen Sie das Dokument zuerst ins Archiv.',
+      );
     }
 
     const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
@@ -306,6 +328,19 @@ export async function DELETE(
 
     if (deleteDocError) {
       return apiError(500, 'INTERNAL_ERROR', deleteDocError.message ?? 'Dokument konnte nicht gelöscht werden.');
+    }
+
+    const { error: rpcError } = await supabase.rpc('delete_ai_queries_referencing_document', {
+      p_document_id: documentId,
+      p_school_number: docSchool,
+    });
+    if (rpcError) {
+      return apiError(
+        500,
+        'INTERNAL_ERROR',
+        rpcError.message ??
+          'Dokument wurde entfernt; KI-Anfragen konnten nicht bereinigt werden. Bitte Migration prüfen (delete_ai_queries_referencing_document).',
+      );
     }
 
     return NextResponse.json({ success: true });

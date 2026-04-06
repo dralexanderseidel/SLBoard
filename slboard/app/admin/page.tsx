@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { MIN_APP_PASSWORD_LENGTH } from '../../lib/authPasswordConstants';
 
 type AppUser = {
   id: string;
@@ -50,6 +51,30 @@ type PromptTemplateConfig = {
   updated_at: string | null;
 };
 
+type AdminStats = {
+  scope: 'school';
+  schoolNumber: string;
+  userCount: number;
+  documentTotal: number;
+  documentActive: number;
+  documentArchived: number;
+  documentPublished: number;
+  aiQueriesTotal: number;
+  aiQueriesLast7Days: number;
+  aiQueriesByDay: { date: string; count: number }[];
+};
+
+function formatStatsDayUtc(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map((x) => Number(x));
+  if (!y || !m || !d) return ymd;
+  return new Intl.DateTimeFormat('de-DE', {
+    weekday: 'short',
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'UTC',
+  }).format(new Date(Date.UTC(y, m - 1, d)));
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -58,6 +83,7 @@ export default function AdminPage() {
   const [aiPanelOpen, setAiPanelOpen] = useState(true);
   const [promptPanelOpen, setPromptPanelOpen] = useState(true);
   const [metadataPanelOpen, setMetadataPanelOpen] = useState(true);
+  const [statsPanelOpen, setStatsPanelOpen] = useState(true);
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +111,9 @@ export default function AdminPage() {
     email: '',
     org_unit: 'Schulleitung',
     school_number: '',
+    temporary_password: '',
   });
+  const [editTempPassword, setEditTempPassword] = useState('');
   const [saving, setSaving] = useState(false);
   const [metaLoading, setMetaLoading] = useState(false);
   const [metaError, setMetaError] = useState<string | null>(null);
@@ -102,6 +130,11 @@ export default function AdminPage() {
   const [activePromptUseCase, setActivePromptUseCase] = useState<PromptUseCase>('steering');
   const [promptPreviewLoading, setPromptPreviewLoading] = useState(false);
   const [promptPreviewResult, setPromptPreviewResult] = useState<string | null>(null);
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+  /** null = Prüfung läuft; false = kein Zugriff (z. B. 403); true = Admin-Daten laden */
+  const [adminAllowed, setAdminAllowed] = useState<boolean | null>(null);
 
   const activeOrgUnitOptions = (responsibleUnitOptions.length > 0
     ? responsibleUnitOptions.filter((u) => u.active).map((u) => u.name).filter(Boolean)
@@ -119,18 +152,21 @@ export default function AdminPage() {
     const aiParam = p.get('aiPanel');
     const promptParam = p.get('promptPanel');
     const metaParam = p.get('metaPanel');
+    const statsParam = p.get('statsPanel');
     if (usersParam === '0' || usersParam === '1') setUsersPanelOpen(usersParam === '1');
     if (aiParam === '0' || aiParam === '1') setAiPanelOpen(aiParam === '1');
     if (promptParam === '0' || promptParam === '1') setPromptPanelOpen(promptParam === '1');
     if (metaParam === '0' || metaParam === '1') setMetadataPanelOpen(metaParam === '1');
+    if (statsParam === '0' || statsParam === '1') setStatsPanelOpen(statsParam === '1');
   }, [searchParams]);
 
-  const setPanelQuery = (next: { users?: boolean; ai?: boolean; prompt?: boolean; meta?: boolean }) => {
+  const setPanelQuery = (next: { users?: boolean; ai?: boolean; prompt?: boolean; meta?: boolean; stats?: boolean }) => {
     const p = new URLSearchParams(searchParams.toString());
     if (typeof next.users === 'boolean') p.set('usersPanel', next.users ? '1' : '0');
     if (typeof next.ai === 'boolean') p.set('aiPanel', next.ai ? '1' : '0');
     if (typeof next.prompt === 'boolean') p.set('promptPanel', next.prompt ? '1' : '0');
     if (typeof next.meta === 'boolean') p.set('metaPanel', next.meta ? '1' : '0');
+    if (typeof next.stats === 'boolean') p.set('statsPanel', next.stats ? '1' : '0');
     const q = p.toString();
     router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
   };
@@ -142,17 +178,30 @@ export default function AdminPage() {
       const res = await fetch('/api/admin/users', { credentials: 'include' });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 403) {
+          setError(data.error ?? 'Keine Admin-Berechtigung.');
+          setAdminAllowed(false);
+          setUsers([]);
+          return;
+        }
         const msg = data.error ?? 'Fehler beim Laden.';
         if (res.status === 401 && msg.includes('Anmeldung')) {
-          throw new Error(
+          setError(
             `${msg} Falls Sie bereits angemeldet sind: Bitte melden Sie sich ab und erneut an, damit die Sitzung funktioniert.`
           );
+        } else {
+          setError(msg);
         }
-        throw new Error(msg);
+        setAdminAllowed(false);
+        setUsers([]);
+        return;
       }
+      setAdminAllowed(true);
       setUsers(data.users ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden der Nutzer.');
+      setAdminAllowed(false);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -162,7 +211,29 @@ export default function AdminPage() {
     void loadUsers();
   }, []);
 
+  const loadStats = async () => {
+    setStatsLoading(true);
+    setStatsError(null);
+    try {
+      const res = await fetch('/api/admin/stats', { credentials: 'include' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Statistik konnte nicht geladen werden.');
+      setStats(data as AdminStats);
+    } catch (e) {
+      setStatsError(e instanceof Error ? e.message : 'Statistik konnte nicht geladen werden.');
+      setStats(null);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
   useEffect(() => {
+    if (adminAllowed !== true) return;
+    void loadStats();
+  }, [adminAllowed]);
+
+  useEffect(() => {
+    if (adminAllowed !== true) return;
     const load = async () => {
       setPromptLoading(true);
       setPromptError(null);
@@ -179,9 +250,10 @@ export default function AdminPage() {
       }
     };
     void load();
-  }, []);
+  }, [adminAllowed]);
 
   useEffect(() => {
+    if (adminAllowed !== true) return;
     const load = async () => {
       setMetaLoading(true);
       setMetaError(null);
@@ -199,7 +271,7 @@ export default function AdminPage() {
       }
     };
     void load();
-  }, []);
+  }, [adminAllowed]);
 
   const handleSaveMetadata = async () => {
     setMetaLoading(true);
@@ -225,6 +297,7 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
+    if (adminAllowed !== true) return;
     const load = async () => {
       setAiLoading(true);
       setAiError(null);
@@ -249,7 +322,7 @@ export default function AdminPage() {
       }
     };
     void load();
-  }, []);
+  }, [adminAllowed]);
 
   const handleSaveAiSettings = async () => {
     setAiLoading(true);
@@ -395,6 +468,7 @@ export default function AdminPage() {
 
   const handleEdit = (u: AppUser) => {
     setEditingId(u.id);
+    setEditTempPassword('');
     setEditForm({
       username: u.username,
       full_name: u.full_name,
@@ -405,24 +479,35 @@ export default function AdminPage() {
 
   const handleSaveEdit = async () => {
     if (!editingId) return;
+    const tp = editTempPassword.trim();
+    if (tp && tp.length < MIN_APP_PASSWORD_LENGTH) {
+      setError(`Temporäres Passwort: mindestens ${MIN_APP_PASSWORD_LENGTH} Zeichen oder leer lassen.`);
+      return;
+    }
     setSaving(true);
     setError(null);
     setMessage(null);
     try {
+      const payload: Record<string, unknown> = { ...editForm };
+      if (tp) payload.temporary_password = tp;
       const res = await fetch(`/api/admin/users/${editingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Fehler beim Speichern.');
+      const updated = data.user as AppUser | undefined;
       setUsers((prev) =>
-        prev.map((u) =>
-          u.id === editingId ? { ...u, ...editForm } : u
-        )
+        prev.map((u) => {
+          if (u.id !== editingId) return u;
+          if (updated) return { ...u, ...updated, roles: u.roles };
+          return { ...u, ...editForm } as AppUser;
+        })
       );
       setEditingId(null);
-      setMessage('Nutzer aktualisiert.');
+      setEditTempPassword('');
+      setMessage(tp ? 'Nutzer aktualisiert und Passwort gesetzt.' : 'Nutzer aktualisiert.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Speichern.');
     } finally {
@@ -483,6 +568,11 @@ export default function AdminPage() {
       setError('Bitte alle Pflichtfelder ausfüllen.');
       return;
     }
+    const tp = createForm.temporary_password.trim();
+    if (tp && tp.length < MIN_APP_PASSWORD_LENGTH) {
+      setError(`Temporäres Passwort: mindestens ${MIN_APP_PASSWORD_LENGTH} Zeichen oder leer lassen.`);
+      return;
+    }
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -491,15 +581,25 @@ export default function AdminPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...createForm,
+          username: createForm.username,
+          full_name: createForm.full_name,
+          email: createForm.email,
           org_unit: createForm.org_unit,
           school_number: createForm.school_number,
+          ...(tp ? { temporary_password: tp } : {}),
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Fehler beim Anlegen.');
       setUsers((prev) => [...prev, data.user]);
-      setCreateForm({ username: '', full_name: '', email: '', org_unit: 'Schulleitung', school_number: '' });
+      setCreateForm({
+        username: '',
+        full_name: '',
+        email: '',
+        org_unit: 'Schulleitung',
+        school_number: '',
+        temporary_password: '',
+      });
       setShowCreate(false);
       setMessage('Nutzer angelegt.');
     } catch (e) {
@@ -508,6 +608,37 @@ export default function AdminPage() {
       setSaving(false);
     }
   };
+
+  if (adminAllowed === false) {
+    return (
+      <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
+        <div className="mx-auto max-w-5xl px-6 py-8">
+          <h1 className="text-xl font-semibold">Admin</h1>
+          {error && (
+            <p className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+              {error}
+            </p>
+          )}
+          <Link
+            href="/"
+            className="mt-4 inline-block text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+          >
+            ← Zurück
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (adminAllowed !== true) {
+    return (
+      <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
+        <div className="mx-auto max-w-5xl px-6 py-8">
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">Lädt…</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -670,6 +801,25 @@ export default function AdminPage() {
                         ))}
                       </select>
                     </div>
+                    <div className="sm:col-span-2">
+                      <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+                        Temporäres Passwort (Login)
+                      </label>
+                      <input
+                        type="password"
+                        autoComplete="new-password"
+                        value={createForm.temporary_password}
+                        onChange={(e) =>
+                          setCreateForm((f) => ({ ...f, temporary_password: e.target.value }))
+                        }
+                        className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                        placeholder={`min. ${MIN_APP_PASSWORD_LENGTH} Zeichen; optional`}
+                      />
+                      <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                        Wenn gesetzt, kann sich der Nutzer damit anmelden und das Passwort später unter dem
+                        Profilbild ändern.
+                      </p>
+                    </div>
                   </div>
                   <button
                     type="submit"
@@ -737,6 +887,19 @@ export default function AdminPage() {
                                   className="w-full rounded border px-2 py-1 text-xs"
                                   placeholder="Vollständiger Name"
                                 />
+                                <div>
+                                  <label className="mb-0.5 block text-[10px] text-zinc-500 dark:text-zinc-400">
+                                    Neues temporäres Passwort (optional)
+                                  </label>
+                                  <input
+                                    type="password"
+                                    autoComplete="new-password"
+                                    value={editTempPassword}
+                                    onChange={(e) => setEditTempPassword(e.target.value)}
+                                    className="w-full rounded border px-2 py-1 text-xs"
+                                    placeholder={`min. ${MIN_APP_PASSWORD_LENGTH} Zeichen`}
+                                  />
+                                </div>
                               </div>
                             ) : (
                               <div>
@@ -821,7 +984,10 @@ export default function AdminPage() {
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => setEditingId(null)}
+                                  onClick={() => {
+                                    setEditingId(null);
+                                    setEditTempPassword('');
+                                  }}
                                   className="rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-800"
                                 >
                                   Abbrechen
@@ -860,10 +1026,11 @@ export default function AdminPage() {
               )}
 
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                Hinweis: Nutzer werden in app_users geführt. Beim Löschen wird der passende Eintrag in
-                Supabase Auth mit entfernt, sofern die E-Mail übereinstimmt. Der bei der
-                Schulregistrierung angelegte erste Admin pro Schule kann nicht gelöscht werden.
-                Weitere Logins können weiterhin manuell unter Authentication → Users angelegt werden.
+                Hinweis: Nutzer werden in app_users geführt. Beim Anlegen oder Bearbeiten können Sie ein
+                temporäres Passwort setzen (Supabase Auth); der Nutzer kann es nach der Anmeldung über
+                das Profilbild ändern. Beim Löschen wird der passende Auth-User mit entfernt, sofern die
+                E-Mail übereinstimmt. Der bei der Schulregistrierung angelegte erste Admin pro Schule kann
+                nicht gelöscht werden.
               </p>
             </div>
           )}
@@ -1394,6 +1561,139 @@ export default function AdminPage() {
               >
                 {metaLoading ? 'Speichere…' : 'Metadaten speichern'}
               </button>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <button
+            type="button"
+            onClick={() => {
+              const next = !statsPanelOpen;
+              setStatsPanelOpen(next);
+              setPanelQuery({ stats: next });
+            }}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
+          >
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Statistik</h2>
+              <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                Nutzer, Dokumente und KI-Anfragen (letzte 14 Tage nach UTC-Tag).
+              </p>
+            </div>
+            <span
+              className="inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+              aria-hidden="true"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className={`transition-transform ${statsPanelOpen ? 'rotate-180' : ''}`}
+              >
+                <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </span>
+          </button>
+          {statsPanelOpen && (
+            <div className="border-t border-zinc-200 p-4 dark:border-zinc-800">
+              {statsError && (
+                <p className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
+                  {statsError}
+                </p>
+              )}
+              {statsLoading && !stats && !statsError && (
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">Lade Statistik…</p>
+              )}
+              {stats && (
+                <>
+                  <p className="mb-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Zahlen für Ihre Schule ({stats.schoolNumber}).
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                    <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Nutzer</p>
+                      <p className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{stats.userCount}</p>
+                    </div>
+                    <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Dokumente gesamt</p>
+                      <p className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{stats.documentTotal}</p>
+                    </div>
+                    <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Aktiv (nicht archiviert)</p>
+                      <p className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{stats.documentActive}</p>
+                    </div>
+                    <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Archiviert</p>
+                      <p className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{stats.documentArchived}</p>
+                    </div>
+                    <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Veröffentlicht</p>
+                      <p className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{stats.documentPublished}</p>
+                    </div>
+                    <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">KI-Anfragen gesamt</p>
+                      <p className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{stats.aiQueriesTotal}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">KI-Anfragen (letzte 7 Tage, ab UTC-Mitternacht)</p>
+                      <p className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{stats.aiQueriesLast7Days}</p>
+                    </div>
+                    <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Ø pro Tag (14 Tage)</p>
+                      <p className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+                        {(
+                          stats.aiQueriesByDay.reduce((a, x) => a + x.count, 0) / Math.max(stats.aiQueriesByDay.length, 1)
+                        ).toLocaleString('de-DE', { maximumFractionDigits: 1 })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <p className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">KI-Anfragen pro Tag (14 Tage)</p>
+                    {(() => {
+                      const max = Math.max(1, ...stats.aiQueriesByDay.map((x) => x.count));
+                      return (
+                        <div className="flex h-36 items-end gap-0.5 border-b border-zinc-200 pb-1 dark:border-zinc-700">
+                          {stats.aiQueriesByDay.map((day) => (
+                            <div
+                              key={day.date}
+                              className="group flex min-w-0 flex-1 flex-col items-center justify-end"
+                              title={`${formatStatsDayUtc(day.date)}: ${day.count}`}
+                            >
+                              <span className="mb-0.5 hidden text-[9px] text-zinc-500 group-hover:block dark:text-zinc-400">
+                                {day.count}
+                              </span>
+                              <div
+                                className="w-full max-w-[20px] rounded-t bg-blue-500/80 dark:bg-blue-400/70"
+                                style={{ height: `${(day.count / max) * 100}%`, minHeight: day.count > 0 ? 4 : 0 }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                    <div className="mt-1 flex gap-0.5 text-[9px] text-zinc-500 dark:text-zinc-400">
+                      {stats.aiQueriesByDay.map((day) => (
+                        <div key={`lbl-${day.date}`} className="min-w-0 flex-1 truncate text-center">
+                          {day.date.slice(8, 10)}.{day.date.slice(5, 7)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void loadStats()}
+                    disabled={statsLoading}
+                    className="mt-3 rounded border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  >
+                    {statsLoading ? 'Aktualisiere…' : 'Aktualisieren'}
+                  </button>
+                </>
+              )}
             </div>
           )}
         </section>

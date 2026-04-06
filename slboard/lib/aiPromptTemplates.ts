@@ -51,21 +51,25 @@ Das Modell umfasst vier Dimensionen:
 
 Evidenz-Logik:
 - Fuer Tragfaehigkeit: Schul-Steckbrief (falls vorhanden) einbeziehen.
-- Fuer Belastungsgrad, Entscheidungsstruktur und Verbindlichkeit: ausschliesslich Dokumenttext.
+- Strukturelle Metadaten (Gremium, Status, Fristen, Zustaendigkeit, Reichweite, Rechtsbezug, Kurzbeschreibung) duerfen fuer Tragfaehigkeit und Passung herangezogen werden.
+- Belastungsgrad: primaer am Fliesstext des Dokuments (Umfang, Komplexitaet, Dichte); Metadaten nur ergaenzend, wenn sie die Bearbeitungslast einordnen.
+- Entscheidungsstruktur und Verbindlichkeit: werten am Fliesstext aus; Metadaten duerfen mit einfliessen, wenn sie Beschlusswege, Zustaendigkeiten, Verfahrensstand oder rechtliche Einordnung konkretisieren (z. B. Gremium, Workflow-Status, Rechtsbezug), und der Fliesstext dazu nichts oder zu wenig hergibt.
 - Fehlende Belege explizit benennen und konservativ bewerten.
-- Keine Annahmen ausserhalb des Dokuments.
+- Keine freien Erfindungen: nur Schul-Steckbrief, Metadatenblock und Dokumenttext als Belegbasis.
 - Praezise, kurze Begruendungen.`,
     user_locked: `Analysiere das folgende Dokument anhand der vier Dimensionen.
 
 Dokumenttitel: {{document_title}}
+
+{{document_metadata_block}}
 
 {{school_profile_block}}Dokumenttext:
 {{document_text}}
 
 Wichtig:
 - Analysiere das konkrete Dokument, nicht die Schule im Allgemeinen.
-- Falls Schul-Steckbrief und Dokumenttext widerspruechlich sind, hat der Dokumenttext Vorrang.
-- Begruende jede Bewertung mit expliziten Textsignalen oder klar benannten fehlenden Textsignalen im Dokument.
+- Falls Schul-Steckbrief, Metadaten und Dokumenttext sich widersprechen, hat der formulierte Dokumenttext (Fliesstext) Vorrang; Metadaten dennoch erwaehnen, wenn sie die Einordnung aendern wuerden.
+- Begruende jede Bewertung mit expliziten Signalen aus Fliesstext und/oder Metadaten (siehe Systemanweisung, Evidenz-Logik) oder benenne fehlende Belege klar.
 
 Antwortformat (MUSS exakt als JSON-Objekt eingehalten werden):
 {

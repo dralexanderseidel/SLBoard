@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
-import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
 
 type BulkCapabilitiesPayload = {
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ editableIds: [], blockedIds: [] });
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     const { data: docs, error } = await supabase
       .from('documents')

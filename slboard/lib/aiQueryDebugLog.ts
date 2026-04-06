@@ -32,6 +32,7 @@ export type AiQueryDebugPayload = {
   documentSelection: 'explicit_ids' | 'suggested';
   explicitDocumentIds: string[] | undefined;
   documents: AiQueryDebugDocEntry[];
+  promptTemplateVersion?: number;
   systemPrompt: string;
   userPrompt: string;
 };

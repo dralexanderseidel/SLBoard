@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { isAdmin } from '../../../../lib/adminAuth';
-import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
+import { ensureAuthCredentials } from '../../../../lib/authAdminUsers';
 
 export async function GET() {
   try {
@@ -22,7 +23,7 @@ export async function GET() {
       return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const adminSchool = access.schoolNumber ?? null;
 
     let usersQuery = supabase
@@ -97,13 +98,13 @@ export async function POST(req: NextRequest) {
       return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const adminSchool = access.schoolNumber ?? null;
 
     const body = await req.json();
     const username = (body.username as string)?.trim();
     const fullName = (body.full_name as string)?.trim();
-    const email = (body.email as string)?.trim();
+    const email = (body.email as string)?.trim().toLowerCase();
     const orgUnit = (body.org_unit as string)?.trim();
 
     if (!username || !fullName || !email || !orgUnit) {
@@ -127,6 +128,21 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       return apiError(500, 'INTERNAL_ERROR', error.message);
+    }
+
+    const tempPwd = (body.temporary_password as string | undefined)?.trim() ?? '';
+    if (tempPwd) {
+      try {
+        await ensureAuthCredentials(supabase, {
+          email,
+          password: tempPwd,
+          schoolNumber,
+        });
+      } catch (e) {
+        await supabase.from('app_users').delete().eq('id', newUser.id);
+        const msg = e instanceof Error ? e.message : 'Auth konnte nicht angelegt werden.';
+        return apiError(500, 'INTERNAL_ERROR', msg);
+      }
     }
 
     return NextResponse.json({ user: { ...newUser, roles: [], deletable: true } });

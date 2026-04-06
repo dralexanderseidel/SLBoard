@@ -67,6 +67,7 @@ function DraftAssistantContent() {
       let q = supabase
         .from('documents')
         .select('id, title, created_at, document_type_code')
+        .is('archived_at', null)
         .in('status', ['FREIGEGEBEN', 'BESCHLUSS', 'VEROEFFENTLICHT'])
         .order('created_at', { ascending: false });
 
@@ -99,6 +100,7 @@ function DraftAssistantContent() {
           let one = supabase
             .from('documents')
             .select('id, title, created_at, document_type_code')
+            .is('archived_at', null)
             .eq('id', sourceIdParam);
           if (meAccess?.schoolNumber) {
             one = one.eq('school_number', meAccess.schoolNumber);

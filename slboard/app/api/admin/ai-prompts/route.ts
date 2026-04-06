@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { isAdmin } from '../../../../lib/adminAuth';
-import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../../lib/documentAccess';
 import {
   getAllSchoolPromptTemplates,
   resetSchoolPromptTemplate,
@@ -39,7 +39,7 @@ export async function GET() {
       return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
     const templates = await getAllSchoolPromptTemplates(schoolNumber);
     return NextResponse.json({ templates, schoolNumber });
@@ -67,7 +67,7 @@ export async function PUT(req: NextRequest) {
       return apiError(400, 'VALIDATION_ERROR', 'Keine Template-Aenderungen uebergeben.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
     const allowed: PromptUseCase[] = ['qa', 'summary', 'steering'];
     for (const row of updates) {
@@ -105,7 +105,7 @@ export async function DELETE(req: NextRequest) {
       return apiError(400, 'VALIDATION_ERROR', 'Ungueltiger use_case.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
     await resetSchoolPromptTemplate(schoolNumber, useCase);
     const templates = await getAllSchoolPromptTemplates(schoolNumber);

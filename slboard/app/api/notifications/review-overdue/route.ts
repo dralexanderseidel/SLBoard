@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
-import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
 
 type ReviewOverdueItem = {
@@ -24,7 +24,7 @@ export async function GET() {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     const today = new Date();
     const ymd = today.toISOString().slice(0, 10); // YYYY-MM-DD
@@ -37,6 +37,7 @@ export async function GET() {
       .not('review_date', 'is', null)
       .lt('review_date', ymd)
       .eq('status', 'VEROEFFENTLICHT')
+      .is('archived_at', null)
       .order('review_date', { ascending: true })
       .limit(20);
     if (access.schoolNumber) docsQuery = docsQuery.eq('school_number', access.schoolNumber);

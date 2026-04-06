@@ -3,7 +3,7 @@ import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { getDocumentText } from '../../../lib/documentText';
 import { buildSearchIndex } from '../../../lib/indexing';
-import { getUserAccessContext } from '../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
 import { WORKFLOW_STATUS_ORDER } from '../../../lib/documentWorkflow';
 
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
 
     const protectionId = Math.max(1, Math.min(3, parseInt(protectionClass, 10) || 1));
     const createdById = '00000000-0000-0000-0000-000000000001'; // Platzhalter; später aus Session
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
 
     // 1) Dokument anlegen

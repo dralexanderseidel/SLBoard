@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
 import Link from 'next/link';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { UserMenu } from '../components/UserMenu';
 import { SchoolContextBadge } from '../components/SchoolContextBadge';
+import { SuperAdminNavLink } from '../components/SuperAdminNavLink';
+import { NomosLogo } from '../components/NomosLogo';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -31,17 +32,9 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <div className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
           <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90">
-            <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-              <Link href="/" className="flex items-center">
-                <Image
-                  src="/nomos-logo-crop.png"
-                  alt="NOMOS EduGovernance Pro"
-                  width={440}
-                  height={100}
-                  className="h-20 w-auto object-contain object-left"
-                  priority
-                  unoptimized
-                />
+            <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
+              <Link href="/" className="flex min-w-0 shrink-0 items-center">
+                <NomosLogo />
               </Link>
 
               <nav className="flex items-center gap-4 text-xs font-medium text-zinc-700 dark:text-zinc-200">
@@ -69,6 +62,7 @@ export default function RootLayout({
                 >
                   Admin
                 </Link>
+                <SuperAdminNavLink />
                 <SchoolContextBadge />
               </nav>
 

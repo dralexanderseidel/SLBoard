@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { isAdmin } from '../../../../../lib/adminAuth';
-import { getUserAccessContext } from '../../../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../../../lib/documentAccess';
 import {
   getSchoolPromptTemplate,
   renderPromptTemplate,
@@ -11,6 +11,7 @@ import {
 import { callLlm, isLlmConfigured } from '../../../../../lib/llmClient';
 import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
 import { apiError } from '../../../../../lib/apiError';
+import { buildDocumentMetadataPromptSection } from '../../../../../lib/aiSearch';
 
 export const runtime = 'nodejs';
 
@@ -94,17 +95,32 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => ({}))) as PreviewPayload;
     const useCase: PromptUseCase = body.use_case === 'qa' || body.use_case === 'summary' ? body.use_case : 'steering';
     const mode = body.mode === 'prompt_only' ? 'prompt_only' : 'llm_test';
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
     const template = await getSchoolPromptTemplate(schoolNumber, useCase);
     const systemPrompt = [template.system_locked, template.system_editable].filter(Boolean).join('\n\n').trim();
 
     const userTemplate = [template.user_locked, template.user_editable].filter(Boolean).join('\n\n').trim();
+    const sampleMetadataBlock = buildDocumentMetadataPromptSection({
+      id: '00000000-0000-0000-0000-000000000001',
+      title: 'Testdokument',
+      document_type_code: 'PROTOKOLL',
+      created_at: new Date().toISOString(),
+      status: 'ENTWURF',
+      legal_reference: 'Musterrecht',
+      responsible_unit: 'Schulleitung',
+      gremium: 'Schulkonferenz',
+      reach_scope: 'intern',
+      participation_groups: ['Lehrkräfte'],
+      review_date: '2026-12-31',
+      summary: 'Kurzbeschreibung fuer die Vorschau.',
+    });
     const userPrompt = renderPromptTemplate(userTemplate, {
       question: 'Welche Fristen gelten fuer die Zeugnisabgabe?',
       context: 'Dokumentpassage A: Zeugnisabgabe bis 20.06. durch Klassenleitungen.',
       school_profile_block: 'Schul-Steckbrief:\nMittelgrosse Gesamtschule.\n\n',
       document_title: 'Testdokument',
+      document_metadata_block: sampleMetadataBlock,
       document_text:
         'Die Klassenleitungen melden Zeugnisdaten bis 20.06. Das Sekretariat prueft Vollstaendigkeit. Beschlusswege sind im Dokument nur teilweise konkretisiert.',
     });

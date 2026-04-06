@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { isAdmin } from '../../../../lib/adminAuth';
-import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { getAiSettingsForSchool } from '../../../../lib/aiSettings';
 import { apiError } from '../../../../lib/apiError';
 
@@ -30,7 +30,7 @@ export async function GET() {
       return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const settings = await getAiSettingsForSchool(access.schoolNumber);
     const schoolNumber = access.schoolNumber ?? '000000';
     const { data: school } = await supabase
@@ -58,7 +58,7 @@ export async function PUT(req: NextRequest) {
       return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
     const body = (await req.json().catch(() => ({}))) as UpdatePayload;
 

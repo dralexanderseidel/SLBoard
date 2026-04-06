@@ -7,10 +7,11 @@ import {
   getSuggestedDocuments,
   getDocumentsByIds,
   extractKeywords,
+  buildDocumentMetadataPromptSection,
   MAX_DOCS,
   type DocRow,
 } from '../../../../lib/aiSearch';
-import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../../lib/documentAccess';
 import {
   buildPromptSnippetFromChunks,
   pickTopChunksForQuestion,
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
     const schoolProfile = await getSchoolProfileText(access.schoolNumber);
     const MAX_TEXT_PER_DOC = aiSettings.max_text_per_doc ?? DEFAULT_MAX_TEXT_PER_DOC;
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
     const sourceTexts: {
       id: string;
       title: string;
+      metadataBlock: string;
       promptSnippet: string;
       evidenceSnippet: string;
     }[] = [];
@@ -92,6 +94,8 @@ export async function POST(req: NextRequest) {
     };
 
     for (const doc of docList) {
+      const metadataBlock = buildDocumentMetadataPromptSection(doc as DocRow);
+
       // Antwortqualität: zuerst Volltext chunken; KI-Zusammenfassung nur bei fehlendem/kurzem Extrakt.
       const fullText = ((await getDocumentText(doc.id)) ?? '').trim();
       const summaryText = (doc.summary ?? '').trim();
@@ -106,36 +110,62 @@ export async function POST(req: NextRequest) {
         text = legalText;
       }
 
+      let promptSnippet = '';
+      let evidenceSnippet = '';
+      let selectedChunksForDebug: string[] = [];
+      let builtSnippetLengthDebug = 0;
+
       if (text && text.trim().length > 30) {
         const selectedChunks = pickTopChunksForQuestion(text, keywords, chunkParams);
-        const promptSnippet = buildPromptSnippetFromChunks(selectedChunks, MAX_TEXT_PER_DOC);
-        if (promptSnippet.length > 30) {
+        const built = buildPromptSnippetFromChunks(selectedChunks, MAX_TEXT_PER_DOC);
+        if (built.length > 30) {
+          promptSnippet = built;
           const firstChunk = (selectedChunks[0] ?? '').replace(/\s+/g, ' ').trim();
-          const evidenceSnippet =
+          evidenceSnippet =
             firstChunk.length > 360 ? `${firstChunk.slice(0, 360)}…` : firstChunk;
-          sourceTexts.push({
-            id: doc.id,
-            title: doc.title,
-            promptSnippet,
-            evidenceSnippet,
-          });
-          if (debugEnabled) {
-            debugDocEntries.push({
-              documentId: doc.id,
-              title: doc.title,
-              chunkParams,
-              selectedChunks,
-              builtSnippetLength: promptSnippet.length,
-            });
-          }
+          selectedChunksForDebug = selectedChunks;
+          builtSnippetLengthDebug = built.length;
         }
+      }
+
+      if (promptSnippet.length <= 30) {
+        const fallback =
+          summaryText.length > 30 ? summaryText : legalText.length > 0 ? legalText : '';
+        if (fallback.length > 20) {
+          promptSnippet = fallback.slice(0, MAX_TEXT_PER_DOC);
+          evidenceSnippet = fallback.length > 360 ? `${fallback.slice(0, 360)}…` : fallback;
+        } else {
+          promptSnippet =
+            '(Kein längerer Dokumententext extrahiert. Beantworte die Frage soweit möglich mit den Metadaten oben und allgemeinem Wissen.)';
+          evidenceSnippet = '—';
+        }
+      }
+
+      sourceTexts.push({
+        id: doc.id,
+        title: doc.title,
+        metadataBlock,
+        promptSnippet,
+        evidenceSnippet,
+      });
+      if (debugEnabled && selectedChunksForDebug.length > 0) {
+        debugDocEntries.push({
+          documentId: doc.id,
+          title: doc.title,
+          chunkParams,
+          selectedChunks: selectedChunksForDebug,
+          builtSnippetLength: builtSnippetLengthDebug,
+        });
       }
     }
 
     const contextBlock =
       sourceTexts.length > 0
         ? sourceTexts
-            .map((s) => `--- ${s.title} ---\n${s.promptSnippet}`)
+            .map(
+              (s) =>
+                `--- ${s.title} ---\n${s.metadataBlock}\n\nDokumentinhalt (Auszug):\n${s.promptSnippet}`,
+            )
             .join('\n\n')
         : 'Es wurden keine passenden Dokumente gefunden.';
 

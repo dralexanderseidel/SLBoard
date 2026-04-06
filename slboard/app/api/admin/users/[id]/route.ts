@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { isAdmin } from '../../../../../lib/adminAuth';
-import { canAccessSchool, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { canAccessSchool, resolveUserAccess } from '../../../../../lib/documentAccess';
 import { apiError } from '../../../../../lib/apiError';
+import { ensureAuthCredentials } from '../../../../../lib/authAdminUsers';
 
 async function deleteAuthUserByEmail(
   supabase: NonNullable<ReturnType<typeof supabaseServer>>,
@@ -47,7 +48,7 @@ export async function DELETE(
       return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const { id } = await params;
 
     const { data: currentApp } = await supabase
@@ -126,43 +127,85 @@ export async function PATCH(
       return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     const { id } = await params;
     const body = await req.json();
     const updates: Record<string, string> = {};
     if (typeof body.username === 'string' && body.username.trim()) updates.username = body.username.trim();
     if (typeof body.full_name === 'string' && body.full_name.trim()) updates.full_name = body.full_name.trim();
-    if (typeof body.email === 'string' && body.email.trim()) updates.email = body.email.trim();
+    if (typeof body.email === 'string' && body.email.trim()) {
+      updates.email = body.email.trim().toLowerCase();
+    }
     if (typeof body.org_unit === 'string' && body.org_unit.trim()) updates.org_unit = body.org_unit.trim();
 
-    if (Object.keys(updates).length === 0) {
+    const tempPwd = (body.temporary_password as string | undefined)?.trim() ?? '';
+
+    if (Object.keys(updates).length === 0 && !tempPwd) {
       return apiError(400, 'VALIDATION_ERROR', 'Keine Felder zum Aktualisieren.');
     }
 
     const { data: target } = await supabase
       .from('app_users')
-      .select('id, school_number')
+      .select('id, school_number, email')
       .eq('id', id)
       .single();
     const targetSchool = (target as { school_number?: string | null } | null)?.school_number ?? null;
+    const previousEmail = (target as { email?: string } | null)?.email?.trim().toLowerCase() ?? '';
     if (!canAccessSchool(access, targetSchool)) {
       return apiError(403, 'FORBIDDEN', 'Keine Berechtigung für diesen Nutzer.');
     }
 
-    let updateQuery = supabase
-      .from('app_users')
-      .update(updates)
-      .eq('id', id)
-      .select('id, username, full_name, email, org_unit, school_number, created_at');
-    if (targetSchool) updateQuery = updateQuery.eq('school_number', targetSchool);
-    const { data, error } = await updateQuery.single();
+    if (Object.keys(updates).length > 0) {
+      let updateQuery = supabase
+        .from('app_users')
+        .update(updates)
+        .eq('id', id)
+        .select('id, username, full_name, email, org_unit, school_number, created_at');
+      if (targetSchool) updateQuery = updateQuery.eq('school_number', targetSchool);
+      const { data, error } = await updateQuery.single();
 
-    if (error) {
-      return apiError(500, 'INTERNAL_ERROR', error.message);
+      if (error) {
+        return apiError(500, 'INTERNAL_ERROR', error.message);
+      }
+
+      if (tempPwd) {
+        try {
+          await ensureAuthCredentials(supabase, {
+            email: (data as { email: string }).email,
+            password: tempPwd,
+            schoolNumber: targetSchool ?? '',
+            lookupEmail: previousEmail,
+          });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Passwort konnte nicht gesetzt werden.';
+          return apiError(500, 'INTERNAL_ERROR', msg);
+        }
+      }
+
+      return NextResponse.json({ user: data });
     }
 
-    return NextResponse.json({ user: data });
+    if (tempPwd) {
+      try {
+        await ensureAuthCredentials(supabase, {
+          email: previousEmail,
+          password: tempPwd,
+          schoolNumber: targetSchool ?? '',
+        });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Passwort konnte nicht gesetzt werden.';
+        return apiError(500, 'INTERNAL_ERROR', msg);
+      }
+    }
+
+    const { data: refreshed } = await supabase
+      .from('app_users')
+      .select('id, username, full_name, email, org_unit, school_number, created_at')
+      .eq('id', id)
+      .single();
+
+    return NextResponse.json({ user: refreshed });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return apiError(500, 'INTERNAL_ERROR', msg);

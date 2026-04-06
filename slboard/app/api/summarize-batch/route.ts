@@ -3,7 +3,7 @@ import { getDocumentText } from '../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
-import { canAccessSchool, getUserAccessContext } from '../../../lib/documentAccess';
+import { canAccessSchool, resolveUserAccess } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
 import { getAiSettingsForSchool } from '../../../lib/aiSettings';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../lib/aiQueryDebugLog';
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = supabaseServer();
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
     const promptTemplate = await getSchoolPromptTemplate(access.schoolNumber ?? '000000', 'summary');
     const systemPrompt = [promptTemplate.system_locked, promptTemplate.system_editable].filter(Boolean).join('\n\n').trim();
@@ -56,11 +56,14 @@ export async function POST(req: NextRequest) {
       try {
         const { data: doc, error: docError } = await supabase
           .from('documents')
-          .select('id, title, document_type_code, created_at, school_number')
+          .select('id, title, document_type_code, created_at, school_number, archived_at')
           .eq('id', documentId)
           .single();
 
         if (docError || !doc) throw new Error('Dokument nicht gefunden.');
+        if ((doc as { archived_at?: string | null }).archived_at) {
+          throw new Error('Dokument ist archiviert — bitte zuerst wiederherstellen.');
+        }
         const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
         if (!canAccessSchool(access, docSchool)) {
           throw new Error('Keine Berechtigung für dieses Dokument.');

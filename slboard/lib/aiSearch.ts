@@ -2,7 +2,7 @@
  * Gemeinsame Suchlogik für KI: Keyword-Extraktion, Relevanz-Score, Dokumentenliste.
  */
 import { supabaseServer } from './supabaseServer';
-import { WORKFLOW_STATUS_ORDER } from './documentWorkflow';
+import { WORKFLOW_STATUS_ORDER, statusLabelDe } from './documentWorkflow';
 
 export const SEARCH_POOL = 25;
 export const MAX_DOCS = 8;
@@ -53,13 +53,66 @@ export type DocRow = {
   title: string;
   document_type_code: string;
   created_at: string;
+  /** Workflow-Status (ENTWURF, …) — für KI-Metadatenkontext */
+  status?: string | null;
   legal_reference: string | null;
   responsible_unit: string | null;
   gremium: string | null;
+  reach_scope?: 'intern' | 'extern' | null;
+  participation_groups?: string[] | null;
+  review_date?: string | null;
   summary: string | null;
   search_text?: string | null;
   keywords?: string[] | null;
 };
+
+/**
+ * Deutscher Textblock mit Dokumentmetadaten für KI-QA (Gremium, Status, Fristen, …).
+ */
+export function buildDocumentMetadataPromptSection(doc: DocRow): string {
+  const lines: string[] = [
+    'Metadaten (verbindlich für Fragen zu Gremium, Status, Reichweite, Review, Verantwortung):',
+  ];
+  lines.push(`- Dokumenttyp (Code): ${doc.document_type_code ?? '—'}`);
+  if (doc.status) {
+    lines.push(`- Workflow-Status: ${statusLabelDe(doc.status)}`);
+  }
+  try {
+    const d = new Date(doc.created_at);
+    if (!Number.isNaN(d.getTime())) {
+      lines.push(`- Erstellungsdatum: ${d.toLocaleDateString('de-DE')}`);
+    }
+  } catch {
+    // ignore
+  }
+  const unit = doc.responsible_unit?.trim();
+  if (unit) lines.push(`- Verantwortliche Organisationseinheit: ${unit}`);
+  const gr = doc.gremium?.trim();
+  if (gr) lines.push(`- Beschlussgremium: ${gr}`);
+  if (doc.reach_scope === 'intern' || doc.reach_scope === 'extern') {
+    lines.push(`- Reichweite: ${doc.reach_scope}`);
+  }
+  const pg = doc.participation_groups;
+  if (Array.isArray(pg) && pg.length > 0) {
+    lines.push(`- Beteiligung (Gruppen): ${pg.join(', ')}`);
+  }
+  const rd = doc.review_date?.trim();
+  if (rd) lines.push(`- Review-Datum: ${rd}`);
+  const lr = doc.legal_reference?.trim();
+  if (lr) {
+    lines.push(`- Rechtsbezug (Metadatenfeld): ${lr.length > 450 ? `${lr.slice(0, 450)}…` : lr}`);
+  }
+  const sum = doc.summary?.trim();
+  if (sum && sum.length > 0) {
+    lines.push(
+      `- Kurzbeschreibung (Metadaten): ${sum.length > 600 ? `${sum.slice(0, 600)}…` : sum}`,
+    );
+  }
+  lines.push(
+    '- Hinweis: Konkrete Zeitpunkte einzelner Workflow-Schritte (z. B. wie lange „Entwurf“ dauerte) sind in diesen Metadaten nicht als Historie gespeichert; sichtbar sind Erstellungsdatum und aktueller Status. Für Zeitverläufe ggf. Versions- oder Änderungsverlauf prüfen.',
+  );
+  return lines.join('\n');
+}
 
 export function scoreRelevance(doc: DocRow, keywords: string[]): number {
   const title = (doc.title ?? '').toLowerCase();
@@ -104,8 +157,9 @@ export async function getSuggestedDocuments(question: string, schoolNumber?: str
     let relevantQuery = supabase
       .from('documents')
       .select(
-        'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
+        'id, title, document_type_code, created_at, status, reach_scope, participation_groups, review_date, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
       )
+      .is('archived_at', null)
       .in('status', [...WORKFLOW_STATUS_ORDER])
       .or(orParts.join(','))
       .order('created_at', { ascending: false })
@@ -123,8 +177,9 @@ export async function getSuggestedDocuments(question: string, schoolNumber?: str
     let fallbackQuery = supabase
       .from('documents')
       .select(
-        'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
+        'id, title, document_type_code, created_at, status, reach_scope, participation_groups, review_date, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
       )
+      .is('archived_at', null)
       .in('status', [...WORKFLOW_STATUS_ORDER])
       .order('created_at', { ascending: false })
       .limit(MAX_DOCS);
@@ -146,7 +201,7 @@ export async function getDocumentsByIds(ids: string[], schoolNumber?: string | n
   let byIdsQuery = supabase
     .from('documents')
     .select(
-      'id, title, document_type_code, created_at, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
+      'id, title, document_type_code, created_at, status, reach_scope, participation_groups, review_date, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
     )
     .in('id', ids)
     .in('status', [...WORKFLOW_STATUS_ORDER]);

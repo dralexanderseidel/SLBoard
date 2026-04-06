@@ -3,7 +3,7 @@ import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { getDocumentText } from '../../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../../lib/indexing';
-import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../../lib/documentAccess';
 import { apiError } from '../../../../../lib/apiError';
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const ALLOWED_MIME_TYPES = [
@@ -51,7 +51,7 @@ export async function POST(
     }
 
     const { id: documentId } = await params;
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     const { data: doc, error: docError } = await supabase
       .from('documents')

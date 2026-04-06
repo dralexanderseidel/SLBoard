@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { supabaseServer } from '../../../../lib/supabaseServer';
-import { getUserAccessContext } from '../../../../lib/documentAccess';
+import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
 import {
   getSuggestedDocuments,
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     if (!supabase) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     const { question } = (await req.json()) as { question?: string };
     const trimmed = typeof question === 'string' ? question.trim() : '';

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
-import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../../lib/documentAccess';
 import { apiError } from '../../../../../lib/apiError';
 
 /**
@@ -25,7 +25,7 @@ export async function GET(
     }
 
     const { id: documentId } = await params;
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const { searchParams } = new URL(req.url);
     const versionId = searchParams.get('versionId');
 

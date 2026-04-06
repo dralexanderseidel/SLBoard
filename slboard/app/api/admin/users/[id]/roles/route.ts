@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../../lib/supabaseServerClient';
 import { isAdmin } from '../../../../../../lib/adminAuth';
-import { canAccessSchool, getUserAccessContext } from '../../../../../../lib/documentAccess';
+import { canAccessSchool, resolveUserAccess } from '../../../../../../lib/documentAccess';
 import { apiError } from '../../../../../../lib/apiError';
 
 export async function PATCH(
@@ -25,7 +25,7 @@ export async function PATCH(
       return apiError(403, 'FORBIDDEN', 'Keine Admin-Berechtigung.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     const { id: userId } = await params;
     const body = await req.json();

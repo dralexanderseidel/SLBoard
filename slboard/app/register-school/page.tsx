@@ -36,7 +36,9 @@ export default function RegisterSchoolPage() {
       if (!res.ok) throw new Error(data.error ?? 'Registrierung fehlgeschlagen.');
       setMessage(data.message ?? 'Registrierung erfolgreich.');
       setTimeout(() => {
-        router.push('/login?registered=1');
+        const sn = schoolNumber.trim();
+        const q = sn ? `registered=1&school=${encodeURIComponent(sn)}` : 'registered=1';
+        router.push(`/login?${q}`);
       }, 800);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Registrierung fehlgeschlagen.');

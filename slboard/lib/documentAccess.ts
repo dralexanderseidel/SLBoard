@@ -1,4 +1,5 @@
 import { supabaseServer } from './supabaseServer';
+import { getActiveSchoolNumberFromCookies, normalizeAuthEmail } from './schoolSession';
 
 type SupabaseAdmin = ReturnType<typeof supabaseServer>;
 
@@ -9,45 +10,69 @@ export type UserAccessContext = {
   roles: string[];
   isSchulleitung: boolean;
   isSekretariat: boolean;
+  /** Mehrere Schul-Konten unter derselben E-Mail, aber kein Schul-Kontext (Cookie/JWT) gesetzt */
+  needsSchoolContext?: boolean;
 };
 
+const emptyContext = (): UserAccessContext => ({
+  hasAppUser: false,
+  orgUnit: null,
+  schoolNumber: null,
+  roles: [],
+  isSchulleitung: false,
+  isSekretariat: false,
+});
+
+/**
+ * Lädt app_users inkl. Rollen.
+ * @param activeSchoolNumber — aus Cookie/JWT (6 Ziffern); ohne mehrdeutige E-Mail-Zuordnung
+ */
 export async function getUserAccessContext(
   authEmail: string,
-  supabase: SupabaseAdmin
+  supabase: SupabaseAdmin,
+  activeSchoolNumber?: string | null
 ): Promise<UserAccessContext> {
   try {
     if (!supabase) {
-      return {
-        hasAppUser: false,
-        orgUnit: null,
-        schoolNumber: null,
-        roles: [],
-        isSchulleitung: false,
-        isSekretariat: false,
-      };
+      return emptyContext();
     }
 
-    const { data: appUser } = await supabase
+    const emailNorm = normalizeAuthEmail(authEmail);
+    if (!emailNorm) {
+      return emptyContext();
+    }
+
+    const { data: rows, error } = await supabase
       .from('app_users')
       .select('id, org_unit, school_number')
-      .eq('email', authEmail)
-      .single();
+      .eq('email', emailNorm);
 
-    if (!appUser) {
+    if (error || !rows?.length) {
+      return emptyContext();
+    }
+
+    const schoolTrim = activeSchoolNumber?.trim() ?? '';
+    const schoolOk = schoolTrim.length === 6 && /^\d{6}$/.test(schoolTrim);
+    let appUser: { id: string; org_unit: string | null; school_number: string | null } | undefined;
+
+    if (schoolOk) {
+      appUser = rows.find((r) => (r.school_number as string | null) === schoolTrim);
+      if (!appUser) {
+        return emptyContext();
+      }
+    } else if (rows.length === 1) {
+      appUser = rows[0] as typeof appUser;
+    } else {
       return {
-        hasAppUser: false,
-        orgUnit: null,
-        schoolNumber: null,
-        roles: [],
-        isSchulleitung: false,
-        isSekretariat: false,
+        ...emptyContext(),
+        needsSchoolContext: true,
       };
     }
 
     const { data: rolesRows } = await supabase
       .from('user_roles')
       .select('role_code')
-      .eq('user_id', appUser.id);
+      .eq('user_id', appUser!.id);
 
     const roles = (rolesRows ?? []).map((r) => r.role_code as string).filter(Boolean);
     const isSchulleitung = roles.includes('SCHULLEITUNG');
@@ -55,22 +80,24 @@ export async function getUserAccessContext(
 
     return {
       hasAppUser: true,
-      orgUnit: (appUser.org_unit as string | null) ?? null,
-      schoolNumber: (appUser.school_number as string | null) ?? null,
+      orgUnit: (appUser!.org_unit as string | null) ?? null,
+      schoolNumber: (appUser!.school_number as string | null) ?? null,
       roles,
       isSchulleitung,
       isSekretariat,
     };
   } catch {
-    return {
-      hasAppUser: false,
-      orgUnit: null,
-      schoolNumber: null,
-      roles: [],
-      isSchulleitung: false,
-      isSekretariat: false,
-    };
+    return emptyContext();
   }
+}
+
+/** Server: Schul-Kontext aus Cookie, dann app_users. */
+export async function resolveUserAccess(
+  authEmail: string,
+  supabase: SupabaseAdmin
+): Promise<UserAccessContext> {
+  const school = await getActiveSchoolNumberFromCookies();
+  return getUserAccessContext(authEmail, supabase, school);
 }
 
 /**
@@ -124,4 +151,3 @@ export function canReadDocument(
     (!!access.orgUnit && !!responsibleUnit && access.orgUnit === responsibleUnit)
   );
 }
-

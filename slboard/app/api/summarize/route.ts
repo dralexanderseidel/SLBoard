@@ -3,7 +3,7 @@ import { getDocumentText } from '../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
-import { canAccessSchool, getUserAccessContext } from '../../../lib/documentAccess';
+import { canAccessSchool, resolveUserAccess } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
 import { getAiSettingsForSchool } from '../../../lib/aiSettings';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../lib/aiQueryDebugLog';
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     if (!supabase) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber ?? null);
     const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
 

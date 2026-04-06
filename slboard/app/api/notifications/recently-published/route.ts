@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
-import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
 
 /**
@@ -21,7 +21,7 @@ export async function GET() {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
 
     let auditQuery = supabase
       .from('audit_log')
@@ -55,7 +55,8 @@ export async function GET() {
       .from('documents')
       .select('id, title, responsible_unit, protection_class_id, school_number')
       .in('id', documentIds)
-      .eq('status', 'VEROEFFENTLICHT');
+      .eq('status', 'VEROEFFENTLICHT')
+      .is('archived_at', null);
 
     const { data: docs, error: docsError } = await query;
 

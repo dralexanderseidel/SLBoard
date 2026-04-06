@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
-import { canAccessSchool, canReadDocument, getUserAccessContext } from '../../../../../lib/documentAccess';
+import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../../lib/documentAccess';
 import { getDocumentText } from '../../../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../../../lib/llmClient';
 import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
@@ -10,6 +10,7 @@ import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../
 import { apiError } from '../../../../../lib/apiError';
 import { chunkTextByParagraphs } from '../../../../../lib/chunkingOnTheFly';
 import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../../../lib/aiPromptTemplates';
+import { buildDocumentMetadataPromptSection, type DocRow } from '../../../../../lib/aiSearch';
 
 export const runtime = 'nodejs';
 
@@ -106,7 +107,7 @@ export async function POST(
     }
 
     const { id: documentId } = await params;
-    const access = await getUserAccessContext(user.email, supabase);
+    const access = await resolveUserAccess(user.email, supabase);
     const schoolProfile = await getSchoolProfileText(access.schoolNumber);
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
     const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
@@ -116,7 +117,9 @@ export async function POST(
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, title, current_version_id, protection_class_id, responsible_unit, school_number, legal_reference, steering_analysis, steering_analysis_updated_at, steering_analysis_version_id')
+      .select(
+        'id, title, document_type_code, created_at, status, current_version_id, protection_class_id, responsible_unit, school_number, gremium, reach_scope, participation_groups, review_date, legal_reference, summary, steering_analysis, steering_analysis_updated_at, steering_analysis_version_id'
+      )
       .eq('id', documentId)
       .single();
 
@@ -169,7 +172,7 @@ export async function POST(
       steeringChunkParams.maxChunks
     );
 
-    const promptTemplate = await getSchoolPromptTemplate(access.schoolNumber, 'steering');
+    const promptTemplate = await getSchoolPromptTemplate(access.schoolNumber ?? '000000', 'steering');
     const systemPrompt = [promptTemplate.system_locked, promptTemplate.system_editable]
       .filter(Boolean)
       .join('\n\n')
@@ -179,8 +182,44 @@ export async function POST(
       .filter(Boolean)
       .join('\n\n')
       .trim();
+
+    const dr = doc as {
+      id: string;
+      title?: string | null;
+      document_type_code?: string | null;
+      created_at?: string | null;
+      status?: string | null;
+      legal_reference?: string | null;
+      responsible_unit?: string | null;
+      gremium?: string | null;
+      reach_scope?: 'intern' | 'extern' | null;
+      participation_groups?: unknown;
+      review_date?: string | null;
+      summary?: string | null;
+    };
+    const pgRaw = dr.participation_groups;
+    const participationGroups =
+      Array.isArray(pgRaw) && pgRaw.every((x) => typeof x === 'string') ? (pgRaw as string[]) : null;
+
+    const docRow: DocRow = {
+      id: dr.id,
+      title: (dr.title ?? '').trim() || 'Unbenannt',
+      document_type_code: (dr.document_type_code ?? '').trim() || '—',
+      created_at: dr.created_at ?? new Date().toISOString(),
+      status: dr.status ?? null,
+      legal_reference: dr.legal_reference ?? null,
+      responsible_unit: dr.responsible_unit ?? null,
+      gremium: dr.gremium ?? null,
+      reach_scope: dr.reach_scope === 'intern' || dr.reach_scope === 'extern' ? dr.reach_scope : null,
+      participation_groups: participationGroups,
+      review_date: dr.review_date ?? null,
+      summary: dr.summary ?? null,
+    };
+    const documentMetadataBlock = buildDocumentMetadataPromptSection(docRow);
+
     const userPrompt = renderPromptTemplate(userPromptTemplate, {
-      document_title: doc.title,
+      document_title: (dr.title ?? '').trim() || 'Unbenanntes Dokument',
+      document_metadata_block: documentMetadataBlock,
       school_profile_block: schoolContextBlock,
       document_text: basisText,
     });
@@ -192,6 +231,7 @@ export async function POST(
           schoolNumber: access.schoolNumber,
           documentId,
           title: doc.title,
+          documentMetadataBlockLength: documentMetadataBlock.length,
           basisTextLength: basisText.length,
           chunkParams: steeringChunkParams,
           selectedChunks: steeringChunks,
