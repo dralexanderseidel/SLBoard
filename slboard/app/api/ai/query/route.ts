@@ -14,6 +14,7 @@ import {
 import { resolveUserAccess } from '../../../../lib/documentAccess';
 import {
   buildPromptSnippetFromChunks,
+  pickBestEvidenceChunkForQuestion,
   pickTopChunksForQuestion,
 } from '../../../../lib/chunkingOnTheFly';
 import {
@@ -120,9 +121,11 @@ export async function POST(req: NextRequest) {
         const built = buildPromptSnippetFromChunks(selectedChunks, MAX_TEXT_PER_DOC);
         if (built.length > 30) {
           promptSnippet = built;
-          const firstChunk = (selectedChunks[0] ?? '').replace(/\s+/g, ' ').trim();
-          evidenceSnippet =
-            firstChunk.length > 360 ? `${firstChunk.slice(0, 360)}…` : firstChunk;
+          // Textbeleg: Chunk mit höchstem Keyword-Score (nicht nur erster Chunk in Lesereihenfolge).
+          const bestForEvidence =
+            pickBestEvidenceChunkForQuestion(text, keywords, chunkParams) ?? selectedChunks[0] ?? '';
+          const compact = bestForEvidence.replace(/\s+/g, ' ').trim();
+          evidenceSnippet = compact.length > 360 ? `${compact.slice(0, 360)}…` : compact;
           selectedChunksForDebug = selectedChunks;
           builtSnippetLengthDebug = built.length;
         }

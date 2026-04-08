@@ -99,6 +99,47 @@ function countKeywordOccurrences(haystackLower: string, keywordLower: string): n
   return count;
 }
 
+/** Gleiche Bewertung wie bei pickTopChunksForQuestion (Keyword-Treffer im Chunk). */
+export function scoreChunkForKeywords(chunk: string, keywordsLower: string[]): number {
+  const lower = chunk.toLowerCase();
+  let score = 0;
+  for (const k of keywordsLower) {
+    if (!k.length || !lower.includes(k)) continue;
+    const occurrences = countKeywordOccurrences(lower, k);
+    score += 1 + Math.min(2, occurrences - 1) * 0.5;
+  }
+  return score;
+}
+
+/**
+ * Ein Chunk mit der höchsten Übereinstimmung zur Frage (Keywords) — für UI-Textbelege.
+ * Abweichend vom Prompt-Kontext: dort werden Top-Chunks in Lesereihenfolge zusammengefügt.
+ */
+export function pickBestEvidenceChunkForQuestion(
+  text: string,
+  keywords: string[],
+  opts: ChunkingOptions
+): string | null {
+  const cleaned = text.trim();
+  if (!cleaned) return null;
+  const chunks = chunkTextByParagraphs(cleaned, opts);
+  if (chunks.length === 0) return null;
+  const kw = keywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
+  if (kw.length === 0) return chunks[0] ?? null;
+
+  let bestIdx = 0;
+  let bestScore = -1;
+  for (let i = 0; i < chunks.length; i++) {
+    const s = scoreChunkForKeywords(chunks[i]!, kw);
+    if (s > bestScore) {
+      bestScore = s;
+      bestIdx = i;
+    }
+  }
+  if (bestScore <= 0) return chunks[0] ?? null;
+  return chunks[bestIdx] ?? null;
+}
+
 export function pickTopChunksForQuestion(text: string, keywords: string[], opts: ChunkingOptions): string[] {
   const cleaned = text.trim();
   if (!cleaned) return [];
@@ -113,16 +154,7 @@ export function pickTopChunksForQuestion(text: string, keywords: string[], opts:
   if (kw.length === 0) return chunks.slice(0, maxChunks);
 
   const scored = chunks.map((chunk, idx) => {
-    const lower = chunk.toLowerCase();
-    let score = 0;
-
-    for (const k of kw) {
-      if (!lower.includes(k)) continue;
-      const occurrences = countKeywordOccurrences(lower, k);
-      // 1 point for hit + small weight for multiple occurrences.
-      score += 1 + Math.min(2, occurrences - 1) * 0.5;
-    }
-
+    const score = scoreChunkForKeywords(chunk, kw);
     return { idx, chunk, score };
   });
 

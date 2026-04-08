@@ -18,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'NOMOS EduGovernance Pro',
+  title: 'NOMOS Edu Governance Pro',
   description: 'KI-gestützte Dokumentenverwaltung für Schulen',
 };
 
@@ -32,12 +32,12 @@ export default function RootLayout({
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <div className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
           <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90">
-            <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
-              <Link href="/" className="flex min-w-0 shrink-0 items-center">
+            <div className="flex w-full items-center gap-2 sm:gap-3 lg:gap-4 px-4 sm:px-6 lg:px-10 xl:px-14 py-3">
+              <Link href="/" className="flex shrink-0 items-center self-center">
                 <NomosLogo />
               </Link>
 
-              <nav className="flex items-center gap-4 text-xs font-medium text-zinc-700 dark:text-zinc-200">
+              <nav className="flex min-h-[2.5rem] min-w-0 flex-1 flex-nowrap items-center justify-start gap-x-2.5 sm:gap-x-3 md:gap-x-4 overflow-x-auto pl-1 text-xs font-medium text-zinc-700 [scrollbar-width:thin] dark:text-zinc-200 [&>*]:shrink-0">
                 <Link
                   href="/"
                   className="rounded-full px-3 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800"
@@ -66,7 +66,9 @@ export default function RootLayout({
                 <SchoolContextBadge />
               </nav>
 
-              <UserMenu />
+              <div className="ml-auto flex shrink-0 items-center border-l border-zinc-200 pl-6 dark:border-zinc-700">
+                <UserMenu />
+              </div>
             </div>
           </header>
 

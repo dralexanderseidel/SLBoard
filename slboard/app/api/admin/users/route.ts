@@ -74,7 +74,11 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ users: usersWithRoles });
+    return NextResponse.json({
+      users: usersWithRoles,
+      /** Wenn gesetzt, darf der Admin nur Nutzer für diese Schule anlegen (UI + POST erzwingen). */
+      createUserSchoolNumber: access.schoolNumber ?? null,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return apiError(500, 'INTERNAL_ERROR', msg);
@@ -112,9 +116,17 @@ export async function POST(req: NextRequest) {
     }
 
     const requestedSchool = (body.school_number as string | undefined)?.trim() ?? '';
-    const schoolNumber = adminSchool || requestedSchool;
-    if (!schoolNumber) {
-      return apiError(400, 'VALIDATION_ERROR', 'school_number ist erforderlich.');
+    let schoolNumber: string;
+    if (adminSchool) {
+      if (requestedSchool && requestedSchool !== adminSchool) {
+        return apiError(403, 'FORBIDDEN', 'Sie können nur Nutzer für Ihre eigene Schule anlegen.');
+      }
+      schoolNumber = adminSchool;
+    } else {
+      schoolNumber = requestedSchool;
+      if (!schoolNumber) {
+        return apiError(400, 'VALIDATION_ERROR', 'school_number ist erforderlich.');
+      }
     }
     if (!/^\d{6}$/.test(schoolNumber)) {
       return apiError(400, 'VALIDATION_ERROR', 'school_number muss 6-stellig sein.');

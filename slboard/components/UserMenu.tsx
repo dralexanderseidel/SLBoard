@@ -71,7 +71,7 @@ export function UserMenu() {
 
   if (loading) {
     return (
-      <div className="ml-6 flex shrink-0 items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-300">
+      <div className="flex shrink-0 items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-300">
         Lädt…
       </div>
     );
@@ -79,7 +79,7 @@ export function UserMenu() {
 
   if (!user) {
     return (
-      <div className="ml-6 flex shrink-0 items-center gap-2 text-[11px] text-zinc-600 dark:text-zinc-300">
+      <div className="flex shrink-0 items-center gap-2 text-[11px] text-zinc-600 dark:text-zinc-300">
         <span className="hidden sm:inline">Nicht angemeldet</span>
         <Link
           href="/login"
@@ -95,7 +95,7 @@ export function UserMenu() {
 
   return (
     <>
-      <div className="ml-6 flex shrink-0 items-center gap-2 text-[11px] text-zinc-700 dark:text-zinc-200">
+      <div className="flex shrink-0 items-center gap-2 text-[11px] text-zinc-700 dark:text-zinc-200">
         <span className="hidden max-w-[160px] truncate sm:inline">{user.email}</span>
         <div className="relative" ref={wrapRef}>
           <button

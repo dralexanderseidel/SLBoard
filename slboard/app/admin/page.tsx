@@ -135,6 +135,8 @@ export default function AdminPage() {
   const [statsError, setStatsError] = useState<string | null>(null);
   /** null = Prüfung läuft; false = kein Zugriff (z. B. 403); true = Admin-Daten laden */
   const [adminAllowed, setAdminAllowed] = useState<boolean | null>(null);
+  /** Aus GET /api/admin/users: feste Schulnummer für „Nutzer anlegen“ (Schul-Admin), sonst null (freie Eingabe). */
+  const [createUserSchoolNumber, setCreateUserSchoolNumber] = useState<string | null>(null);
 
   const activeOrgUnitOptions = (responsibleUnitOptions.length > 0
     ? responsibleUnitOptions.filter((u) => u.active).map((u) => u.name).filter(Boolean)
@@ -182,6 +184,7 @@ export default function AdminPage() {
           setError(data.error ?? 'Keine Admin-Berechtigung.');
           setAdminAllowed(false);
           setUsers([]);
+          setCreateUserSchoolNumber(null);
           return;
         }
         const msg = data.error ?? 'Fehler beim Laden.';
@@ -194,14 +197,21 @@ export default function AdminPage() {
         }
         setAdminAllowed(false);
         setUsers([]);
+        setCreateUserSchoolNumber(null);
         return;
       }
       setAdminAllowed(true);
       setUsers(data.users ?? []);
+      setCreateUserSchoolNumber(
+        typeof data.createUserSchoolNumber === 'string' && /^\d{6}$/.test(data.createUserSchoolNumber)
+          ? data.createUserSchoolNumber
+          : null
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Fehler beim Laden der Nutzer.');
       setAdminAllowed(false);
       setUsers([]);
+      setCreateUserSchoolNumber(null);
     } finally {
       setLoading(false);
     }
@@ -210,6 +220,12 @@ export default function AdminPage() {
   useEffect(() => {
     void loadUsers();
   }, []);
+
+  useEffect(() => {
+    if (createUserSchoolNumber) {
+      setCreateForm((f) => ({ ...f, school_number: createUserSchoolNumber }));
+    }
+  }, [createUserSchoolNumber]);
 
   const loadStats = async () => {
     setStatsLoading(true);
@@ -573,6 +589,11 @@ export default function AdminPage() {
       setError(`Temporäres Passwort: mindestens ${MIN_APP_PASSWORD_LENGTH} Zeichen oder leer lassen.`);
       return;
     }
+    const schoolNum = (createUserSchoolNumber ?? createForm.school_number).trim();
+    if (!/^\d{6}$/.test(schoolNum)) {
+      setError('Schulnummer (6-stellig) ist erforderlich.');
+      return;
+    }
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -585,7 +606,7 @@ export default function AdminPage() {
           full_name: createForm.full_name,
           email: createForm.email,
           org_unit: createForm.org_unit,
-          school_number: createForm.school_number,
+          school_number: schoolNum,
           ...(tp ? { temporary_password: tp } : {}),
         }),
       });
@@ -597,7 +618,7 @@ export default function AdminPage() {
         full_name: '',
         email: '',
         org_unit: 'Schulleitung',
-        school_number: '',
+        school_number: createUserSchoolNumber ?? '',
         temporary_password: '',
       });
       setShowCreate(false);
@@ -775,15 +796,31 @@ export default function AdminPage() {
                     </div>
                     <div>
                       <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
-                        Schulnummer (6-stellig)
+                        Schulnummer
                       </label>
-                      <input
-                        type="text"
-                        value={createForm.school_number}
-                        onChange={(e) => setCreateForm((f) => ({ ...f, school_number: e.target.value }))}
-                        className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-                        placeholder="z.B. 123456"
-                      />
+                      {createUserSchoolNumber ? (
+                        <>
+                          <div className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-sm font-medium text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-100">
+                            {createUserSchoolNumber}
+                          </div>
+                          <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                            Vorgegeben für Ihre aktuelle Schule; andere Schulnummern sind nicht wählbar.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            value={createForm.school_number}
+                            onChange={(e) => setCreateForm((f) => ({ ...f, school_number: e.target.value }))}
+                            className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                            placeholder="6-stellig, z.B. 123456"
+                          />
+                          <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                            Nur nötig, wenn kein Schul-Kontext gesetzt ist (z. B. zentrale Verwaltung).
+                          </p>
+                        </>
+                      )}
                     </div>
                     <div>
                       <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
@@ -847,7 +884,15 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                  <table className="w-full text-left text-sm">
+                  <table className="w-full min-w-[70rem] table-fixed text-left text-sm">
+                    <colgroup>
+                      <col className="w-[25%]" />
+                      <col className="w-[20%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[21%]" />
+                      <col className="w-[9%]" />
+                    </colgroup>
                     <thead>
                       <tr className="border-b border-zinc-200 dark:border-zinc-700">
                         <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">
@@ -866,16 +911,16 @@ export default function AdminPage() {
                           key={u.id}
                           className="border-b border-zinc-100 dark:border-zinc-800"
                         >
-                          <td className="p-3">
+                          <td className="align-top p-3">
                             {editingId === u.id ? (
-                              <div className="space-y-2">
+                              <div className="min-w-0 space-y-2.5">
                                 <input
                                   type="text"
                                   value={editForm.username ?? ''}
                                   onChange={(e) =>
                                     setEditForm((f) => ({ ...f, username: e.target.value }))
                                   }
-                                  className="w-full rounded border px-2 py-1 text-xs"
+                                  className="w-full min-w-0 rounded border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950"
                                   placeholder="Benutzername"
                                 />
                                 <input
@@ -884,11 +929,11 @@ export default function AdminPage() {
                                   onChange={(e) =>
                                     setEditForm((f) => ({ ...f, full_name: e.target.value }))
                                   }
-                                  className="w-full rounded border px-2 py-1 text-xs"
+                                  className="w-full min-w-0 rounded border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950"
                                   placeholder="Vollständiger Name"
                                 />
                                 <div>
-                                  <label className="mb-0.5 block text-[10px] text-zinc-500 dark:text-zinc-400">
+                                  <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
                                     Neues temporäres Passwort (optional)
                                   </label>
                                   <input
@@ -896,15 +941,15 @@ export default function AdminPage() {
                                     autoComplete="new-password"
                                     value={editTempPassword}
                                     onChange={(e) => setEditTempPassword(e.target.value)}
-                                    className="w-full rounded border px-2 py-1 text-xs"
+                                    className="w-full min-w-0 rounded border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950"
                                     placeholder={`min. ${MIN_APP_PASSWORD_LENGTH} Zeichen`}
                                   />
                                 </div>
                               </div>
                             ) : (
-                              <div>
-                                <div className="font-medium">{u.full_name}</div>
-                                <div className="text-[11px] text-zinc-500">{u.username}</div>
+                              <div className="min-w-0">
+                                <div className="font-medium leading-snug">{u.full_name}</div>
+                                <div className="mt-0.5 text-[11px] text-zinc-500">{u.username}</div>
                               </div>
                             )}
                           </td>
