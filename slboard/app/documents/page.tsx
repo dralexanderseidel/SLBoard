@@ -1202,7 +1202,7 @@ export default function DocumentsPage() {
 
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                  Review-Datum
+                  Evaluation/Wiedervorlage
                 </label>
                 <select
                   value={reviewFilter}
@@ -1210,9 +1210,9 @@ export default function DocumentsPage() {
                   className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                 >
                   <option value="">Alle</option>
-                  <option value="overdue">Review überfällig</option>
-                  <option value="set">Review gesetzt</option>
-                  <option value="empty">Review leer</option>
+                  <option value="overdue">überfällig</option>
+                  <option value="set">Datum gesetzt</option>
+                  <option value="empty">Datum leer</option>
                 </select>
               </div>
 

@@ -4,42 +4,38 @@ import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabaseClient';
 import { ChangePasswordDialog } from './ChangePasswordDialog';
+import { useHeaderAccess } from './HeaderAccessContext';
 
 type SessionUser = {
   email: string | null;
 };
 
+/** Anzeigenamen für user_roles.role_code (ergänzen bei neuen Codes). */
+const ROLE_LABEL_DE: Record<string, string> = {
+  SCHULLEITUNG: 'Schulleitung',
+  SEKRETARIAT: 'Sekretariat',
+  VERWALTUNG: 'Verwaltung',
+  KOORDINATION: 'Koordination',
+  LEHRKRAFT: 'Lehrkraft',
+  FACHVORSITZ: 'Fachvorsitz',
+  STEUERGRUPPE: 'Steuergruppe',
+  ADMIN: 'Admin',
+  SUPER_ADMIN: 'Super-Admin',
+};
+
+function formatRolesForMenu(codes: string[] | null): string {
+  if (codes === null) return '…';
+  if (codes.length === 0) return 'Keine Rollen hinterlegt';
+  return codes.map((c) => ROLE_LABEL_DE[c] ?? c).join(', ');
+}
+
 export function UserMenu() {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { userEmail, sessionLoading, access, accessLoading } = useHeaderAccess();
   const [menuOpen, setMenuOpen] = useState(false);
   const [pwdOpen, setPwdOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const toSessionUser = (u: { email?: string | null } | null): SessionUser | null =>
-      u ? { email: u.email ?? null } : null;
-
-    const load = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      setUser(toSessionUser(session?.user ?? null));
-      setLoading(false);
-    };
-
-    void load();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(toSessionUser(session?.user ?? null));
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+  const user: SessionUser | null = userEmail ? { email: userEmail } : null;
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -67,9 +63,10 @@ export function UserMenu() {
       /* ignore */
     }
     await supabase.auth.signOut();
+    window.location.assign('/login');
   };
 
-  if (loading) {
+  if (sessionLoading) {
     return (
       <div className="flex shrink-0 items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-300">
         Lädt…
@@ -92,18 +89,36 @@ export function UserMenu() {
   }
 
   const initials = user.email?.trim().charAt(0).toUpperCase() ?? '?';
+  const schoolLine =
+    access?.schoolNumber || access?.schoolName
+      ? access.schoolName
+        ? `${access.schoolName} (${access.schoolNumber ?? '—'})`
+        : (access.schoolNumber ?? '')
+      : null;
 
   return (
     <>
       <div className="flex shrink-0 items-center gap-2 text-[11px] text-zinc-700 dark:text-zinc-200">
-        <span className="hidden max-w-[160px] truncate sm:inline">{user.email}</span>
+        <div className="hidden min-w-0 flex-col items-end text-right sm:flex">
+          <span className="max-w-[min(12rem,36vw)] truncate">{user.email}</span>
+          {accessLoading && !schoolLine ? (
+            <span className="text-[10px] text-zinc-400">Schule wird geladen…</span>
+          ) : schoolLine ? (
+            <span
+              className="max-w-[min(14rem,42vw)] truncate text-[10px] font-medium leading-tight text-zinc-500 dark:text-zinc-400"
+              title={schoolLine}
+            >
+              {schoolLine}
+            </span>
+          ) : null}
+        </div>
         <div className="relative" ref={wrapRef}>
           <button
             type="button"
             onClick={() => setMenuOpen((o) => !o)}
             aria-expanded={menuOpen}
             aria-haspopup="menu"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-200 text-[11px] font-semibold text-zinc-700 ring-zinc-400 transition hover:ring-2 focus:outline-none focus:ring-2 dark:bg-zinc-700 dark:text-zinc-100 dark:ring-zinc-500"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-200 text-[11px] font-semibold text-zinc-700 ring-zinc-400 transition hover:ring-2 focus:outline-none focus:ring-2 dark:bg-zinc-700 dark:text-zinc-100 dark:ring-zinc-500"
             title="Konto"
           >
             {initials}
@@ -111,8 +126,16 @@ export function UserMenu() {
           {menuOpen && (
             <div
               role="menu"
-              className="absolute right-0 top-full z-50 mt-1 min-w-[11rem] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+              className="absolute right-0 top-full z-50 mt-1 min-w-[13rem] max-w-[min(100vw-1.5rem,18rem)] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
             >
+              <div className="border-b border-zinc-200 px-3 py-2 dark:border-zinc-700">
+                <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  Rollen
+                </p>
+                <p className="mt-0.5 text-xs leading-snug text-zinc-800 dark:text-zinc-100">
+                  {formatRolesForMenu(accessLoading ? null : access?.roles ?? [])}
+                </p>
+              </div>
               <button
                 type="button"
                 role="menuitem"

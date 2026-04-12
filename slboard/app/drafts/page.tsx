@@ -3,7 +3,6 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { supabase } from '../../lib/supabaseClient';
 
 type SourceDoc = {
   id: string;
@@ -15,11 +14,6 @@ type SourceDoc = {
 type UsedSource = {
   documentId: string;
   title: string;
-};
-
-type MeAccess = {
-  schoolNumber: string | null;
-  schoolName: string | null;
 };
 
 function DraftAssistantContent() {
@@ -34,7 +28,7 @@ function DraftAssistantContent() {
   const [sources, setSources] = useState<SourceDoc[]>([]);
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const [lastUsedSources, setLastUsedSources] = useState<UsedSource[]>([]);
-  const [sourceTypeFilter, setSourceTypeFilter] = useState<string>('ELTERNBRIEF');
+  const [sourceTypeFilter, setSourceTypeFilter] = useState<string>('');
   const [sourceSearchInput, setSourceSearchInput] = useState('');
   const [sourceSearchQuery, setSourceSearchQuery] = useState('');
   const [saving, setSaving] = useState(false);
@@ -42,82 +36,73 @@ function DraftAssistantContent() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAfterSaveActions, setShowAfterSaveActions] = useState(false);
-  const [meAccess, setMeAccess] = useState<MeAccess | null>(null);
 
   useEffect(() => {
     if (subjectParam) setSubject(decodeURIComponent(subjectParam));
   }, [subjectParam]);
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch('/api/me/access');
-        if (!res.ok) return;
-        const data = (await res.json()) as MeAccess;
-        setMeAccess(data);
-      } catch {
-        // optional
-      }
-    };
-    void load();
-  }, []);
-
-  useEffect(() => {
     const loadSources = async () => {
-      let q = supabase
-        .from('documents')
-        .select('id, title, created_at, document_type_code')
-        .is('archived_at', null)
-        .in('status', ['FREIGEGEBEN', 'BESCHLUSS', 'VEROEFFENTLICHT'])
-        .order('created_at', { ascending: false });
-
-      if (meAccess?.schoolNumber) {
-        q = q.eq('school_number', meAccess.schoolNumber);
+      const q = sourceSearchQuery.trim();
+      const typ = sourceTypeFilter.trim();
+      const hasBrowse =
+        typ.length > 0 || (sourceIdParam !== null && sourceIdParam.length > 0);
+      const hasSearch = q.length > 0;
+      if (!hasSearch && !hasBrowse) {
+        setSources([]);
+        return;
       }
 
-      if (sourceTypeFilter) {
-        q = q.eq('document_type_code', sourceTypeFilter);
-      }
+      try {
+        // Gleicher Kern wie Dashboard (page.tsx): nur question, optional documentTypeCode / ensureIds.
+        // Kein allowBrowseFallback: false — sonst abweichendes Verhalten zur Browse-Fallback-Logik.
+        const payload: Record<string, unknown> = { question: q };
+        if (typ) payload.documentTypeCode = typ;
+        if (sourceIdParam) payload.ensureIds = [sourceIdParam];
+        const res = await fetch('/api/ai/suggest-documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          cache: 'no-store',
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          setSources([]);
+          return;
+        }
+        const data = (await res.json()) as {
+          suggestedDocuments?: Array<{
+            id: string;
+            title: string;
+            document_type_code?: string;
+            created_at?: string;
+          }>;
+        };
+        const list = data.suggestedDocuments ?? [];
+        setSources(
+          list.map((d) => ({
+            id: d.id,
+            title: d.title,
+            created_at: d.created_at ?? new Date().toISOString(),
+            document_type_code: d.document_type_code,
+          })),
+        );
 
-      const s = sourceSearchQuery.trim();
-      if (s) {
-        const pattern = `%${s}%`;
-        q = q.or(`title.ilike.${pattern},search_text.ilike.${pattern}`);
-      }
-
-      const { data } = await q.limit(20);
-
-      const list = data ?? [];
-      setSources(list);
-
-      if (sourceIdParam) {
-        const exists = list.some((d) => d.id === sourceIdParam);
-        if (exists) {
-          setSelectedSourceIds((prev) =>
-            prev.includes(sourceIdParam) ? prev : [...prev, sourceIdParam],
-          );
-        } else {
-          let one = supabase
-            .from('documents')
-            .select('id, title, created_at, document_type_code')
-            .is('archived_at', null)
-            .eq('id', sourceIdParam);
-          if (meAccess?.schoolNumber) {
-            one = one.eq('school_number', meAccess.schoolNumber);
-          }
-          const { data: sourceDoc } = await one.single();
-          if (sourceDoc) {
-            setSources((prev) => [sourceDoc as SourceDoc, ...prev]);
+        if (sourceIdParam) {
+          const exists = list.some((d) => d.id === sourceIdParam);
+          if (exists) {
             setSelectedSourceIds((prev) =>
               prev.includes(sourceIdParam) ? prev : [...prev, sourceIdParam],
             );
           }
         }
+      } catch {
+        setSources([]);
       }
     };
 
     void loadSources();
-  }, [sourceIdParam, meAccess?.schoolNumber, sourceTypeFilter, sourceSearchQuery]);
+  }, [sourceIdParam, sourceTypeFilter, sourceSearchQuery]);
 
   const toggleSource = (id: string) => {
     setSelectedSourceIds((prev) =>
@@ -417,8 +402,9 @@ function DraftAssistantContent() {
               Quellen für nächsten Vorschlag auswählen (optional):
             </p>
             <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
-              Es werden nur Dokumente der eigenen Schule angezeigt. Als Vorlagen stehen nur freigegebene oder
-              veröffentlichte Dokumente zur Verfügung.
+              Gleiche Suche und Leserechte wie beim Dashboard („Relevante Dokumente finden“): nur Ihre Schule,
+              nur Dokumente, die Sie lesen dürfen; nicht archiviert; alle Workflow-Status. Optional nach
+              Dokumenttyp eingrenzen.
             </p>
 
             <div className="mb-3 grid gap-2">
@@ -445,8 +431,11 @@ function DraftAssistantContent() {
 
               <div className="flex flex-col gap-1">
                 <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
-                  Suche (Titel + Inhalt)
+                  Suche
                 </label>
+                <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                  Geben Sie einen Suchbegriff ein und klicken Sie auf „Suchen“.
+                </p>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -479,16 +468,26 @@ function DraftAssistantContent() {
 
             {sources.length === 0 ? (
               <div className="space-y-2">
-                <p className="text-zinc-600 dark:text-zinc-400">
-                  Es wurden noch keine passenden Vorlagen gefunden. Laden Sie zunächst einige Dokumente hoch, um sie
-                  hier auswählen zu können.
-                </p>
-                <Link
-                  href="/upload"
-                  className="inline-flex h-8 items-center rounded-md bg-blue-600 px-3 text-[11px] font-medium text-white shadow-sm transition hover:bg-blue-700"
-                >
-                  Dokumente hochladen
-                </Link>
+                {!sourceSearchQuery.trim() &&
+                !sourceTypeFilter.trim() &&
+                !sourceIdParam ? (
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                    Geben Sie einen Suchbegriff ein und klicken Sie auf „Suchen“.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-zinc-600 dark:text-zinc-400">
+                      Keine lesbaren Vorlagen für diese Suche. Prüfen Sie die Schreibweise oder laden Sie passende
+                      Dokumente hoch.
+                    </p>
+                    <Link
+                      href="/upload"
+                      className="inline-flex h-8 items-center rounded-md bg-blue-600 px-3 text-[11px] font-medium text-white shadow-sm transition hover:bg-blue-700"
+                    >
+                      Dokumente hochladen
+                    </Link>
+                  </>
+                )}
               </div>
             ) : (
               <ul className="space-y-2">
@@ -496,16 +495,19 @@ function DraftAssistantContent() {
                   <li key={doc.id} className="flex items-start gap-2">
                     <input
                       type="checkbox"
-                      id={doc.id}
+                      id={`draft-src-${doc.id}`}
                       checked={selectedSourceIds.includes(doc.id)}
                       onChange={() => toggleSource(doc.id)}
                       className="mt-0.5"
                     />
-                    <label htmlFor={doc.id} className="flex flex-col">
-                      <span className="font-medium text-zinc-800 dark:text-zinc-100">
+                    <label htmlFor={`draft-src-${doc.id}`} className="flex flex-1 flex-col">
+                      <Link
+                        href={`/documents/${doc.id}`}
+                        className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+                      >
                         {doc.title}
-                      </span>
-                      <span className="text-[11px] text-zinc-500">
+                      </Link>
+                      <span className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
                         {doc.document_type_code ? `${doc.document_type_code} · ` : ''}
                         {new Date(doc.created_at).toLocaleDateString('de-DE')}
                       </span>

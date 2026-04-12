@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from '../../../../../lib/supabaseServerCli
 import { getDocumentText } from '../../../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../../../lib/llmClient';
 import { resolveUserAccess } from '../../../../../lib/documentAccess';
-import { extractKeywords } from '../../../../../lib/aiSearch';
+import { extractKeywords, getDocumentsByIds, getSuggestedDocuments } from '../../../../../lib/aiSearch';
 import {
   buildPromptSnippetFromChunks,
   pickTopChunksForQuestion,
@@ -58,28 +58,17 @@ export async function POST(req: NextRequest) {
     let docsToUse: { id: string; title: string; summary?: string | null }[] = [];
 
     if (sourceIds && sourceIds.length > 0) {
-      let selectedDocsQuery = supabase
-        .from('documents')
-        .select('id, title, summary')
-        .is('archived_at', null)
-        .in('id', sourceIds);
-      if (access.schoolNumber) selectedDocsQuery = selectedDocsQuery.eq('school_number', access.schoolNumber);
-      const { data } = await selectedDocsQuery;
-      docsToUse = (data ?? []).map((d) => ({ id: d.id, title: d.title, summary: (d as any).summary ?? null }));
+      const rows = await getDocumentsByIds(sourceIds, access);
+      docsToUse = rows.map((d) => ({ id: d.id, title: d.title, summary: d.summary ?? null }));
     }
 
     if (docsToUse.length === 0) {
-      let fallbackDocsQuery = supabase
-        .from('documents')
-        .select('id, title, summary')
-        .is('archived_at', null)
-        .eq('document_type_code', 'ELTERNBRIEF')
-        .in('status', ['FREIGEGEBEN', 'BESCHLUSS', 'VEROEFFENTLICHT'])
-        .order('created_at', { ascending: false })
-        .limit(5);
-      if (access.schoolNumber) fallbackDocsQuery = fallbackDocsQuery.eq('school_number', access.schoolNumber);
-      const { data } = await fallbackDocsQuery;
-      docsToUse = (data ?? []).map((d) => ({ id: d.id, title: d.title, summary: (d as any).summary ?? null }));
+      const hint = `${topic ?? ''} ${targetAudience ?? ''} ${purpose ?? ''}`.trim();
+      const rows = await getSuggestedDocuments(hint || ' ', access, {
+        maxResults: 5,
+        documentTypeCode: 'ELTERNBRIEF',
+      });
+      docsToUse = rows.map((d) => ({ id: d.id, title: d.title, summary: d.summary ?? null }));
     }
 
     const sourceTexts: { id: string; title: string; text: string }[] = [];

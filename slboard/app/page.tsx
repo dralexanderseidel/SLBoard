@@ -157,11 +157,11 @@ export default function Home() {
         if (res.ok && json.data) {
           setReviewOverdue(json.data);
         } else {
-          setReviewOverdueLoadError('Review-Hinweise konnten nicht geladen werden.');
+          setReviewOverdueLoadError('Evaluation/Wiedervorlage-Daten konnten nicht geladen werden.');
         }
       } catch {
         setReviewOverdue([]);
-        setReviewOverdueLoadError('Review-Hinweise konnten nicht geladen werden.');
+        setReviewOverdueLoadError('Evaluation/Wiedervorlage-Daten konnten nicht geladen werden.');
       } finally {
         setReviewOverdueLoading(false);
       }
@@ -582,11 +582,11 @@ export default function Home() {
               </div>
             )}
 
-            {/* Review überfällig */}
+            {/* Evaluation/Wiedervorlage */}
             {reviewOverdueLoading ? (
               <div className="rounded-lg border border-rose-200 bg-white p-4 text-sm shadow-sm dark:border-rose-900/40 dark:bg-zinc-900">
                 <h2 className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                  Review überfällig
+                  Evaluation/Wiedervorlage
                 </h2>
                 <div className="space-y-2">
                   {Array.from({ length: 3 }).map((_, idx) => (
@@ -597,7 +597,7 @@ export default function Home() {
             ) : reviewOverdue.length > 0 ? (
               <div className="rounded-lg border border-rose-200 bg-white p-4 text-sm shadow-sm dark:border-rose-900/40 dark:bg-zinc-900">
                 <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                  Review überfällig
+                  Evaluation/Wiedervorlage
                 </h2>
                 {reviewOverdueLoadError && (
                   <p className="mb-2 text-[11px] text-red-600 dark:text-red-400">{reviewOverdueLoadError}</p>
@@ -631,13 +631,13 @@ export default function Home() {
             ) : (
               <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <h2 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                  Review überfällig
+                  Evaluation/Wiedervorlage
                 </h2>
                 {reviewOverdueLoadError && (
                   <p className="mb-2 text-[11px] text-red-600 dark:text-red-400">{reviewOverdueLoadError}</p>
                 )}
                 <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                  Kein Review ist aktuell überfällig.
+                  Zurzeit keine überfälligen Termine.
                 </p>
               </div>
             )}

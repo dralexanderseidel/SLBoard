@@ -884,14 +884,14 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                  <table className="w-full min-w-[70rem] table-fixed text-left text-sm">
+                  <table className="w-full min-w-[58rem] table-fixed text-left text-sm">
                     <colgroup>
-                      <col className="w-[25%]" />
                       <col className="w-[20%]" />
+                      <col className="w-[22%]" />
                       <col className="w-[10%]" />
                       <col className="w-[15%]" />
                       <col className="w-[21%]" />
-                      <col className="w-[9%]" />
+                      <col className="w-[12%]" />
                     </colgroup>
                     <thead>
                       <tr className="border-b border-zinc-200 dark:border-zinc-700">

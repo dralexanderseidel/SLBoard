@@ -73,9 +73,9 @@ export async function POST(req: NextRequest) {
 
     let docList: DocRow[] = [];
     if (documentIds && documentIds.length > 0) {
-      docList = await getDocumentsByIds(documentIds, access.schoolNumber);
+      docList = await getDocumentsByIds(documentIds, access);
     } else {
-      docList = (await getSuggestedDocuments(trimmed, access.schoolNumber)).slice(0, MAX_DOCS);
+      docList = (await getSuggestedDocuments(trimmed, access)).slice(0, MAX_DOCS);
     }
 
     const sourceTexts: {

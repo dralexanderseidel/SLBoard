@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabaseClient';
 import { MIN_APP_PASSWORD_LENGTH } from '../lib/authPasswordConstants';
 
@@ -69,9 +70,12 @@ export function ChangePasswordDialog({ open, onClose }: Props) {
     onClose();
   };
 
-  return (
+  /** Portal auf document.body: sonst bleibt der Dialog im Header-Stacking-Context (z-40) und liegt unter dem Seiteninhalt. */
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-[max(5rem,12svh)] pb-10 sm:pt-[max(6rem,14svh)]"
       role="presentation"
       onMouseDown={(ev) => {
         if (ev.target === ev.currentTarget) onClose();
@@ -150,6 +154,7 @@ export function ChangePasswordDialog({ open, onClose }: Props) {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

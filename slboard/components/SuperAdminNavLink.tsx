@@ -1,28 +1,13 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
+import { useHeaderAccess } from './HeaderAccessContext';
 
 export function SuperAdminNavLink() {
-  const [show, setShow] = useState(false);
+  const { access, accessLoading } = useHeaderAccess();
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch('/api/super-admin/check', { credentials: 'include' });
-        const data = (await res.json()) as { superAdmin?: boolean };
-        if (!cancelled && data.superAdmin) setShow(true);
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!show) return null;
+  if (accessLoading || !access?.superAdmin) return null;
 
   return (
     <Link

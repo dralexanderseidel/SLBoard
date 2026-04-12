@@ -8,6 +8,82 @@ import { buildSearchIndex } from '../../../../lib/indexing';
 import { allowedNextStatuses, isValidWorkflowStatus } from '../../../../lib/documentWorkflow';
 
 /**
+ * GET: Dokumenten-Metadaten (Leserechte: Mandant + Schutzstufe/Rollen wie canReadDocument).
+ */
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const client = await createServerSupabaseClient();
+    const { data: { user } } = await client?.auth.getUser() ?? { data: { user: null } };
+    if (!user?.email) {
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
+    }
+
+    const supabase = supabaseServer();
+    if (!supabase) {
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
+    }
+
+    const { id: documentId } = await params;
+    const access = await resolveUserAccess(user.email, supabase);
+
+    const { data: doc, error: docError } = await supabase
+      .from('documents')
+      .select(
+        'id, title, document_type_code, created_at, archived_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, legal_reference, summary, summary_updated_at, review_date, current_version_id, steering_analysis, steering_analysis_updated_at, school_number',
+      )
+      .eq('id', documentId)
+      .single();
+
+    if (docError || !doc) {
+      return apiError(404, 'NOT_FOUND', 'Dokument nicht gefunden.');
+    }
+
+    const docSchool = (doc as { school_number?: string | null }).school_number ?? null;
+    const mayAccessSchool = canAccessSchool(access, docSchool);
+    const mayRead = canReadDocument(
+      access,
+      (doc as { protection_class_id?: number | null }).protection_class_id,
+      (doc as { responsible_unit?: string | null }).responsible_unit ?? null,
+    );
+    if (!mayAccessSchool || !mayRead) {
+      return apiError(403, 'FORBIDDEN', 'Keine Berechtigung für dieses Dokument.');
+    }
+
+    const { school_number: _sn, ...document } = doc as Record<string, unknown>;
+
+    type CurrentVersionRow = {
+      id: string;
+      version_number: string;
+      created_at: string;
+      file_uri: string;
+      mime_type: string;
+    };
+    let currentVersion: CurrentVersionRow | null = null;
+
+    const currentVersionId = (doc as { current_version_id?: string | null }).current_version_id;
+    if (currentVersionId) {
+      let vq = supabase
+        .from('document_versions')
+        .select('id, version_number, created_at, file_uri, mime_type')
+        .eq('id', currentVersionId);
+      if (docSchool) vq = vq.eq('school_number', docSchool);
+      const { data: ver } = await vq.single();
+      if (ver) {
+        currentVersion = ver as CurrentVersionRow;
+      }
+    }
+
+    return NextResponse.json({ document, currentVersion });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
+    return apiError(500, 'INTERNAL_ERROR', message);
+  }
+}
+
+/**
  * PATCH: Metadaten eines Dokuments aktualisieren (Titel, Status, Rechtsbezug, etc.)
  */
 export async function PATCH(

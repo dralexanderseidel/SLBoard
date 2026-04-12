@@ -163,60 +163,66 @@ export default function DocumentDetailPage() {
       setLoading(true);
       setError(null);
 
-      const { data, error } = await supabase
-        .from('documents')
-        .select(
-          'id, title, document_type_code, created_at, archived_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, legal_reference, summary, summary_updated_at, review_date, current_version_id, steering_analysis, steering_analysis_updated_at',
-        )
-        .eq('id', params.id)
-        .single();
+      const res = await fetch(`/api/documents/${params.id}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
 
-      if (error) {
-        const code = (error as { code?: string }).code;
-        const msg = error.message ?? '';
-        if (code === 'PGRST116' || msg.includes('single JSON object')) {
-          setError('Dieses Dokument ist nicht mehr verfügbar (gelöscht oder nicht gefunden).');
-        } else {
-          setError(msg);
+      if (!res.ok) {
+        let msg = 'Fehler beim Laden.';
+        try {
+          const j = (await res.json()) as { error?: string };
+          if (res.status === 403) {
+            msg = 'Keine Berechtigung, dieses Dokument einzusehen.';
+          } else if (res.status === 404) {
+            msg = 'Dieses Dokument ist nicht mehr verfügbar (gelöscht oder nicht gefunden).';
+          } else if (j.error) {
+            msg = j.error;
+          }
+        } catch {
+          // ignore
         }
+        setError(msg);
         setDoc(null);
       } else {
-        const typed = data as DocumentDetail & { current_version_id?: string | null };
-        setDoc(typed);
-        setSummary(typed?.summary?.trim() ?? null);
-        setSummaryUpdatedAt(typed?.summary_updated_at ?? null);
-        setSteeringAnalysis((typed.steering_analysis as SteeringAnalysis | null) ?? null);
-        setSteeringUpdatedAt(typed.steering_analysis_updated_at ?? null);
+        const json = (await res.json()) as {
+          document?: DocumentDetail & { current_version_id?: string | null };
+          currentVersion?: VersionInfo | null;
+        };
+        const typed = json.document;
+        if (!typed) {
+          setError('Ungültige Antwort vom Server.');
+          setDoc(null);
+        } else {
+          setDoc(typed);
+          setSummary(typed?.summary?.trim() ?? null);
+          setSummaryUpdatedAt(typed?.summary_updated_at ?? null);
+          setSteeringAnalysis((typed.steering_analysis as SteeringAnalysis | null) ?? null);
+          setSteeringUpdatedAt(typed.steering_analysis_updated_at ?? null);
 
-        if (typed.current_version_id) {
-          const { data: verData, error: verError } = await supabase
-            .from('document_versions')
-            .select('id, version_number, created_at, file_uri, mime_type')
-            .eq('id', typed.current_version_id)
-            .single();
-
-          if (!verError && verData) {
-            const v = verData as VersionInfo;
-            setVersion(v);
+          if (json.currentVersion) {
+            setVersion(json.currentVersion);
+          } else {
+            setVersion(null);
           }
-        }
 
-        // Versionen-Historie laden
-        try {
-          const verRes = await fetch(`/api/documents/${params.id}/versions`);
-          const verJson = (await verRes.json()) as { data?: Array<{ id: string; version_number: string; created_at: string; comment: string | null; mime_type: string | null; is_current: boolean }> };
-          if (verRes.ok && verJson.data) setAllVersions(verJson.data);
-        } catch {
-          setAllVersions([]);
-        }
-        setSelectedVersionId(typed.current_version_id ?? null);
+          // Versionen-Historie laden
+          try {
+            const verRes = await fetch(`/api/documents/${params.id}/versions`);
+            const verJson = (await verRes.json()) as { data?: Array<{ id: string; version_number: string; created_at: string; comment: string | null; mime_type: string | null; is_current: boolean }> };
+            if (verRes.ok && verJson.data) setAllVersions(verJson.data);
+          } catch {
+            setAllVersions([]);
+          }
+          setSelectedVersionId(typed.current_version_id ?? null);
 
-        try {
-          const auditRes = await fetch(`/api/documents/${params.id}/audit`);
-          const auditJson = (await auditRes.json()) as { data?: typeof auditLog };
-          if (auditRes.ok && auditJson.data) setAuditLog(auditJson.data);
-        } catch {
-          setAuditLog([]);
+          try {
+            const auditRes = await fetch(`/api/documents/${params.id}/audit`);
+            const auditJson = (await auditRes.json()) as { data?: typeof auditLog };
+            if (auditRes.ok && auditJson.data) setAuditLog(auditJson.data);
+          } catch {
+            setAuditLog([]);
+          }
         }
       }
 
@@ -1534,7 +1540,7 @@ export default function DocumentDetailPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="mb-0.5 block text-zinc-500">Review-Datum</label>
+                    <label className="mb-0.5 block text-zinc-500">Evaluation/Wiedervorlage</label>
                     <input
                       type="date"
                       value={(editForm.review_date as string) ?? ''}
@@ -1586,7 +1592,7 @@ export default function DocumentDetailPage() {
                     <dd>{doc.protection_class_id}</dd>
                   </div>
                   <div className="flex justify-between gap-3">
-                    <dt className="text-zinc-500">Review-Datum</dt>
+                    <dt className="text-zinc-500">Evaluation/Wiedervorlage</dt>
                     <dd>
                       {doc.review_date ? new Date(`${doc.review_date}T00:00:00`).toLocaleDateString('de-DE') : '—'}
                     </dd>

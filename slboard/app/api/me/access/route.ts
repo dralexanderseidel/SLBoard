@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
+import { isSuperAdmin } from '../../../../lib/superAdminAuth';
 
 export async function GET() {
   try {
@@ -18,6 +19,7 @@ export async function GET() {
     }
 
     const access = await resolveUserAccess(user.email, supabase);
+    const superAdmin = await isSuperAdmin(user.email, supabase);
     let schoolName: string | null = null;
 
     if (access.schoolNumber) {
@@ -33,6 +35,8 @@ export async function GET() {
       schoolNumber: access.schoolNumber,
       schoolName,
       orgUnit: access.orgUnit,
+      roles: access.roles,
+      superAdmin,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';

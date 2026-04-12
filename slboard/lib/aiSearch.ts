@@ -3,9 +3,43 @@
  */
 import { supabaseServer } from './supabaseServer';
 import { WORKFLOW_STATUS_ORDER, statusLabelDe } from './documentWorkflow';
+import {
+  canAccessSchool,
+  canReadDocument,
+  type UserAccessContext,
+} from './documentAccess';
 
-export const SEARCH_POOL = 25;
 export const MAX_DOCS = 8;
+
+/** Größerer Pool vor Leserechte-Filter, damit genug Treffer übrig bleiben. */
+const SEARCH_POOL_BEFORE_FILTER = 100;
+const FALLBACK_POOL_BEFORE_FILTER = 48;
+
+const MAX_RESULTS_CAP = 50;
+
+export type SuggestedDocumentsOptions = {
+  /** Standard: MAX_DOCS (8), z. B. Entwurfsassistent: 20 */
+  maxResults?: number;
+  /** Wenn gesetzt: nur dieser document_type_code */
+  documentTypeCode?: string | null;
+  /**
+   * false: keine „Stöbern“-Fallback-Liste (neueste lesbare), wenn keine Suchbegriffe.
+   * true (Standard): wie bisher; mit documentTypeCode ohne Text trotzdem nach Typ stöbern.
+   */
+  allowBrowseFallback?: boolean;
+};
+
+function clampMaxResults(n: number | undefined): number {
+  const v = n ?? MAX_DOCS;
+  return Math.min(Math.max(v, 1), MAX_RESULTS_CAP);
+}
+
+function filterDocsByReadAccess(access: UserAccessContext, rows: DocRow[]): DocRow[] {
+  return rows.filter((d) =>
+    canAccessSchool(access, d.school_number ?? null) &&
+    canReadDocument(access, d.protection_class_id ?? null, d.responsible_unit ?? null),
+  );
+}
 
 const STOP_WORDS = new Set([
   'und', 'oder', 'der', 'die', 'das', 'ein', 'eine', 'bei', 'von', 'zu', 'zur', 'mit', 'für',
@@ -48,6 +82,28 @@ export function extractKeywords(question: string): string[] {
   return [...expanded];
 }
 
+/** Volltext für Phrasen-ilike: keine Zeichen, die PostgREST-.or() zerlegen oder LIKE wildcards triggern. */
+function sanitizeForPhraseIlike(q: string): string {
+  return q
+    .replace(/,/g, ' ')
+    .replace(/[%_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+}
+
+/** Relevanz-Score: extrahierte Keywords oder einzelne Wörter (≥2) aus der Phrase. */
+function keywordsForScoring(question: string): string[] {
+  const fromExtract = extractKeywords(question);
+  if (fromExtract.length > 0) return fromExtract;
+  const safe = sanitizeForPhraseIlike(question);
+  const words = safe
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length >= 2 && !STOP_WORDS.has(w));
+  return [...new Set(words)];
+}
+
 export type DocRow = {
   id: string;
   title: string;
@@ -57,6 +113,8 @@ export type DocRow = {
   status?: string | null;
   legal_reference: string | null;
   responsible_unit: string | null;
+  protection_class_id?: number | null;
+  school_number?: string | null;
   gremium: string | null;
   reach_scope?: 'intern' | 'extern' | null;
   participation_groups?: string[] | null;
@@ -71,7 +129,7 @@ export type DocRow = {
  */
 export function buildDocumentMetadataPromptSection(doc: DocRow): string {
   const lines: string[] = [
-    'Metadaten (verbindlich für Fragen zu Gremium, Status, Reichweite, Review, Verantwortung):',
+    'Metadaten (verbindlich für Fragen zu Gremium, Status, Reichweite, Evaluation/Wiedervorlage, Verantwortung):',
   ];
   lines.push(`- Dokumenttyp (Code): ${doc.document_type_code ?? '—'}`);
   if (doc.status) {
@@ -97,7 +155,7 @@ export function buildDocumentMetadataPromptSection(doc: DocRow): string {
     lines.push(`- Beteiligung (Gruppen): ${pg.join(', ')}`);
   }
   const rd = doc.review_date?.trim();
-  if (rd) lines.push(`- Review-Datum: ${rd}`);
+  if (rd) lines.push(`- Evaluation/Wiedervorlage: ${rd}`);
   const lr = doc.legal_reference?.trim();
   if (lr) {
     lines.push(`- Rechtsbezug (Metadatenfeld): ${lr.length > 450 ? `${lr.slice(0, 450)}…` : lr}`);
@@ -126,15 +184,58 @@ export function scoreRelevance(doc: DocRow, keywords: string[]): number {
   return keywords.filter((k) => combined.includes(k.toLowerCase())).length;
 }
 
+const DOC_SELECT_FOR_SEARCH =
+  'id, title, document_type_code, created_at, status, reach_scope, participation_groups, review_date, legal_reference, responsible_unit, protection_class_id, school_number, gremium, summary, search_text, keywords';
+
 /**
  * Sucht Dokumente nach Frage (Keywords), sortiert nach Relevanz. Kein LLM.
+ * Ergebnisse sind auf vom Nutzer lesbare Dokumente begrenzt (Schutzstufe / Rollen).
  */
-export async function getSuggestedDocuments(question: string, schoolNumber?: string | null): Promise<DocRow[]> {
+export async function getSuggestedDocuments(
+  question: string,
+  access: UserAccessContext,
+  options?: SuggestedDocumentsOptions,
+): Promise<DocRow[]> {
   const supabase = supabaseServer();
   if (!supabase) return [];
 
+  const maxDocs = clampMaxResults(options?.maxResults);
+  const docType = options?.documentTypeCode?.trim() || null;
+  const allowBrowseFallback = options?.allowBrowseFallback ?? true;
+
+  const schoolNumber = access.schoolNumber;
+  const trimmedQ = question.trim();
+  const hasSearchIntent = trimmedQ.length > 0;
   const keywords = extractKeywords(question);
   let docList: DocRow[] = [];
+
+  const runPhraseSearch = async (): Promise<DocRow[]> => {
+    const safe = sanitizeForPhraseIlike(trimmedQ);
+    if (safe.length < 2) return [];
+    const pattern = `%${safe}%`;
+    const orParts = [
+      `title.ilike.${pattern}`,
+      `search_text.ilike.${pattern}`,
+      `summary.ilike.${pattern}`,
+      `legal_reference.ilike.${pattern}`,
+    ];
+    let phraseQuery = supabase
+      .from('documents')
+      .select(DOC_SELECT_FOR_SEARCH)
+      .is('archived_at', null)
+      .in('status', [...WORKFLOW_STATUS_ORDER])
+      .or(orParts.join(','))
+      .order('created_at', { ascending: false })
+      .limit(SEARCH_POOL_BEFORE_FILTER);
+    if (schoolNumber) phraseQuery = phraseQuery.eq('school_number', schoolNumber);
+    if (docType) phraseQuery = phraseQuery.eq('document_type_code', docType);
+    const { data: phraseRows } = await phraseQuery;
+    let typed = filterDocsByReadAccess(access, (phraseRows ?? []) as DocRow[]);
+    if (typed.length === 0) return [];
+    const kwScore = keywordsForScoring(trimmedQ);
+    typed.sort((a, b) => scoreRelevance(b, kwScore) - scoreRelevance(a, kwScore));
+    return typed.slice(0, maxDocs);
+  };
 
   if (keywords.length > 0) {
     const orParts: string[] = [];
@@ -156,36 +257,41 @@ export async function getSuggestedDocuments(question: string, schoolNumber?: str
     }
     let relevantQuery = supabase
       .from('documents')
-      .select(
-        'id, title, document_type_code, created_at, status, reach_scope, participation_groups, review_date, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
-      )
+      .select(DOC_SELECT_FOR_SEARCH)
       .is('archived_at', null)
       .in('status', [...WORKFLOW_STATUS_ORDER])
       .or(orParts.join(','))
       .order('created_at', { ascending: false })
-      .limit(SEARCH_POOL);
+      .limit(SEARCH_POOL_BEFORE_FILTER);
     if (schoolNumber) relevantQuery = relevantQuery.eq('school_number', schoolNumber);
+    if (docType) relevantQuery = relevantQuery.eq('document_type_code', docType);
     const { data: relevant } = await relevantQuery;
-    const typed = (relevant ?? []) as DocRow[];
-    if (typed.length > 0) {
+    let typed = filterDocsByReadAccess(access, (relevant ?? []) as DocRow[]);
+    if (typed.length === 0) {
+      docList = await runPhraseSearch();
+    } else {
       typed.sort((a, b) => scoreRelevance(b, keywords) - scoreRelevance(a, keywords));
-      docList = typed.slice(0, MAX_DOCS);
+      docList = typed.slice(0, maxDocs);
     }
+  } else if (hasSearchIntent) {
+    docList = await runPhraseSearch();
   }
 
   if (docList.length === 0) {
+    if (!allowBrowseFallback && !docType) {
+      return [];
+    }
     let fallbackQuery = supabase
       .from('documents')
-      .select(
-        'id, title, document_type_code, created_at, status, reach_scope, participation_groups, review_date, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
-      )
+      .select(DOC_SELECT_FOR_SEARCH)
       .is('archived_at', null)
       .in('status', [...WORKFLOW_STATUS_ORDER])
       .order('created_at', { ascending: false })
-      .limit(MAX_DOCS);
+      .limit(FALLBACK_POOL_BEFORE_FILTER);
     if (schoolNumber) fallbackQuery = fallbackQuery.eq('school_number', schoolNumber);
+    if (docType) fallbackQuery = fallbackQuery.eq('document_type_code', docType);
     const { data: fallback } = await fallbackQuery;
-    docList = (fallback ?? []) as DocRow[];
+    docList = filterDocsByReadAccess(access, (fallback ?? []) as DocRow[]).slice(0, maxDocs);
   }
 
   return docList;
@@ -193,23 +299,28 @@ export async function getSuggestedDocuments(question: string, schoolNumber?: str
 
 /**
  * Lädt Dokumente anhand von IDs (für KI-Anfrage mit fest gewählter Liste).
+ * Nur Einträge, die der Nutzer lesen darf.
  */
-export async function getDocumentsByIds(ids: string[], schoolNumber?: string | null): Promise<DocRow[]> {
+export async function getDocumentsByIds(ids: string[], access: UserAccessContext): Promise<DocRow[]> {
   const supabase = supabaseServer();
   if (!supabase || ids.length === 0) return [];
 
+  const schoolNumber = access.schoolNumber;
   let byIdsQuery = supabase
     .from('documents')
-    .select(
-      'id, title, document_type_code, created_at, status, reach_scope, participation_groups, review_date, legal_reference, responsible_unit, gremium, summary, search_text, keywords',
-    )
+    .select(DOC_SELECT_FOR_SEARCH)
     .in('id', ids)
     .in('status', [...WORKFLOW_STATUS_ORDER]);
   if (schoolNumber) byIdsQuery = byIdsQuery.eq('school_number', schoolNumber);
   const { data } = await byIdsQuery;
 
+  const allowed = new Set(
+    filterDocsByReadAccess(access, (data ?? []) as DocRow[]).map((d) => d.id),
+  );
   const order = new Map(ids.map((id, i) => [id, i]));
-  const list = (data ?? []) as DocRow[];
+  const list = (data ?? [])
+    .filter((row) => allowed.has((row as DocRow).id))
+    .map((row) => row as DocRow);
   list.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   return list;
 }
