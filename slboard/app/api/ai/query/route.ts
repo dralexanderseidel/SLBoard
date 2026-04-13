@@ -94,11 +94,18 @@ export async function POST(req: NextRequest) {
       maxChunks: MAX_CHUNKS_PER_DOC,
     };
 
+    // Alle Dokument-Texte parallel laden (statt sequentiell im Loop)
+    const docTextMap = new Map<string, string>(
+      await Promise.all(
+        docList.map(async (doc) => [doc.id, ((await getDocumentText(doc.id)) ?? '').trim()] as const)
+      )
+    );
+
     for (const doc of docList) {
       const metadataBlock = buildDocumentMetadataPromptSection(doc as DocRow);
 
       // Antwortqualität: zuerst Volltext chunken; KI-Zusammenfassung nur bei fehlendem/kurzem Extrakt.
-      const fullText = ((await getDocumentText(doc.id)) ?? '').trim();
+      const fullText = docTextMap.get(doc.id) ?? '';
       const summaryText = (doc.summary ?? '').trim();
       const legalText = ((doc.legal_reference as string) ?? '').trim();
 

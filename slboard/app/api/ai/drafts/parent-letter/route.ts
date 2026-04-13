@@ -79,8 +79,16 @@ export async function POST(req: NextRequest) {
       overlapChars: Math.max(0, Math.floor(aiSettings.chunk_overlap_chars ?? TEMPLATE_CHUNK_OVERLAP)),
       maxChunks: Math.max(1, Math.floor(aiSettings.max_chunks_per_doc ?? TEMPLATE_MAX_CHUNKS)),
     };
+
+    // Alle Dokument-Texte parallel laden (statt sequentiell im Loop)
+    const docTextMap = new Map<string, string>(
+      await Promise.all(
+        docsToUse.map(async (doc) => [doc.id, ((await getDocumentText(doc.id)) ?? '').trim()] as const)
+      )
+    );
+
     for (const doc of docsToUse) {
-      const fullText = ((await getDocumentText(doc.id)) ?? '').trim();
+      const fullText = docTextMap.get(doc.id) ?? '';
       const summary = (doc.summary ?? '').trim();
 
       // Optional schneller Kontext über Summary; Hauptsubstanz kommt aus relevanten Volltext-Passagen.

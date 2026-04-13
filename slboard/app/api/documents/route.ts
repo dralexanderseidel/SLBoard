@@ -184,6 +184,25 @@ export async function GET(req: NextRequest) {
       query = query.is('summary', null);
     }
 
+    // Steering-Filter: has/low/medium/high direkt in SQL via JSON-Operator
+    if (steeringFilter === 'has') {
+      query = query.or(
+        Object.values(STEERING_GESAMT_BY_LEVEL)
+          .map((v) => `steering_analysis->gesamtbewertung->>score.eq.${v}`)
+          .join(',')
+      );
+    } else if (steeringFilter === 'low' || steeringFilter === 'medium' || steeringFilter === 'high') {
+      query = query.filter(
+        'steering_analysis->gesamtbewertung->>score',
+        'eq',
+        STEERING_GESAMT_BY_LEVEL[steeringFilter]
+      );
+    }
+    // 'missing' wird nach dem Fetch in-memory gefiltert (erfordert Negation des JSON-Pfads)
+
+    // Sicherheitsnetz: max. 500 Dokumente pro Anfrage
+    query = query.limit(500);
+
     const { data, error } = await query;
 
     if (error) {
@@ -195,17 +214,8 @@ export async function GET(req: NextRequest) {
       canReadDocument(access, d.protection_class_id as number, d.responsible_unit as string | null)
     );
 
-    if (steeringFilter === 'has') {
-      filtered = filtered.filter((d) => isSteeringAnalysisPresent(d.steering_analysis));
-    } else if (steeringFilter === 'missing') {
+    if (steeringFilter === 'missing') {
       filtered = filtered.filter((d) => !isSteeringAnalysisPresent(d.steering_analysis));
-    } else if (
-      steeringFilter === 'low' ||
-      steeringFilter === 'medium' ||
-      steeringFilter === 'high'
-    ) {
-      const expected = STEERING_GESAMT_BY_LEVEL[steeringFilter];
-      filtered = filtered.filter((d) => steeringGesamtScore(d.steering_analysis) === expected);
     }
 
     return NextResponse.json({ data: filtered });

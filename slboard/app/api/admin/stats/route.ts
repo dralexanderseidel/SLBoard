@@ -26,14 +26,6 @@ export type AdminStatsPayload = {
   aiQueriesByDay: AdminStatsDayPoint[];
 };
 
-function dayKeyUtc(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(d.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
 
 function lastNDaysUTC(n: number): string[] {
   const out: string[] = [];
@@ -77,129 +69,58 @@ export async function GET() {
       );
     }
 
-    let userQuery = supabase.from('app_users').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool);
-    const { count: userCount, error: userErr } = await userQuery;
-    if (userErr) {
-      return apiError(500, 'INTERNAL_ERROR', userErr.message);
-    }
-
-    let docBase = supabase.from('documents').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool);
-    const { count: documentTotal, error: docErr } = await docBase;
-    if (docErr) {
-      return apiError(500, 'INTERNAL_ERROR', docErr.message);
-    }
-
-    let docActiveQ = supabase
-      .from('documents')
-      .select('*', { count: 'exact', head: true })
-      .is('archived_at', null);
-    docActiveQ = docActiveQ.eq('school_number', adminSchool);
-    const { count: documentActive, error: docActErr } = await docActiveQ;
-    if (docActErr) {
-      return apiError(500, 'INTERNAL_ERROR', docActErr.message);
-    }
-
-    let docArchQ = supabase
-      .from('documents')
-      .select('*', { count: 'exact', head: true })
-      .not('archived_at', 'is', null);
-    docArchQ = adminSchool ? docArchQ.eq('school_number', adminSchool) : docArchQ;
-    const { count: documentArchived, error: docArchErr } = await docArchQ;
-    if (docArchErr) {
-      return apiError(500, 'INTERNAL_ERROR', docArchErr.message);
-    }
-
-    let docPubQ = supabase
-      .from('documents')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'VEROEFFENTLICHT')
-      .is('archived_at', null);
-    docPubQ = docPubQ.eq('school_number', adminSchool);
-    const { count: documentPublished, error: docPubErr } = await docPubQ;
-    if (docPubErr) {
-      return apiError(500, 'INTERNAL_ERROR', docPubErr.message);
-    }
-
-    let llmTotalQ = supabase.from('ai_llm_calls').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool);
-    const { count: llmCallsTotal, error: llmTotErr } = await llmTotalQ;
-    if (llmTotErr) {
-      return apiError(500, 'INTERNAL_ERROR', llmTotErr.message);
-    }
-
-    let aiTotalQ = supabase.from('ai_queries').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool);
-    const { count: aiQueriesTotal, error: aiTotErr } = await aiTotalQ;
-    if (aiTotErr) {
-      return apiError(500, 'INTERNAL_ERROR', aiTotErr.message);
-    }
-
     const since7 = new Date();
     since7.setUTCDate(since7.getUTCDate() - 7);
     since7.setUTCHours(0, 0, 0, 0);
     const since7iso = since7.toISOString();
-
-    let llmLast7Q = supabase
-      .from('ai_llm_calls')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', since7iso)
-      .eq('school_number', adminSchool);
-    const { count: llmCallsLast7Days, error: llm7Err } = await llmLast7Q;
-    if (llm7Err) {
-      return apiError(500, 'INTERNAL_ERROR', llm7Err.message);
-    }
-
-    let aiLast7Q = supabase
-      .from('ai_queries')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', since7iso);
-    aiLast7Q = aiLast7Q.eq('school_number', adminSchool);
-    const { count: aiQueriesLast7Days, error: ai7Err } = await aiLast7Q;
-    if (ai7Err) {
-      return apiError(500, 'INTERNAL_ERROR', ai7Err.message);
-    }
 
     const since14 = new Date();
     since14.setUTCDate(since14.getUTCDate() - 14);
     since14.setUTCHours(0, 0, 0, 0);
     const since14iso = since14.toISOString();
 
-    let llmRowsQ = supabase
-      .from('ai_llm_calls')
-      .select('created_at')
-      .gte('created_at', since14iso)
-      .limit(20000);
-    llmRowsQ = llmRowsQ.eq('school_number', adminSchool);
-    const { data: llmRows, error: llmRowsErr } = await llmRowsQ;
-    if (llmRowsErr) {
-      return apiError(500, 'INTERNAL_ERROR', llmRowsErr.message);
+    const [
+      { count: userCount, error: userErr },
+      { count: documentTotal, error: docErr },
+      { count: documentActive, error: docActErr },
+      { count: documentArchived, error: docArchErr },
+      { count: documentPublished, error: docPubErr },
+      { count: llmCallsTotal, error: llmTotErr },
+      { count: aiQueriesTotal, error: aiTotErr },
+      { count: llmCallsLast7Days, error: llm7Err },
+      { count: aiQueriesLast7Days, error: ai7Err },
+    ] = await Promise.all([
+      supabase.from('app_users').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool),
+      supabase.from('documents').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool),
+      supabase.from('documents').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool).is('archived_at', null),
+      supabase.from('documents').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool).not('archived_at', 'is', null),
+      supabase.from('documents').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool).eq('status', 'VEROEFFENTLICHT').is('archived_at', null),
+      supabase.from('ai_llm_calls').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool),
+      supabase.from('ai_queries').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool),
+      supabase.from('ai_llm_calls').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool).gte('created_at', since7iso),
+      supabase.from('ai_queries').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool).gte('created_at', since7iso),
+    ]);
+
+    const firstErr = userErr ?? docErr ?? docActErr ?? docArchErr ?? docPubErr ?? llmTotErr ?? aiTotErr ?? llm7Err ?? ai7Err;
+    if (firstErr) {
+      return apiError(500, 'INTERNAL_ERROR', firstErr.message);
     }
 
-    let aiRowsQ = supabase
-      .from('ai_queries')
-      .select('created_at')
-      .gte('created_at', since14iso)
-      .limit(20000);
-    aiRowsQ = adminSchool ? aiRowsQ.eq('school_number', adminSchool) : aiRowsQ;
-    const { data: aiRows, error: aiRowsErr } = await aiRowsQ;
-    if (aiRowsErr) {
-      return apiError(500, 'INTERNAL_ERROR', aiRowsErr.message);
+    // Aggregierte Tageswerte via SQL – gibt nur aktive Tage zurück (max. ~14 Zeilen je Serie)
+    const { data: activityRows, error: activityErr } = await supabase.rpc(
+      'admin_stats_activity_by_day',
+      { p_school_number: adminSchool, p_since: since14iso }
+    );
+    if (activityErr) {
+      return apiError(500, 'INTERNAL_ERROR', activityErr.message);
     }
 
+    type ActivityRow = { series: string; day: string; count: number };
     const byDayLlm = new Map<string, number>();
-    for (const row of llmRows ?? []) {
-      const created = (row as { created_at?: string }).created_at;
-      if (!created) continue;
-      const k = dayKeyUtc(created);
-      if (!k) continue;
-      byDayLlm.set(k, (byDayLlm.get(k) ?? 0) + 1);
-    }
-
     const byDayAi = new Map<string, number>();
-    for (const row of aiRows ?? []) {
-      const created = (row as { created_at?: string }).created_at;
-      if (!created) continue;
-      const k = dayKeyUtc(created);
-      if (!k) continue;
-      byDayAi.set(k, (byDayAi.get(k) ?? 0) + 1);
+    for (const row of (activityRows ?? []) as ActivityRow[]) {
+      if (row.series === 'llm_calls') byDayLlm.set(row.day, Number(row.count));
+      else if (row.series === 'ai_queries') byDayAi.set(row.day, Number(row.count));
     }
 
     const dayLabels = lastNDaysUTC(14);

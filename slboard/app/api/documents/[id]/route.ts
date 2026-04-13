@@ -3,7 +3,6 @@ import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
-import { getDocumentText } from '../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../lib/indexing';
 import { allowedNextStatuses, isValidWorkflowStatus } from '../../../../lib/documentWorkflow';
 import { pickDocumentUpdateDelta } from '../../../../lib/auditDiff';
@@ -251,44 +250,36 @@ export async function PATCH(
       // audit_log Tabelle optional (Migration ggf. noch nicht ausgeführt)
     }
 
-    // GAP-Fix: Wenn index-relevante Metadaten geändert wurden, search_text/keywords sofort nachziehen,
-    // damit die Freitextsuche nicht bis zum nächsten Reindex/Version-Upload "hinterherhinkt".
+    // Wenn index-relevante Metadaten geändert wurden, search_text/keywords sofort nachziehen.
+    // Wir nutzen oldDoc (bereits geladen) + delta statt eines zweiten Fetches.
+    // PDF-Text wird NICHT neu extrahiert – der Dateiinhalt hat sich nicht geändert.
+    // Stattdessen wird der bestehende search_text als Proxy für den extrahierten Text verwendet,
+    // damit die Volltextsuche erhalten bleibt. Beim nächsten Versions-Upload erfolgt ein voller Reindex.
     const INDEX_RELEVANT_KEYS = new Set([
-      'title',
-      'document_type_code',
-      'gremium',
-      'responsible_unit',
-      'participation_groups',
-      'legal_reference',
-      'summary',
+      'title', 'document_type_code', 'gremium', 'responsible_unit',
+      'participation_groups', 'legal_reference', 'summary',
     ]);
     const shouldReindex = Object.keys(delta).some((k) => INDEX_RELEVANT_KEYS.has(k));
     if (shouldReindex) {
-      let docForIndexQuery = supabase
-        .from('documents')
-        .select('id, title, document_type_code, gremium, responsible_unit, reach_scope, participation_groups, summary, legal_reference, school_number')
-        .eq('id', documentId);
-      if (docSchool) docForIndexQuery = docForIndexQuery.eq('school_number', docSchool);
-      const { data: docForIndex } = await docForIndexQuery.single();
-
-      if (docForIndex?.title) {
-        let extractedText: string | null = null;
-        try {
-          extractedText = await getDocumentText(documentId);
-        } catch {
-          extractedText = null;
-        }
+      const merged = { ...(oldValues ?? {}), ...delta } as Record<string, unknown>;
+      const mergedTitle = typeof merged.title === 'string' ? merged.title : '';
+      if (mergedTitle.trim()) {
+        // Bestehenden search_text als extractedText-Proxy wiederverwenden (enthält vorherigen PDF-Auszug)
+        const existingSearchText = oldValues?.search_text;
+        const extractedTextProxy = typeof existingSearchText === 'string' && existingSearchText.trim()
+          ? existingSearchText
+          : null;
 
         const idx = buildSearchIndex({
-          title: String(docForIndex.title),
-          documentType: (docForIndex.document_type_code as string | null) ?? null,
-          gremium: (docForIndex.gremium as string | null) ?? null,
-          responsibleUnit: (docForIndex.responsible_unit as string | null) ?? null,
-          reachScope: (docForIndex.reach_scope as string | null) ?? null,
-          participationGroups: (docForIndex.participation_groups as string[] | null) ?? null,
-          summary: (docForIndex.summary as string | null) ?? null,
-          legalReference: (docForIndex.legal_reference as string | null) ?? null,
-          extractedText,
+          title: mergedTitle,
+          documentType: (merged.document_type_code as string | null) ?? null,
+          gremium: (merged.gremium as string | null) ?? null,
+          responsibleUnit: (merged.responsible_unit as string | null) ?? null,
+          reachScope: (merged.reach_scope as string | null) ?? null,
+          participationGroups: (merged.participation_groups as string[] | null) ?? null,
+          summary: (merged.summary as string | null) ?? null,
+          legalReference: (merged.legal_reference as string | null) ?? null,
+          extractedText: extractedTextProxy,
         });
 
         let idxUpdate = supabase

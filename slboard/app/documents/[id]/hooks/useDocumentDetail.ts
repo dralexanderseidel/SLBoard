@@ -70,20 +70,19 @@ export function useDocumentDetail(id: string | undefined): UseDocumentDetailResu
           setInitialVersion(json.currentVersion ?? null);
           setSelectedVersionId(typed.current_version_id ?? null);
 
-          try {
-            const verRes = await fetch(`/api/documents/${id}/versions`);
+          const [verRes, auditRes] = await Promise.all([
+            fetch(`/api/documents/${id}/versions`).catch(() => null),
+            fetch(`/api/documents/${id}/audit`).catch(() => null),
+          ]);
+
+          if (verRes?.ok) {
             const verJson = (await verRes.json()) as { data?: VersionRow[] };
-            if (verRes.ok && verJson.data) setAllVersions(verJson.data);
-          } catch {
-            setAllVersions([]);
+            if (verJson.data) setAllVersions(verJson.data);
           }
 
-          try {
-            const auditRes = await fetch(`/api/documents/${id}/audit`);
+          if (auditRes?.ok) {
             const auditJson = (await auditRes.json()) as { data?: AuditEntry[] };
-            if (auditRes.ok && auditJson.data) setAuditLog(auditJson.data);
-          } catch {
-            setAuditLog([]);
+            if (auditJson.data) setAuditLog(auditJson.data);
           }
         }
       }

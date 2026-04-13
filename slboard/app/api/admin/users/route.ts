@@ -37,34 +37,33 @@ export async function GET() {
       return apiError(500, 'INTERNAL_ERROR', error.message);
     }
 
-    const schoolNumbers = [
-      ...new Set((users ?? []).map((u) => u.school_number).filter((sn): sn is string => Boolean(sn))),
-    ];
-    let initialBySchool = new Map<string, string | null>();
-    if (schoolNumbers.length > 0) {
-      const { data: schoolRows } = await supabase
-        .from('schools')
-        .select('school_number, initial_admin_app_user_id')
-        .in('school_number', schoolNumbers);
-      initialBySchool = new Map(
-        (schoolRows ?? []).map((s) => [
-          s.school_number as string,
-          (s as { initial_admin_app_user_id?: string | null }).initial_admin_app_user_id ?? null,
-        ])
-      );
-    }
+    const userList = users ?? [];
+    const userIds = userList.map((u) => u.id);
+    const schoolNumbers = [...new Set(userList.map((u) => u.school_number).filter((sn): sn is string => Boolean(sn)))];
 
-    // Rollen pro Nutzer laden
-    const { data: allRoles } = await supabase
-      .from('user_roles')
-      .select('user_id, role_code');
-    const rolesByUser = (allRoles ?? []).reduce<Record<string, string[]>>((acc, r) => {
+    const [schoolRows, rolesRows] = await Promise.all([
+      schoolNumbers.length > 0
+        ? supabase.from('schools').select('school_number, initial_admin_app_user_id').in('school_number', schoolNumbers).then((r) => r.data)
+        : Promise.resolve([] as { school_number: string; initial_admin_app_user_id?: string | null }[]),
+      userIds.length > 0
+        ? supabase.from('user_roles').select('user_id, role_code').in('user_id', userIds).then((r) => r.data)
+        : Promise.resolve([] as { user_id: string; role_code: string }[]),
+    ]);
+
+    const initialBySchool = new Map(
+      (schoolRows ?? []).map((s) => [
+        s.school_number as string,
+        (s as { initial_admin_app_user_id?: string | null }).initial_admin_app_user_id ?? null,
+      ])
+    );
+
+    const rolesByUser = (rolesRows ?? []).reduce<Record<string, string[]>>((acc, r) => {
       if (!acc[r.user_id]) acc[r.user_id] = [];
       acc[r.user_id].push(r.role_code);
       return acc;
     }, {});
 
-    const usersWithRoles = (users ?? []).map((u) => {
+    const usersWithRoles = userList.map((u) => {
       const initialId = u.school_number ? initialBySchool.get(u.school_number) : null;
       const isInitialSchoolAdmin = Boolean(u.school_number && initialId === u.id);
       return {
