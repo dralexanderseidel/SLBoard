@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '../../../lib/supabaseClient';
+import { useEffect } from 'react';
 import {
   WORKFLOW_STATUS_ORDER,
   getNextWorkflowTransition,
@@ -17,282 +17,111 @@ import {
   auditValuesEqual,
   formatAuditScalarDe,
 } from '@/lib/auditDiff';
-
-type DocumentDetail = {
-  id: string;
-  title: string;
-  document_type_code: string;
-  created_at: string;
-  archived_at?: string | null;
-  status: string;
-  protection_class_id: number;
-  reach_scope: 'intern' | 'extern';
-  gremium: string | null;
-  responsible_unit: string;
-  participation_groups: string[] | null;
-  legal_reference: string | null;
-  summary: string | null;
-  review_date: string | null;
-  summary_updated_at?: string | null;
-  steering_analysis?: SteeringAnalysis | null;
-  steering_analysis_updated_at?: string | null;
-};
-
-type VersionInfo = {
-  id: string;
-  version_number: string;
-  created_at: string;
-  file_uri: string;
-  mime_type: string;
-};
-
-type SteeringAnalysis = {
-  tragfaehigkeit: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
-  belastungsgrad: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
-  entscheidungsstruktur: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
-  verbindlichkeit: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
-  passung: { score: 'gut' | 'kritisch'; begruendung: string };
-  gesamtbewertung: {
-    score: 'niedriger Steuerungsbedarf' | 'mittlerer Steuerungsbedarf' | 'hoher Steuerungsbedarf';
-    begruendung: string;
-  };
-};
-
-const DOC_TYPES = [
-  'PROTOKOLL',
-  'BESCHLUSSVORLAGE',
-  'KONZEPT',
-  'CURRICULUM',
-  'VEREINBARUNG',
-  'ELTERNBRIEF',
-  'RUNDSCHREIBEN',
-  'SITUATIVE_REGELUNG',
-];
-const ORG_UNITS = ['Schulleitung', 'Sekretariat', 'Fachschaft Deutsch', 'Fachschaft Mathematik', 'Fachschaft Englisch', 'Steuergruppe', 'Lehrkräfte'];
-const PARTICIPATION_GROUP_OPTIONS = [
-  'Schulkonferenz',
-  'Lehrerkonferenz',
-  'Fachkonferenz',
-  'Schülervertretung',
-  'Elternvertretung',
-  'Steuergruppe',
-  'Ganztagsteam',
-];
+import {
+  DEFAULT_SCHOOL_DOC_TYPES,
+  DEFAULT_ORG_UNIT_NAMES,
+  PARTICIPATION_GROUP_OPTIONS,
+  docTypeLabelDe,
+} from '@/lib/documentMeta';
+import { useDocumentDetail } from './hooks/useDocumentDetail';
+import { useDocumentPreview } from './hooks/useDocumentPreview';
+import { useDocumentSummary } from './hooks/useDocumentSummary';
+import { useDocumentSteering } from './hooks/useDocumentSteering';
+import { useDocumentAsk } from './hooks/useDocumentAsk';
+import { useDocumentMetadataOptions } from './hooks/useDocumentMetadataOptions';
+import type { DocumentDetail } from './types';
 
 export default function DocumentDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [doc, setDoc] = useState<DocumentDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [version, setVersion] = useState<VersionInfo | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewText, setPreviewText] = useState<string | null>(null);
-  const [previewTextLoading, setPreviewTextLoading] = useState(false);
-  const [summary, setSummary] = useState<string | null>(null);
-  const [summaryUpdatedAt, setSummaryUpdatedAt] = useState<string | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
-  const [docQuestionInput, setDocQuestionInput] = useState<string>('');
-  const [docQuestion, setDocQuestion] = useState<string>('');
-  const [docAnswer, setDocAnswer] = useState<string | null>(null);
-  const [docSources, setDocSources] = useState<Array<{ documentId: string; title: string; snippet: string }>>([]);
-  const [docAskLoading, setDocAskLoading] = useState(false);
-  const [docAskError, setDocAskError] = useState<string | null>(null);
-  const [steeringAnalysis, setSteeringAnalysis] = useState<SteeringAnalysis | null>(null);
-  const [steeringLoading, setSteeringLoading] = useState(false);
-  const [steeringError, setSteeringError] = useState<string | null>(null);
-  const [steeringUpdatedAt, setSteeringUpdatedAt] = useState<string | null>(null);
+
+  // ── Kern-Daten ──────────────────────────────────────────────────────────────
+  const {
+    doc, setDoc,
+    loading, error,
+    initialVersion,
+    allVersions,
+    selectedVersionId, setSelectedVersionId,
+    auditLog, setAuditLog,
+    reload,
+  } = useDocumentDetail(params?.id);
+
+  const { documentTypeOptions, responsibleUnitOptions } = useDocumentMetadataOptions();
+  const docTypeLabel = (code: string) => docTypeLabelDe(code, documentTypeOptions);
+
+  // ── Datei-Vorschau ──────────────────────────────────────────────────────────
+  const { version, previewUrl, previewText, previewTextLoading } = useDocumentPreview(
+    params?.id,
+    selectedVersionId,
+    allVersions,
+    initialVersion,
+  );
+
+  // ── KI-Features ────────────────────────────────────────────────────────────
+  const {
+    summary, setSummary,
+    summaryUpdatedAt, setSummaryUpdatedAt,
+    summaryLoading, summaryError,
+    handleSummarize,
+  } = useDocumentSummary(params?.id, doc, docTypeLabel);
+
+  const {
+    steeringAnalysis,
+    steeringUpdatedAt,
+    steeringLoading, steeringError,
+    handleSteeringAnalysis,
+  } = useDocumentSteering(params?.id, doc);
+
+  const {
+    docQuestionInput, setDocQuestionInput,
+    docQuestion, docAnswer, docSources,
+    docAskLoading, docAskError,
+    handleAskAboutThisDocument,
+  } = useDocumentAsk(params?.id, doc);
+
+  // ── Bearbeiten ──────────────────────────────────────────────────────────────
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<DocumentDetail>>({});
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [editParticipationInput, setEditParticipationInput] = useState('');
+  const [responsibleCustom, setResponsibleCustom] = useState(false);
+
+  // ── Version hochladen ───────────────────────────────────────────────────────
   const versionFormRef = useRef<HTMLFormElement>(null);
   const versionInputRef = useRef<HTMLInputElement>(null);
   const versionFileRef = useRef<File | null>(null);
   const [versionLoading, setVersionLoading] = useState(false);
   const [versionError, setVersionError] = useState<string | null>(null);
   const [versionFileName, setVersionFileName] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+
+  // ── Löschen / Archiv ────────────────────────────────────────────────────────
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [archiveLoading, setArchiveLoading] = useState(false);
+
+  // ── Workflow ────────────────────────────────────────────────────────────────
   const [workflowLoading, setWorkflowLoading] = useState(false);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
-  const [allVersions, setAllVersions] = useState<Array<{ id: string; version_number: string; created_at: string; comment: string | null; mime_type: string | null; is_current: boolean }>>([]);
-  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
-  const [auditLog, setAuditLog] = useState<Array<{ user_email: string; action: string; old_values: Record<string, unknown> | null; new_values: Record<string, unknown> | null; created_at: string }>>([]);
-  const [auditImportantOnly, setAuditImportantOnly] = useState(false);
-  const [editParticipationInput, setEditParticipationInput] = useState('');
-  const [documentTypeOptions, setDocumentTypeOptions] = useState<Array<{ code: string; label: string }>>([]);
-  const [responsibleUnitOptions, setResponsibleUnitOptions] = useState<string[]>([]);
-  const [responsibleCustom, setResponsibleCustom] = useState(false);
 
+  // ── Audit-Filter ────────────────────────────────────────────────────────────
+  const [auditImportantOnly, setAuditImportantOnly] = useState(false);
+
+  // ── Scroll-to-section via ?focus= ──────────────────────────────────────────
   useEffect(() => {
     const focus = searchParams.get('focus');
     if (focus !== 'summary' && focus !== 'steering') return;
     if (!doc) return;
-
     const t = window.setTimeout(() => {
       const el = document.getElementById(focus === 'steering' ? 'steering-section' : 'summary-section');
       el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 80);
-
     return () => window.clearTimeout(t);
   }, [searchParams, doc]);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch('/api/metadata/options', { credentials: 'include', cache: 'no-store' });
-        const data = (await res.json()) as {
-          documentTypes?: Array<{ code: string; label: string }>;
-          responsibleUnits?: string[];
-        };
-        if (!res.ok) return;
-        if (Array.isArray(data.documentTypes)) setDocumentTypeOptions(data.documentTypes);
-        if (Array.isArray(data.responsibleUnits)) setResponsibleUnitOptions(data.responsibleUnits);
-      } catch {
-        // ignore
-      }
-    };
-    void load();
-  }, []);
-
-  useEffect(() => {
-    const load = async () => {
-      if (!params?.id) return;
-
-      setLoading(true);
-      setError(null);
-
-      const res = await fetch(`/api/documents/${params.id}`, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
-
-      if (!res.ok) {
-        let msg = 'Fehler beim Laden.';
-        try {
-          const j = (await res.json()) as { error?: string };
-          if (res.status === 403) {
-            msg = 'Keine Berechtigung, dieses Dokument einzusehen.';
-          } else if (res.status === 404) {
-            msg = 'Dieses Dokument ist nicht mehr verfügbar (gelöscht oder nicht gefunden).';
-          } else if (j.error) {
-            msg = j.error;
-          }
-        } catch {
-          // ignore
-        }
-        setError(msg);
-        setDoc(null);
-      } else {
-        const json = (await res.json()) as {
-          document?: DocumentDetail & { current_version_id?: string | null };
-          currentVersion?: VersionInfo | null;
-        };
-        const typed = json.document;
-        if (!typed) {
-          setError('Ungültige Antwort vom Server.');
-          setDoc(null);
-        } else {
-          setDoc(typed);
-          setSummary(typed?.summary?.trim() ?? null);
-          setSummaryUpdatedAt(typed?.summary_updated_at ?? null);
-          setSteeringAnalysis((typed.steering_analysis as SteeringAnalysis | null) ?? null);
-          setSteeringUpdatedAt(typed.steering_analysis_updated_at ?? null);
-
-          if (json.currentVersion) {
-            setVersion(json.currentVersion);
-          } else {
-            setVersion(null);
-          }
-
-          // Versionen-Historie laden
-          try {
-            const verRes = await fetch(`/api/documents/${params.id}/versions`);
-            const verJson = (await verRes.json()) as { data?: Array<{ id: string; version_number: string; created_at: string; comment: string | null; mime_type: string | null; is_current: boolean }> };
-            if (verRes.ok && verJson.data) setAllVersions(verJson.data);
-          } catch {
-            setAllVersions([]);
-          }
-          setSelectedVersionId(typed.current_version_id ?? null);
-
-          try {
-            const auditRes = await fetch(`/api/documents/${params.id}/audit`);
-            const auditJson = (await auditRes.json()) as { data?: typeof auditLog };
-            if (auditRes.ok && auditJson.data) setAuditLog(auditJson.data);
-          } catch {
-            setAuditLog([]);
-          }
-        }
-      }
-
-      setLoading(false);
-    };
-
-    void load();
-  }, [params?.id, reloadKey]);
-
-  // Bei Wechsel der ausgewählten Version: Datei-URL laden
-  useEffect(() => {
-    if (!params?.id || !selectedVersionId) return;
-    const chosen = allVersions.find((v) => v.id === selectedVersionId);
-    if (!chosen) return;
-
-    let cancelled = false;
-    (async () => {
-      const res = await fetch(`/api/documents/${params.id}/file?versionId=${encodeURIComponent(selectedVersionId)}`);
-      const data = (await res.json()) as { signedUrl?: string; error?: string };
-      if (cancelled) return;
-      if (res.ok && data.signedUrl) {
-        setPreviewUrl(data.signedUrl);
-        setPreviewText(null);
-        setVersion({
-          id: chosen.id,
-          version_number: chosen.version_number,
-          created_at: chosen.created_at,
-          file_uri: '',
-          mime_type: chosen.mime_type ?? 'application/pdf',
-        });
-      } else {
-        setPreviewUrl(null);
-        setPreviewText(null);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [params?.id, selectedVersionId, allVersions]);
-
-  // Text-Vorschau für text/plain laden
-  useEffect(() => {
-    if (!previewUrl || version?.mime_type !== 'text/plain') {
-      setPreviewText(null);
-      setPreviewTextLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setPreviewTextLoading(true);
-    (async () => {
-      try {
-        const res = await fetch(previewUrl);
-        if (!res.ok) throw new Error('Textvorschau konnte nicht geladen werden.');
-        const text = await res.text();
-        if (!cancelled) setPreviewText(text);
-      } catch {
-        if (!cancelled) setPreviewText(null);
-      } finally {
-        if (!cancelled) setPreviewTextLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [previewUrl, version?.mime_type]);
+  // ── Handler ─────────────────────────────────────────────────────────────────
 
   const handleWorkflowStep = async (newStatus: string) => {
     if (!params?.id || doc?.archived_at) return;
@@ -307,7 +136,7 @@ export default function DocumentDetailPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Status konnte nicht geändert werden.');
       setDoc((prev) => (prev ? { ...prev, status: newStatus } : null));
-      setReloadKey((k) => k + 1);
+      reload();
     } catch (e) {
       setWorkflowError(e instanceof Error ? e.message : 'Fehler beim Status-Wechsel.');
     } finally {
@@ -347,7 +176,7 @@ export default function DocumentDetailPage() {
       if (!res.ok) throw new Error(data.error ?? 'Fehler beim Speichern.');
       setDoc((prev) => (prev ? { ...prev, ...editForm } : null));
       setIsEditing(false);
-      setReloadKey((k) => k + 1);
+      reload();
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Fehler beim Speichern.');
     } finally {
@@ -384,12 +213,11 @@ export default function DocumentDetailPage() {
       if (!res.ok) throw new Error(data.error ?? 'Fehler beim Hochladen.');
       versionFileRef.current = null;
       setVersionFileName(null);
-      setSummary(null);
-      setSummaryUpdatedAt(null);
-      setDoc((prev) => (prev ? { ...prev, summary: null } : null));
       versionFormRef.current?.reset();
       if (versionInputRef.current) versionInputRef.current.value = '';
-      setReloadKey((k) => k + 1);
+      // Zusammenfassung beim nächsten Reload leeren (über doc.summary → useDocumentSummary synct)
+      setDoc((prev) => (prev ? { ...prev, summary: null, summary_updated_at: null } : null));
+      reload();
     } catch (err) {
       setVersionError(err instanceof Error ? err.message : 'Fehler beim Hochladen.');
     } finally {
@@ -406,7 +234,7 @@ export default function DocumentDetailPage() {
   const handleArchiveToVault = async () => {
     if (!params?.id || !doc) return;
     const ok = window.confirm(
-      `Dokument „${doc.title}“ ins Archiv legen?\n\nEs erscheint nicht mehr in der normalen Liste; gespeicherte KI-Anfragen mit Verweis darauf bleiben nutzbar.`,
+      `Dokument „${doc.title}" ins Archiv legen?\n\nEs erscheint nicht mehr in der normalen Liste; gespeicherte KI-Anfragen mit Verweis darauf bleiben nutzbar.`,
     );
     if (!ok) return;
     setArchiveLoading(true);
@@ -427,7 +255,7 @@ export default function DocumentDetailPage() {
           prev ? { ...prev, archived_at: data.document!.archived_at ?? null } : null,
         );
       } else {
-        setReloadKey((k) => k + 1);
+        reload();
       }
       try {
         const auditRes = await fetch(`/api/documents/${params.id}/audit`);
@@ -445,7 +273,7 @@ export default function DocumentDetailPage() {
 
   const handleRestoreFromVault = async () => {
     if (!params?.id || !doc) return;
-    const ok = window.confirm(`Dokument „${doc.title}“ aus dem Archiv wiederherstellen?`);
+    const ok = window.confirm(`Dokument „${doc.title}" aus dem Archiv wiederherstellen?`);
     if (!ok) return;
     setArchiveLoading(true);
     setDeleteError(null);
@@ -465,7 +293,7 @@ export default function DocumentDetailPage() {
           prev ? { ...prev, archived_at: data.document!.archived_at ?? null } : null,
         );
       } else {
-        setReloadKey((k) => k + 1);
+        reload();
       }
       try {
         const auditRes = await fetch(`/api/documents/${params.id}/audit`);
@@ -498,173 +326,9 @@ export default function DocumentDetailPage() {
     }
   };
 
-  const handleSummarize = async () => {
-    if (!doc) return;
-    setSummaryLoading(true);
-    setSummaryError(null);
+  // ── Hilfs-Funktionen ────────────────────────────────────────────────────────
 
-    // Vorab: prüfen, ob der PDF/DOC-Text überhaupt extrahierbar ist.
-    // Bei Scan-PDFs liefern pdf-parse/mammoth oft keinen Text (OCR wäre nötig).
-    try {
-      const res = await fetch(`/api/documents/${params?.id as string}/extract-text`);
-      const data = (await res.json()) as { hasText?: boolean; error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'OCR-/Extraktions-Check fehlgeschlagen.');
-      if (!data.hasText) {
-        setSummaryLoading(false);
-        setSummaryError(
-          'Dieses Dokument enthält keinen extrahierbaren Text (vermutlich Scan-PDF). Für sinnvolle Ergebnisse wird OCR benötigt. Bitte lade eine "suchbare" PDF oder eine Text-/DOCX-Version hoch.'
-        );
-        return;
-      }
-    } catch (e) {
-      // Falls der Check fehlschlägt, machen wir wie bisher weiter (LLM kann ggf. auch mit Metadaten arbeiten).
-    }
-
-    const payload = {
-      documentId: params?.id,
-      title: doc.title,
-      type: docTypeLabel(doc.document_type_code),
-      createdAt: new Date(doc.created_at).toLocaleDateString('de-DE'),
-      text:
-        doc.legal_reference ??
-        `Dieses Dokument ist ein ${docTypeLabel(doc.document_type_code)}. Verantwortlich ist ${doc.responsible_unit}${
-          doc.gremium ? `, Beschlussgremium: ${doc.gremium}` : ''
-        }.`,
-    };
-
-    const run = async (attempt: number) => {
-      try {
-        const res = await fetch('/api/summarize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          // Rate-Limit-Handling mit einem automatischen Retry
-          const isRateLimited =
-            res.status === 429 ||
-            (typeof data?.details?.error?.code === 'number' && data.details.error.code === 429) ||
-            (typeof data?.details?.error?.metadata?.raw === 'string' &&
-              data.details.error.metadata.raw.toLowerCase().includes('rate-limited'));
-
-          if (isRateLimited && attempt === 1) {
-            setSummaryError(
-              'Das verwendete kostenlose KI-Modell ist aktuell ausgelastet. Es wird automatisch ein zweiter Versuch gestartet …',
-            );
-            // kurzer Backoff, dann zweiter Versuch
-            await new Promise((resolve) => setTimeout(resolve, 1500));
-            await run(2);
-            return;
-          }
-
-          const msgBase =
-            data.error ||
-            'Fehler bei der KI-Zusammenfassung. Bitte versuchen Sie es später erneut.';
-
-          const detailsText =
-            typeof data.details === 'string'
-              ? data.details
-              : data.details
-              ? JSON.stringify(data.details)
-              : '';
-
-          const msg = detailsText ? `${msgBase}: ${detailsText}` : msgBase;
-          setSummaryError(msg);
-        } else {
-          setSummary(data.summary);
-          setSummaryError(null);
-          setSummaryUpdatedAt(new Date().toISOString());
-        }
-      } catch (e: any) {
-        setSummaryError(e?.message ?? 'Fehler bei der KI-Zusammenfassung.');
-      } finally {
-        setSummaryLoading(false);
-      }
-    };
-
-    await run(1);
-  };
-
-  const handleAskAboutThisDocument = async () => {
-    const q = docQuestionInput.trim();
-    if (!doc || !params?.id || !q) return;
-    setDocAskLoading(true);
-    setDocAskError(null);
-    setDocAnswer(null);
-    setDocSources([]);
-    setDocQuestion(q);
-
-    // Vorab: falls der Text nicht extrahierbar ist, geben wir eine klare Info statt eines "leeren" Kontextes.
-    try {
-      const res = await fetch(`/api/documents/${params?.id as string}/extract-text`);
-      const data = (await res.json()) as { hasText?: boolean; error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'OCR-/Extraktions-Check fehlgeschlagen.');
-      if (!data.hasText) {
-        setDocAskLoading(false);
-        setDocAskError(
-          'Dieses Dokument enthält keinen extrahierbaren Text (vermutlich Scan-PDF). Für sinnvolle Antworten wird OCR benötigt.'
-        );
-        return;
-      }
-    } catch (e) {
-      // Wie bisher fortfahren, falls der Check fehlschlägt.
-    }
-
-    try {
-      const res = await fetch('/api/ai/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q, documentIds: [params.id] }),
-      });
-      const data = (await res.json()) as {
-        answer?: string;
-        sources?: Array<{ documentId: string; title: string; snippet: string }>;
-        error?: string;
-      };
-      if (!res.ok) throw new Error(data.error ?? 'Fehler bei der KI-Anfrage.');
-      setDocAnswer(data.answer ?? null);
-      setDocSources(data.sources ?? []);
-    } catch (e) {
-      setDocAskError(e instanceof Error ? e.message : 'Fehler bei der KI-Anfrage.');
-    } finally {
-      setDocAskLoading(false);
-    }
-  };
-
-  const handleSteeringAnalysis = async (force = false) => {
-    if (!params?.id) return;
-    setSteeringLoading(true);
-    setSteeringError(null);
-    try {
-      const res = await fetch(`/api/documents/${params.id}/steering-analysis`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ force }),
-      });
-      const data = (await res.json()) as { analysis?: SteeringAnalysis; error?: string; updatedAt?: string | null };
-      if (!res.ok || !data.analysis) {
-        throw new Error(data.error ?? 'Analyse konnte nicht erstellt werden.');
-      }
-      setSteeringAnalysis(data.analysis);
-      if (data.updatedAt !== undefined) {
-        setSteeringUpdatedAt(data.updatedAt ?? null);
-      } else if (force) {
-        setSteeringUpdatedAt(new Date().toISOString());
-      }
-    } catch (e) {
-      setSteeringError(e instanceof Error ? e.message : 'Analyse konnte nicht erstellt werden.');
-    } finally {
-      setSteeringLoading(false);
-    }
-  };
-
-  const trafficLight = (
-    score: 'niedrig' | 'mittel' | 'hoch',
-    invert = false
-  ) => {
+  const trafficLight = (score: 'niedrig' | 'mittel' | 'hoch', invert = false) => {
     if (invert) {
       if (score === 'niedrig') return 'bg-red-500';
       if (score === 'mittel') return 'bg-amber-400';
@@ -673,18 +337,6 @@ export default function DocumentDetailPage() {
     if (score === 'niedrig') return 'bg-emerald-500';
     if (score === 'mittel') return 'bg-amber-400';
     return 'bg-red-500';
-  };
-
-  const docTypeLabel = (code: string) => {
-    if (code === 'PROTOKOLL') return 'Protokoll';
-    if (code === 'BESCHLUSSVORLAGE') return 'Beschlussvorlage';
-    if (code === 'ELTERNBRIEF') return 'Elternbrief';
-    if (code === 'KONZEPT') return 'Konzept';
-    if (code === 'CURRICULUM') return 'Curriculum';
-    if (code === 'RUNDSCHREIBEN') return 'Rundschreiben';
-    if (code === 'VEREINBARUNG') return 'Vereinbarung';
-    if (code === 'SITUATIVE_REGELUNG') return 'Situative Regelung';
-    return code;
   };
 
   const whoLabel = (email: string) => {
@@ -746,10 +398,9 @@ export default function DocumentDetailPage() {
 
       if (Object.prototype.hasOwnProperty.call(newVals, 'status')) {
         if (!auditValuesEqual(oldVals.status, newVals.status)) {
-          const from =
-            typeof oldVals.status === 'string' ? statusLabelDe(oldVals.status) : '—';
+          const from = typeof oldVals.status === 'string' ? statusLabelDe(oldVals.status) : '—';
           const to = typeof newVals.status === 'string' ? statusLabelDe(newVals.status) : '—';
-          changes.push(`Status von „${from}“ zu „${to}“ geändert`);
+          changes.push(`Status von „${from}" zu „${to}" geändert`);
         }
       }
 
@@ -757,7 +408,7 @@ export default function DocumentDetailPage() {
         if (!auditValuesEqual(oldVals.title, newVals.title)) {
           const from = formatAuditScalarDe('title', oldVals.title);
           const to = formatAuditScalarDe('title', newVals.title);
-          changes.push(`Titel von „${from}“ zu „${to}“ geändert`);
+          changes.push(`Titel von „${from}" zu „${to}" geändert`);
         }
       }
 
@@ -771,7 +422,7 @@ export default function DocumentDetailPage() {
             changes.push('dieses Dokument aus dem Archiv wiederhergestellt');
           } else {
             changes.push(
-              `„${auditMetadataFieldLabelDe('archived_at')}“ von „${formatAuditScalarDe('archived_at', oldVals.archived_at)}“ zu „${formatAuditScalarDe('archived_at', newVals.archived_at)}“ geändert`,
+              `„${auditMetadataFieldLabelDe('archived_at')}" von „${formatAuditScalarDe('archived_at', oldVals.archived_at)}" zu „${formatAuditScalarDe('archived_at', newVals.archived_at)}" geändert`,
             );
           }
         }
@@ -785,7 +436,7 @@ export default function DocumentDetailPage() {
         const label = auditMetadataFieldLabelDe(k);
         const from = formatAuditScalarDe(k, oldVals[k]);
         const to = formatAuditScalarDe(k, newVals[k]);
-        changes.push(`„${label}“ von „${from}“ zu „${to}“ geändert`);
+        changes.push(`„${label}" von „${from}" zu „${to}" geändert`);
       }
 
       if (changes.length === 0) {
@@ -796,6 +447,8 @@ export default function DocumentDetailPage() {
 
     return `${who} hat eine Änderung vorgenommen (${entry.action}).`;
   };
+
+  // ── JSX ─────────────────────────────────────────────────────────────────────
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -971,73 +624,49 @@ export default function DocumentDetailPage() {
                     Text-Vorschau
                   </h3>
                   {previewTextLoading ? (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">Text wird geladen…</p>
+                    <p className="text-xs text-zinc-500">Lade Textvorschau…</p>
                   ) : previewText ? (
-                    <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed">
-                      {previewText}
-                    </pre>
+                    <pre className="whitespace-pre-wrap text-xs">{previewText}</pre>
                   ) : (
-                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                      Die Textvorschau konnte nicht geladen werden.
-                    </p>
+                    <p className="text-xs text-zinc-500">Textvorschau nicht verfügbar.</p>
                   )}
                 </div>
               )}
 
-              {!previewUrl && doc.legal_reference && doc.legal_reference.length > 50 && (
-                <div className="mb-3 max-h-80 overflow-y-auto rounded border border-zinc-200 bg-white p-4 text-sm text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
-                  <h3 className="mb-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
-                    Entwurfstext
-                  </h3>
-                  <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed">
-                    {doc.legal_reference}
-                  </pre>
-                </div>
-              )}
-
-              {!previewUrl && (!doc.legal_reference || doc.legal_reference.length <= 50) && (
+              {!previewUrl && (
                 <p className="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
-                  Für dieses Dokument steht noch keine Vorschau zur Verfügung.
+                  Keine Dateivorschau verfügbar.
                 </p>
               )}
 
-              {version && previewUrl && (
-                <a
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mb-3 inline-flex items-center text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
-                >
-                  Dokument in neuem Tab öffnen
-                </a>
-              )}
-
-              <div className="mt-3 rounded border border-dashed border-zinc-200 bg-zinc-50 p-3 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
-                <p className="mb-1 font-medium">Kurzbeschreibung</p>
-                <p>
-                  Dieses Dokument ist ein {docTypeLabel(doc.document_type_code)}. Verantwortlich:{' '}
-                  <span className="font-medium">{doc.responsible_unit}</span>
-                  {' '}
-                  · Reichweite <span className="font-medium">{doc.reach_scope}</span>
-                  {doc.gremium && (
-                    <>
-                      {' '}
-                      · Beschlussgremium <span className="font-medium">{doc.gremium}</span>
-                    </>
-                  )}
-                  {(doc.participation_groups ?? []).length > 0 && (
-                    <>
-                      {' '}
-                      · Beteiligung{' '}
-                      <span className="font-medium">{(doc.participation_groups ?? []).join(', ')}</span>
-                    </>
-                  )}
-                  . Erstelldatum:{' '}
-                  <span className="font-medium">
-                    {new Date(doc.created_at).toLocaleDateString('de-DE')}
-                  </span>
-                  .
-                </p>
+              <div className="mb-2 rounded border border-zinc-200 bg-zinc-50/80 p-2 text-[11px] text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/30 dark:text-zinc-300">
+                <span className="font-medium text-zinc-700 dark:text-zinc-200">
+                  {docTypeLabel(doc.document_type_code)}
+                </span>
+                {doc.responsible_unit && (
+                  <>
+                    {' '}
+                    · Verantwortlich <span className="font-medium">{doc.responsible_unit}</span>
+                  </>
+                )}
+                {doc.gremium && (
+                  <>
+                    {' '}
+                    · Beschlussgremium <span className="font-medium">{doc.gremium}</span>
+                  </>
+                )}
+                {(doc.participation_groups ?? []).length > 0 && (
+                  <>
+                    {' '}
+                    · Beteiligung{' '}
+                    <span className="font-medium">{(doc.participation_groups ?? []).join(', ')}</span>
+                  </>
+                )}
+                . Erstelldatum:{' '}
+                <span className="font-medium">
+                  {new Date(doc.created_at).toLocaleDateString('de-DE')}
+                </span>
+                .
               </div>
 
               <div
@@ -1080,7 +709,7 @@ export default function DocumentDetailPage() {
                 {!summary && !summaryLoading && !summaryError && (
                   <p className="text-zinc-600 dark:text-zinc-300">
                     Noch keine Zusammenfassung vorhanden. Klicken Sie auf „Zusammenfassung
-                    erzeugen“, um eine KI-basierte Kurzfassung zu erhalten.
+                    erzeugen", um eine KI-basierte Kurzfassung zu erhalten.
                   </p>
                 )}
               </div>
@@ -1105,7 +734,7 @@ export default function DocumentDetailPage() {
                           void handleAskAboutThisDocument();
                         }
                       }}
-                      placeholder="z. B. Was gilt hier bei …?"
+                      placeholder="z. B. Was gilt hier bei …?"
                       className="h-8 w-full rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                     />
                     <button
@@ -1142,7 +771,7 @@ export default function DocumentDetailPage() {
                               </Link>
                               {s.snippet && (
                                 <p className="mt-0.5 italic text-zinc-500 dark:text-zinc-400">
-                                  "{s.snippet}"
+                                  &quot;{s.snippet}&quot;
                                 </p>
                               )}
                             </li>
@@ -1386,16 +1015,7 @@ export default function DocumentDetailPage() {
                     >
                       {(documentTypeOptions.length > 0
                         ? documentTypeOptions
-                        : [
-                            { code: 'PROTOKOLL', label: 'Protokoll' },
-                            { code: 'BESCHLUSSVORLAGE', label: 'Beschlussvorlage' },
-                            { code: 'KONZEPT', label: 'Konzept' },
-                            { code: 'CURRICULUM', label: 'Curriculum' },
-                            { code: 'VEREINBARUNG', label: 'Vereinbarung' },
-                            { code: 'ELTERNBRIEF', label: 'Elternbrief' },
-                            { code: 'RUNDSCHREIBEN', label: 'Rundschreiben' },
-                            { code: 'SITUATIVE_REGELUNG', label: 'Situative Regelung' },
-                          ]
+                        : DEFAULT_SCHOOL_DOC_TYPES
                       ).map((t) => (
                         <option key={t.code} value={t.code}>
                           {t.label}
@@ -1418,7 +1038,7 @@ export default function DocumentDetailPage() {
                         }}
                         className="w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-950"
                       >
-                        {(responsibleUnitOptions.length > 0 ? responsibleUnitOptions : ORG_UNITS).map((u) => (
+                        {(responsibleUnitOptions.length > 0 ? responsibleUnitOptions : DEFAULT_ORG_UNIT_NAMES).map((u) => (
                           <option key={u} value={u}>
                             {u}
                           </option>
@@ -1580,7 +1200,7 @@ export default function DocumentDetailPage() {
                   </div>
                   <div>
                     <label className="mb-0.5 block text-zinc-500">
-                      Rechtsbezug <span className="font-normal text-zinc-400">(wird mit „Speichern“ übernommen)</span>
+                      Rechtsbezug <span className="font-normal text-zinc-400">(wird mit „Speichern" übernommen)</span>
                     </label>
                     <textarea
                       value={(editForm.legal_reference as string) ?? ''}
@@ -1856,4 +1476,3 @@ export default function DocumentDetailPage() {
     </main>
   );
 }
-

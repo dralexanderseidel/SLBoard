@@ -4,8 +4,6 @@ import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient
 import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
 
-const createdById = '00000000-0000-0000-0000-000000000001';
-
 /**
  * Entwurf als echtes Dokument übernehmen: Dokument anlegen + Entwurfstext als erste Version (.txt).
  */
@@ -22,6 +20,7 @@ export async function POST(req: NextRequest) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
     const access = await resolveUserAccess(user.email, supabase);
+    const createdById = access.appUserId;
     const schoolNumber = access.schoolNumber ?? '000000';
 
     const body = await req.json();

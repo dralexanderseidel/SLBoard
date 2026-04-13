@@ -106,8 +106,8 @@ export async function POST(req: NextRequest) {
     }
 
     const protectionId = Math.max(1, Math.min(3, parseInt(protectionClass, 10) || 1));
-    const createdById = '00000000-0000-0000-0000-000000000001'; // Platzhalter; später aus Session
     const access = await resolveUserAccess(user.email, supabase);
+    const createdById = access.appUserId;
     const schoolNumber = access.schoolNumber ?? '000000';
 
     // 1) Dokument anlegen

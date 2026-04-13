@@ -1,6 +1,7 @@
 /**
  * Vergleich und Delta für Dokument-Audit-Logs (PATCH-Metadaten).
  */
+import { docTypeLabelDe } from './documentMeta';
 
 export function auditValuesEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
@@ -40,16 +41,6 @@ export function pickDocumentUpdateDelta(
   return out;
 }
 
-const DOC_TYPE_LABEL_DE: Record<string, string> = {
-  PROTOKOLL: 'Protokoll',
-  BESCHLUSSVORLAGE: 'Beschlussvorlage',
-  ELTERNBRIEF: 'Elternbrief',
-  KONZEPT: 'Konzept',
-  CURRICULUM: 'Curriculum',
-  RUNDSCHREIBEN: 'Rundschreiben',
-  VEREINBARUNG: 'Vereinbarung',
-  SITUATIVE_REGELUNG: 'Situative Regelung',
-};
 
 export const AUDIT_METADATA_LABEL_DE: Record<string, string> = {
   gremium: 'Gremium',
@@ -89,8 +80,7 @@ export function formatAuditScalarDe(fieldKey: string, value: unknown): string {
     return v.length ? truncate(v.join(', ')) : '—';
   }
   if (fieldKey === 'document_type_code') {
-    const c = String(value).trim();
-    return DOC_TYPE_LABEL_DE[c] ?? c;
+    return docTypeLabelDe(String(value).trim());
   }
   if (fieldKey === 'reach_scope') {
     const v = String(value).toLowerCase();

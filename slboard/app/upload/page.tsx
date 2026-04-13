@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { PARTICIPATION_GROUP_OPTIONS } from '@/lib/documentMeta';
 
 type Status = 'ENTWURF' | 'FREIGEGEBEN' | 'BESCHLUSS' | 'VEROEFFENTLICHT';
 type ReachScope = 'intern' | 'extern';
@@ -11,15 +12,6 @@ type UploadItem = {
   title: string;
 };
 
-const PARTICIPATION_GROUP_OPTIONS = [
-  'Schulkonferenz',
-  'Lehrerkonferenz',
-  'Fachkonferenz',
-  'Schülervertretung',
-  'Elternvertretung',
-  'Steuergruppe',
-  'Ganztagsteam',
-];
 
 export default function UploadPage() {
   const getTodayISODateLocal = () => {

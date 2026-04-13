@@ -12,8 +12,3 @@ export function supabaseServer(): SupabaseClient | null {
   if (!url || !serviceKey) return null
   return createClient(url, serviceKey, { auth: { persistSession: false } })
 }
-
-/** @deprecated Verwende supabaseServer(). */
-export const supabaseAdmin = url && serviceKey
-  ? createClient(url, serviceKey, { auth: { persistSession: false } })
-  : null

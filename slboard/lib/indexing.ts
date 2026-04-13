@@ -15,7 +15,7 @@ export type IndexResult = {
   searchText: string;
 };
 
-const STOP_WORDS = new Set([
+export const STOP_WORDS = new Set([
   'und', 'oder', 'der', 'die', 'das', 'ein', 'eine', 'bei', 'von', 'zu', 'zur', 'mit', 'für',
   'auf', 'ist', 'sind', 'wird', 'werden', 'hat', 'haben', 'kann', 'können', 'soll', 'sollen',
   'was', 'wie', 'welche', 'welcher', 'wann', 'wo', 'warum', 'wer',

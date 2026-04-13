@@ -5,6 +5,8 @@ type SupabaseAdmin = ReturnType<typeof supabaseServer>;
 
 export type UserAccessContext = {
   hasAppUser: boolean;
+  /** UUID des app_users-Eintrags; null wenn kein Eintrag gefunden */
+  appUserId: string | null;
   orgUnit: string | null;
   schoolNumber: string | null;
   roles: string[];
@@ -16,6 +18,7 @@ export type UserAccessContext = {
 
 const emptyContext = (): UserAccessContext => ({
   hasAppUser: false,
+  appUserId: null,
   orgUnit: null,
   schoolNumber: null,
   roles: [],
@@ -80,6 +83,7 @@ export async function getUserAccessContext(
 
     return {
       hasAppUser: true,
+      appUserId: appUser!.id as string,
       orgUnit: (appUser!.org_unit as string | null) ?? null,
       schoolNumber: (appUser!.school_number as string | null) ?? null,
       roles,

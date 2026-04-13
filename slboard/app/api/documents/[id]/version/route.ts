@@ -149,7 +149,7 @@ export async function POST(
       );
     }
 
-    const createdById = '00000000-0000-0000-0000-000000000001';
+    const createdById = access.appUserId;
 
     const { data: verData, error: verError } = await supabase
       .from('document_versions')

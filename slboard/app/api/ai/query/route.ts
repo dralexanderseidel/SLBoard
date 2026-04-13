@@ -212,9 +212,8 @@ export async function POST(req: NextRequest) {
       snippet: s.evidenceSnippet,
     }));
 
-    const userId = '00000000-0000-0000-0000-000000000001';
     await supabase.from('ai_queries').insert({
-      user_id: userId,
+      user_id: access.appUserId,
       school_number: access.schoolNumber ?? null,
       question: trimmed,
       answer_excerpt: answer.slice(0, 500),
