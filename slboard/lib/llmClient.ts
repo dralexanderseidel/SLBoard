@@ -1,6 +1,16 @@
 /**
  * Generischer LLM-Aufruf (OpenAI-kompatibel + Google Gemini).
  */
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { logLlmCall, type LlmUseCase } from './aiLlmCalls';
+
+export type CallLlmUsageContext = {
+  supabase: SupabaseClient;
+  schoolNumber: string | null | undefined;
+  useCase: LlmUseCase;
+  metadata?: Record<string, unknown> | null;
+};
+
 const llmUrl = () => process.env.LLM_API_URL?.trim();
 const llmKey = () => process.env.LLM_API_KEY?.trim();
 const llmModel = () => process.env.LLM_MODEL?.trim();
@@ -12,6 +22,8 @@ export function isLlmConfigured(): boolean {
 type CallLlmOptions = {
   timeoutMs?: number;
   maxAttempts?: number;
+  /** Nach jeder erfolgreichen Provider-Antwort: Eintrag in ai_llm_calls. */
+  usage?: CallLlmUsageContext;
 };
 
 const DEFAULT_TIMEOUT_MS = 45_000;
@@ -111,6 +123,14 @@ export async function callLlm(
       const content = isGoogleApi
         ? json.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
         : json.choices?.[0]?.message?.content ?? '';
+
+      if (options?.usage) {
+        await logLlmCall(options.usage.supabase, {
+          schoolNumber: options.usage.schoolNumber,
+          useCase: options.usage.useCase,
+          metadata: options.usage.metadata,
+        });
+      }
 
       return content;
     } catch (err: unknown) {

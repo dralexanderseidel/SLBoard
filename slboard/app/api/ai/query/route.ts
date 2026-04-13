@@ -199,6 +199,11 @@ export async function POST(req: NextRequest) {
 
     const answer = await callLlm(systemPrompt, userPrompt, {
       timeoutMs: aiSettings.llm_timeout_ms,
+      usage: {
+        supabase,
+        schoolNumber: access.schoolNumber,
+        useCase: 'qa',
+      },
     });
 
     const sourcesPayload = sourceTexts.map((s) => ({

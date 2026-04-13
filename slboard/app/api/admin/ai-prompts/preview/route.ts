@@ -144,7 +144,15 @@ export async function POST(req: NextRequest) {
     }
 
     const aiSettings = await getAiSettingsForSchool(schoolNumber);
-    const raw = await callLlm(systemPrompt, userPrompt, { timeoutMs: aiSettings.llm_timeout_ms });
+    const raw = await callLlm(systemPrompt, userPrompt, {
+      timeoutMs: aiSettings.llm_timeout_ms,
+      usage: {
+        supabase,
+        schoolNumber,
+        useCase: 'prompt_preview',
+        metadata: { template_use_case: useCase },
+      },
+    });
     const parsed = extractJsonObject(raw);
     const steeringValidation = useCase === 'steering' ? validateSteeringShape(parsed) : null;
     return NextResponse.json({

@@ -16,6 +16,11 @@ export type AdminStatsPayload = {
   documentActive: number;
   documentArchived: number;
   documentPublished: number;
+  /** Physische LLM-Antworten (ai_llm_calls). */
+  llmCallsTotal: number;
+  llmCallsLast7Days: number;
+  llmCallsByDay: AdminStatsDayPoint[];
+  /** Gespeicherte Dashboard-KI-Anfragen (ai_queries). */
   aiQueriesTotal: number;
   aiQueriesLast7Days: number;
   aiQueriesByDay: AdminStatsDayPoint[];
@@ -115,6 +120,12 @@ export async function GET() {
       return apiError(500, 'INTERNAL_ERROR', docPubErr.message);
     }
 
+    let llmTotalQ = supabase.from('ai_llm_calls').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool);
+    const { count: llmCallsTotal, error: llmTotErr } = await llmTotalQ;
+    if (llmTotErr) {
+      return apiError(500, 'INTERNAL_ERROR', llmTotErr.message);
+    }
+
     let aiTotalQ = supabase.from('ai_queries').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool);
     const { count: aiQueriesTotal, error: aiTotErr } = await aiTotalQ;
     if (aiTotErr) {
@@ -124,10 +135,22 @@ export async function GET() {
     const since7 = new Date();
     since7.setUTCDate(since7.getUTCDate() - 7);
     since7.setUTCHours(0, 0, 0, 0);
+    const since7iso = since7.toISOString();
+
+    let llmLast7Q = supabase
+      .from('ai_llm_calls')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', since7iso)
+      .eq('school_number', adminSchool);
+    const { count: llmCallsLast7Days, error: llm7Err } = await llmLast7Q;
+    if (llm7Err) {
+      return apiError(500, 'INTERNAL_ERROR', llm7Err.message);
+    }
+
     let aiLast7Q = supabase
       .from('ai_queries')
       .select('*', { count: 'exact', head: true })
-      .gte('created_at', since7.toISOString());
+      .gte('created_at', since7iso);
     aiLast7Q = aiLast7Q.eq('school_number', adminSchool);
     const { count: aiQueriesLast7Days, error: ai7Err } = await aiLast7Q;
     if (ai7Err) {
@@ -137,10 +160,23 @@ export async function GET() {
     const since14 = new Date();
     since14.setUTCDate(since14.getUTCDate() - 14);
     since14.setUTCHours(0, 0, 0, 0);
+    const since14iso = since14.toISOString();
+
+    let llmRowsQ = supabase
+      .from('ai_llm_calls')
+      .select('created_at')
+      .gte('created_at', since14iso)
+      .limit(20000);
+    llmRowsQ = llmRowsQ.eq('school_number', adminSchool);
+    const { data: llmRows, error: llmRowsErr } = await llmRowsQ;
+    if (llmRowsErr) {
+      return apiError(500, 'INTERNAL_ERROR', llmRowsErr.message);
+    }
+
     let aiRowsQ = supabase
       .from('ai_queries')
       .select('created_at')
-      .gte('created_at', since14.toISOString())
+      .gte('created_at', since14iso)
       .limit(20000);
     aiRowsQ = adminSchool ? aiRowsQ.eq('school_number', adminSchool) : aiRowsQ;
     const { data: aiRows, error: aiRowsErr } = await aiRowsQ;
@@ -148,19 +184,32 @@ export async function GET() {
       return apiError(500, 'INTERNAL_ERROR', aiRowsErr.message);
     }
 
-    const byDayMap = new Map<string, number>();
+    const byDayLlm = new Map<string, number>();
+    for (const row of llmRows ?? []) {
+      const created = (row as { created_at?: string }).created_at;
+      if (!created) continue;
+      const k = dayKeyUtc(created);
+      if (!k) continue;
+      byDayLlm.set(k, (byDayLlm.get(k) ?? 0) + 1);
+    }
+
+    const byDayAi = new Map<string, number>();
     for (const row of aiRows ?? []) {
       const created = (row as { created_at?: string }).created_at;
       if (!created) continue;
       const k = dayKeyUtc(created);
       if (!k) continue;
-      byDayMap.set(k, (byDayMap.get(k) ?? 0) + 1);
+      byDayAi.set(k, (byDayAi.get(k) ?? 0) + 1);
     }
 
     const dayLabels = lastNDaysUTC(14);
+    const llmCallsByDay: AdminStatsDayPoint[] = dayLabels.map((date) => ({
+      date,
+      count: byDayLlm.get(date) ?? 0,
+    }));
     const aiQueriesByDay: AdminStatsDayPoint[] = dayLabels.map((date) => ({
       date,
-      count: byDayMap.get(date) ?? 0,
+      count: byDayAi.get(date) ?? 0,
     }));
 
     const payload: AdminStatsPayload = {
@@ -171,6 +220,9 @@ export async function GET() {
       documentActive: documentActive ?? 0,
       documentArchived: documentArchived ?? 0,
       documentPublished: documentPublished ?? 0,
+      llmCallsTotal: llmCallsTotal ?? 0,
+      llmCallsLast7Days: llmCallsLast7Days ?? 0,
+      llmCallsByDay,
       aiQueriesTotal: aiQueriesTotal ?? 0,
       aiQueriesLast7Days: aiQueriesLast7Days ?? 0,
       aiQueriesByDay,

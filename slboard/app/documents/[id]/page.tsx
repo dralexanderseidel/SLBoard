@@ -12,6 +12,11 @@ import {
   workflowStatusBadgeClass,
   type WorkflowStatus,
 } from '@/lib/documentWorkflow';
+import {
+  auditMetadataFieldLabelDe,
+  auditValuesEqual,
+  formatAuditScalarDe,
+} from '@/lib/auditDiff';
 
 type DocumentDetail = {
   id: string;
@@ -708,12 +713,22 @@ export default function DocumentDetailPage() {
 
   const isImportantAuditEntry = (entry: (typeof auditLog)[number]) => {
     if (entry.action === 'version.upload') return false;
+    if (entry.action !== 'document.update') return false;
+    const oldVals = entry.old_values ?? {};
     const newVals = entry.new_values ?? {};
-    // Wichtig: Status/Veröffentlichung, Archiv
-    return (
-      Object.prototype.hasOwnProperty.call(newVals, 'status') ||
-      Object.prototype.hasOwnProperty.call(newVals, 'archived_at')
-    );
+    if (
+      Object.prototype.hasOwnProperty.call(newVals, 'status') &&
+      !auditValuesEqual(oldVals.status, newVals.status)
+    ) {
+      return true;
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(newVals, 'archived_at') &&
+      !auditValuesEqual(oldVals.archived_at, newVals.archived_at)
+    ) {
+      return true;
+    }
+    return false;
   };
 
   const formatAuditSummary = (entry: (typeof auditLog)[number]) => {
@@ -730,38 +745,51 @@ export default function DocumentDetailPage() {
       const changes: string[] = [];
 
       if (Object.prototype.hasOwnProperty.call(newVals, 'status')) {
-        const from = typeof oldVals.status === 'string' ? statusLabelDe(oldVals.status) : '—';
-        const to = typeof newVals.status === 'string' ? statusLabelDe(newVals.status) : '—';
-        changes.push(`Status von „${from}“ zu „${to}“ geändert`);
+        if (!auditValuesEqual(oldVals.status, newVals.status)) {
+          const from =
+            typeof oldVals.status === 'string' ? statusLabelDe(oldVals.status) : '—';
+          const to = typeof newVals.status === 'string' ? statusLabelDe(newVals.status) : '—';
+          changes.push(`Status von „${from}“ zu „${to}“ geändert`);
+        }
       }
 
       if (Object.prototype.hasOwnProperty.call(newVals, 'title')) {
-        const from = typeof oldVals.title === 'string' ? oldVals.title : '—';
-        const to = typeof newVals.title === 'string' ? newVals.title : '—';
-        changes.push(`Titel geändert von „${from}“ zu „${to}“`);
+        if (!auditValuesEqual(oldVals.title, newVals.title)) {
+          const from = formatAuditScalarDe('title', oldVals.title);
+          const to = formatAuditScalarDe('title', newVals.title);
+          changes.push(`Titel von „${from}“ zu „${to}“ geändert`);
+        }
       }
 
       if (Object.prototype.hasOwnProperty.call(newVals, 'archived_at')) {
-        const hadArchive = oldVals.archived_at != null && String(oldVals.archived_at).length > 0;
-        const hasArchive = newVals.archived_at != null && String(newVals.archived_at).length > 0;
-        if (hasArchive && !hadArchive) {
-          changes.push('dieses Dokument ins Archiv gelegt');
-        } else if (!hasArchive && hadArchive) {
-          changes.push('dieses Dokument aus dem Archiv wiederhergestellt');
-        } else {
-          changes.push('den Archiv-Status angepasst');
+        if (!auditValuesEqual(oldVals.archived_at, newVals.archived_at)) {
+          const hadArchive = oldVals.archived_at != null && String(oldVals.archived_at).length > 0;
+          const hasArchive = newVals.archived_at != null && String(newVals.archived_at).length > 0;
+          if (hasArchive && !hadArchive) {
+            changes.push('dieses Dokument ins Archiv gelegt');
+          } else if (!hasArchive && hadArchive) {
+            changes.push('dieses Dokument aus dem Archiv wiederhergestellt');
+          } else {
+            changes.push(
+              `„${auditMetadataFieldLabelDe('archived_at')}“ von „${formatAuditScalarDe('archived_at', oldVals.archived_at)}“ zu „${formatAuditScalarDe('archived_at', newVals.archived_at)}“ geändert`,
+            );
+          }
         }
       }
 
       const otherKeys = Object.keys(newVals).filter(
         (k) => k !== 'status' && k !== 'title' && k !== 'archived_at',
       );
-      if (otherKeys.length > 0) {
-        changes.push(`Metadaten angepasst (${otherKeys.join(', ')})`);
+      for (const k of otherKeys.sort()) {
+        if (auditValuesEqual(oldVals[k], newVals[k])) continue;
+        const label = auditMetadataFieldLabelDe(k);
+        const from = formatAuditScalarDe(k, oldVals[k]);
+        const to = formatAuditScalarDe(k, newVals[k]);
+        changes.push(`„${label}“ von „${from}“ zu „${to}“ geändert`);
       }
 
       if (changes.length === 0) {
-        return `${who} hat Metadaten geändert.`;
+        return `${who} hat Metadaten geändert (ohne erkennbare Feldänderung).`;
       }
       return `${who} hat ${changes.join('; ')}.`;
     }

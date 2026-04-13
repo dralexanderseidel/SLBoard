@@ -11,6 +11,8 @@ type UsageRow = {
   document_count: number;
   ai_queries_total: number;
   ai_queries_month: number;
+  llm_calls_total: number;
+  llm_calls_month: number;
 };
 
 function parseQuota(n: unknown): number | null | undefined {
@@ -71,6 +73,8 @@ export async function GET() {
           documentCount: Number(u?.document_count ?? 0),
           aiQueriesTotal: Number(u?.ai_queries_total ?? 0),
           aiQueriesThisMonth: Number(u?.ai_queries_month ?? 0),
+          llmCallsTotal: Number(u?.llm_calls_total ?? 0),
+          llmCallsThisMonth: Number(u?.llm_calls_month ?? 0),
         },
       };
     });

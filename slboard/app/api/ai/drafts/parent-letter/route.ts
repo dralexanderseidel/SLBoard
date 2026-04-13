@@ -158,6 +158,12 @@ TEXT:
 
     const rawResponse = await callLlm(systemPrompt, userPrompt, {
       timeoutMs: aiSettings.llm_timeout_ms,
+      usage: {
+        supabase,
+        schoolNumber: access.schoolNumber,
+        useCase: 'parent_letter',
+        metadata: { source_ids: docsToUse.map((d) => d.id) },
+      },
     });
 
     let suggestedTitle = topic;

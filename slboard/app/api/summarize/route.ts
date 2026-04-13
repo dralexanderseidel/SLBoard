@@ -81,6 +81,12 @@ export async function POST(req: NextRequest) {
 
     const summary = await callLlm(systemPrompt, userPrompt, {
       timeoutMs: aiSettings.llm_timeout_ms,
+      usage: {
+        supabase,
+        schoolNumber: access.schoolNumber,
+        useCase: 'summary',
+        metadata: documentId ? { document_id: documentId } : null,
+      },
     });
     const summaryText = summary || 'Keine Zusammenfassung vom LLM zurückgegeben.';
 

@@ -245,8 +245,15 @@ export async function POST(
 
     let didRetry = false;
     let usedRepair = false;
+    const schoolForUsage = access.schoolNumber ?? '000000';
     let raw = await callLlm(systemPrompt, userPrompt, {
       timeoutMs: aiSettings.llm_timeout_ms,
+      usage: {
+        supabase,
+        schoolNumber: schoolForUsage,
+        useCase: 'steering',
+        metadata: { document_id: documentId, phase: 'primary' },
+      },
     });
     let parsed = extractJsonObject(raw);
     let analysis = normalizeAnalysis(parsed);
@@ -266,6 +273,12 @@ WICHTIG:
 Antworte jetzt ausschließlich mit einem syntaktisch gültigen JSON-Objekt.`;
       raw = await callLlm(retrySystemPrompt, retryUserPrompt, {
         timeoutMs: aiSettings.llm_timeout_ms,
+        usage: {
+          supabase,
+          schoolNumber: schoolForUsage,
+          useCase: 'steering',
+          metadata: { document_id: documentId, phase: 'retry' },
+        },
       });
       parsed = extractJsonObject(raw);
       analysis = normalizeAnalysis(parsed);
@@ -293,6 +306,12 @@ ${raw}
 `;
       raw = await callLlm(repairSystemPrompt, repairUserPrompt, {
         timeoutMs: aiSettings.llm_timeout_ms,
+        usage: {
+          supabase,
+          schoolNumber: schoolForUsage,
+          useCase: 'steering',
+          metadata: { document_id: documentId, phase: 'repair' },
+        },
       });
       parsed = extractJsonObject(raw);
       analysis = normalizeAnalysis(parsed);

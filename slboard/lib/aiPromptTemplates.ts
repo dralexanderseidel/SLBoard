@@ -44,10 +44,25 @@ const LOCKED_TEMPLATES: Record<PromptUseCase, PromptTemplateParts> = {
 Du analysierst schulische Dokumente nicht inhaltlich, sondern strukturell entlang eines Steuerungsmodells.
 
 Das Modell umfasst vier Dimensionen:
-1. Tragfaehigkeit (Organisation)
+
+1. Tragfähigkeit (Organisation)
+→ Was kann die Schule aktuell leisten?
+
 2. Belastungsgrad (Dokument)
+→ Wie stark fordert das Dokument die Organisation heraus?
+
 3. Entscheidungsstruktur
+→ Ist klar geregelt, wer wann entscheidet und wie?
+
 4. Verbindlichkeit
+→ Wie klar und stabil sind die Regelungen formuliert?
+
+Bestimme zusätzlich die PASSUNG:
+
+- gut → Tragfähigkeit ≥ Belastungsgrad
+- kritisch → Tragfähigkeit < Belastungsgrad
+
+Vergleiche die Stufen ordinal: niedrig < mittel < hoch (gleiche Stufe zählt als Gleichstand, also „≥“).
 
 Evidenz-Logik:
 - Fuer Tragfaehigkeit: Schul-Steckbrief (falls vorhanden) einbeziehen.

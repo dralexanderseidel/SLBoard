@@ -8,6 +8,8 @@ type SchoolUsage = {
   documentCount: number;
   aiQueriesTotal: number;
   aiQueriesThisMonth: number;
+  llmCallsTotal: number;
+  llmCallsThisMonth: number;
 };
 
 type SchoolRow = {
@@ -395,8 +397,14 @@ export default function SuperAdminPage() {
                         {fmtQuota(s.usage.userCount, qUsers)}
                       </td>
                       <td className="p-2 tabular-nums">{fmtQuota(s.usage.documentCount, qDocs)}</td>
-                      <td className="p-2 tabular-nums">{s.usage.aiQueriesTotal.toLocaleString('de-DE')}</td>
-                      <td className="p-2 tabular-nums">{s.usage.aiQueriesThisMonth.toLocaleString('de-DE')}</td>
+                      <td className="p-2 tabular-nums">{(s.usage.llmCallsTotal ?? 0).toLocaleString('de-DE')}</td>
+                      <td className="p-2 tabular-nums">{(s.usage.llmCallsThisMonth ?? 0).toLocaleString('de-DE')}</td>
+                      <td className="p-2 tabular-nums text-zinc-600 dark:text-zinc-400">
+                        {s.usage.aiQueriesTotal.toLocaleString('de-DE')}
+                      </td>
+                      <td className="p-2 tabular-nums text-zinc-600 dark:text-zinc-400">
+                        {s.usage.aiQueriesThisMonth.toLocaleString('de-DE')}
+                      </td>
                       <td className="p-2">
                         <input
                           value={d.quota_max_users}

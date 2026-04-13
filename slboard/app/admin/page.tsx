@@ -59,6 +59,9 @@ type AdminStats = {
   documentActive: number;
   documentArchived: number;
   documentPublished: number;
+  llmCallsTotal: number;
+  llmCallsLast7Days: number;
+  llmCallsByDay: { date: string; count: number }[];
   aiQueriesTotal: number;
   aiQueriesLast7Days: number;
   aiQueriesByDay: { date: string; count: number }[];
@@ -1679,31 +1682,42 @@ export default function AdminPage() {
                       <p className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{stats.documentPublished}</p>
                     </div>
                     <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
-                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">KI-Anfragen gesamt</p>
-                      <p className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{stats.aiQueriesTotal}</p>
+                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">KI-API-Aufrufe gesamt</p>
+                      <p className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+                        {stats.llmCallsTotal ?? 0}
+                      </p>
+                      <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                        Jede erfolgreiche LLM-Antwort (Frage, Zusammenfassung, Steuerung, …)
+                      </p>
                     </div>
                   </div>
                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
                     <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
-                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">KI-Anfragen (letzte 7 Tage, ab UTC-Mitternacht)</p>
-                      <p className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">{stats.aiQueriesLast7Days}</p>
+                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                        KI-API (letzte 7 Tage, ab UTC-Mitternacht)
+                      </p>
+                      <p className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+                        {stats.llmCallsLast7Days ?? 0}
+                      </p>
                     </div>
                     <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
-                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Ø pro Tag (14 Tage)</p>
+                      <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Ø pro Tag (14 Tage), KI-API</p>
                       <p className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
                         {(
-                          stats.aiQueriesByDay.reduce((a, x) => a + x.count, 0) / Math.max(stats.aiQueriesByDay.length, 1)
+                          (stats.llmCallsByDay ?? []).reduce((a, x) => a + x.count, 0) /
+                          Math.max((stats.llmCallsByDay ?? []).length, 1)
                         ).toLocaleString('de-DE', { maximumFractionDigits: 1 })}
                       </p>
                     </div>
                   </div>
                   <div className="mt-4">
-                    <p className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">KI-Anfragen pro Tag (14 Tage)</p>
+                    <p className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">KI-API-Aufrufe pro Tag (14 Tage)</p>
                     {(() => {
-                      const max = Math.max(1, ...stats.aiQueriesByDay.map((x) => x.count));
+                      const days = stats.llmCallsByDay ?? [];
+                      const max = Math.max(1, ...days.map((x) => x.count));
                       return (
                         <div className="flex h-36 items-end gap-0.5 border-b border-zinc-200 pb-1 dark:border-zinc-700">
-                          {stats.aiQueriesByDay.map((day) => (
+                          {days.map((day) => (
                             <div
                               key={day.date}
                               className="group flex min-w-0 flex-1 flex-col items-center justify-end"
@@ -1722,11 +1736,72 @@ export default function AdminPage() {
                       );
                     })()}
                     <div className="mt-1 flex gap-0.5 text-[9px] text-zinc-500 dark:text-zinc-400">
-                      {stats.aiQueriesByDay.map((day) => (
-                        <div key={`lbl-${day.date}`} className="min-w-0 flex-1 truncate text-center">
+                      {(stats.llmCallsByDay ?? []).map((day) => (
+                        <div key={`lbl-llm-${day.date}`} className="min-w-0 flex-1 truncate text-center">
                           {day.date.slice(8, 10)}.{day.date.slice(5, 7)}
                         </div>
                       ))}
+                    </div>
+                  </div>
+                  <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+                    <p className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
+                      Dashboard: gespeicherte KI-Anfragen (Verlauf)
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                        <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Einträge gesamt</p>
+                        <p className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+                          {stats.aiQueriesTotal ?? 0}
+                        </p>
+                      </div>
+                      <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                        <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Letzte 7 Tage (UTC)</p>
+                        <p className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+                          {stats.aiQueriesLast7Days ?? 0}
+                        </p>
+                      </div>
+                      <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+                        <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Ø pro Tag (14 Tage)</p>
+                        <p className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+                          {(
+                            (stats.aiQueriesByDay ?? []).reduce((a, x) => a + x.count, 0) /
+                            Math.max((stats.aiQueriesByDay ?? []).length, 1)
+                          ).toLocaleString('de-DE', { maximumFractionDigits: 1 })}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <p className="mb-2 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Pro Tag (14 Tage)</p>
+                      {(() => {
+                        const days = stats.aiQueriesByDay ?? [];
+                        const max = Math.max(1, ...days.map((x) => x.count));
+                        return (
+                          <div className="flex h-24 items-end gap-0.5 border-b border-zinc-200 pb-1 dark:border-zinc-700">
+                            {days.map((day) => (
+                              <div
+                                key={`dash-${day.date}`}
+                                className="group flex min-w-0 flex-1 flex-col items-center justify-end"
+                                title={`${formatStatsDayUtc(day.date)}: ${day.count}`}
+                              >
+                                <span className="mb-0.5 hidden text-[9px] text-zinc-500 group-hover:block dark:text-zinc-400">
+                                  {day.count}
+                                </span>
+                                <div
+                                  className="w-full max-w-[20px] rounded-t bg-violet-500/70 dark:bg-violet-400/60"
+                                  style={{ height: `${(day.count / max) * 100}%`, minHeight: day.count > 0 ? 4 : 0 }}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                      <div className="mt-1 flex gap-0.5 text-[9px] text-zinc-500 dark:text-zinc-400">
+                        {(stats.aiQueriesByDay ?? []).map((day) => (
+                          <div key={`lbl-dash-${day.date}`} className="min-w-0 flex-1 truncate text-center">
+                            {day.date.slice(8, 10)}.{day.date.slice(5, 7)}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   <button

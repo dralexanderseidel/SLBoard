@@ -6,6 +6,7 @@ import { apiError } from '../../../../lib/apiError';
 import { getDocumentText } from '../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../lib/indexing';
 import { allowedNextStatuses, isValidWorkflowStatus } from '../../../../lib/documentWorkflow';
+import { pickDocumentUpdateDelta } from '../../../../lib/auditDiff';
 
 /**
  * GET: Dokumenten-Metadaten (Leserechte: Mandant + Schutzstufe/Rollen wie canReadDocument).
@@ -209,7 +210,20 @@ export async function PATCH(
     if (docSchool) oldDocQuery = oldDocQuery.eq('school_number', docSchool);
     const { data: oldDoc } = await oldDocQuery.single();
 
-    let updateQuery = supabase.from('documents').update(updates).eq('id', documentId);
+    const delta = pickDocumentUpdateDelta(oldDoc as Record<string, unknown> | null, updates);
+    if (Object.keys(delta).length === 0) {
+      const archivedAtUnchanged =
+        oldDoc && typeof oldDoc === 'object' && 'archived_at' in oldDoc
+          ? (oldDoc as { archived_at: string | null }).archived_at
+          : null;
+      return NextResponse.json({
+        success: true,
+        unchanged: true,
+        document: { archived_at: archivedAtUnchanged },
+      });
+    }
+
+    let updateQuery = supabase.from('documents').update(delta).eq('id', documentId);
     if (docSchool) updateQuery = updateQuery.eq('school_number', docSchool);
     const { data: updatedRow, error: updateError } = await updateQuery
       .select('archived_at')
@@ -220,7 +234,7 @@ export async function PATCH(
     }
 
     const oldValues = oldDoc as Record<string, unknown> | null;
-    const changedKeys = Object.keys(updates);
+    const changedKeys = Object.keys(delta);
     const oldSlice = oldValues && changedKeys.length > 0
       ? Object.fromEntries(changedKeys.filter((k) => k in (oldValues ?? {})).map((k) => [k, oldValues![k]]))
       : null;
@@ -231,7 +245,7 @@ export async function PATCH(
       entity_id: documentId,
       school_number: docSchool,
       old_values: oldSlice,
-      new_values: updates,
+      new_values: delta,
     });
     if (auditErr) {
       // audit_log Tabelle optional (Migration ggf. noch nicht ausgeführt)
@@ -248,7 +262,7 @@ export async function PATCH(
       'legal_reference',
       'summary',
     ]);
-    const shouldReindex = Object.keys(updates).some((k) => INDEX_RELEVANT_KEYS.has(k));
+    const shouldReindex = Object.keys(delta).some((k) => INDEX_RELEVANT_KEYS.has(k));
     if (shouldReindex) {
       let docForIndexQuery = supabase
         .from('documents')
