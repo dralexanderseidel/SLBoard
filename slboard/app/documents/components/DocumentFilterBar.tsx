@@ -39,13 +39,12 @@ type Props = Pick<
   | 'statusFilters' | 'toggleStatusChip'
   | 'protectionFilter' | 'setProtectionFilter'
   | 'reachScopeFilters' | 'toggleReachScopeChip'
-  | 'participationFilter' | 'setParticipationFilter'
-  | 'gremiumFilter' | 'setGremiumFilter'
+  | 'participationInput' | 'setParticipationFilter'
+  | 'gremiumInput' | 'setGremiumFilter'
   | 'reviewFilter' | 'setReviewFilter'
   | 'summaryFilter' | 'setSummaryFilter'
   | 'steeringFilter' | 'setSteeringFilter'
   | 'showAdvancedFilters' | 'setShowAdvancedFilters'
-  | 'setStatusFilters'
 > & {
   typeOptions: Array<{ code: string; label: string }>;
   responsibleUnitOptions: string[];
@@ -59,8 +58,8 @@ export function DocumentFilterBar({
   statusFilters, toggleStatusChip,
   protectionFilter, setProtectionFilter,
   reachScopeFilters, toggleReachScopeChip,
-  participationFilter, setParticipationFilter,
-  gremiumFilter, setGremiumFilter,
+  participationInput, setParticipationFilter,
+  gremiumInput, setGremiumFilter,
   reviewFilter, setReviewFilter,
   summaryFilter, setSummaryFilter,
   steeringFilter, setSteeringFilter,
@@ -207,7 +206,7 @@ export function DocumentFilterBar({
               <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Beteiligung enthält</label>
               <input
                 list="participation_suggestions"
-                value={participationFilter}
+                value={participationInput}
                 onChange={(e) => setParticipationFilter(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                 placeholder="z. B. Schulkonferenz (auch mehrere: A, B)"
@@ -222,7 +221,7 @@ export function DocumentFilterBar({
               <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">Beschlussgremium</label>
               <input
                 type="text"
-                value={gremiumFilter}
+                value={gremiumInput}
                 onChange={(e) => setGremiumFilter(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
                 placeholder="z. B. Schulkonferenz"

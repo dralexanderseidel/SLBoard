@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { docTypeLabelDe } from '@/lib/documentMeta';
@@ -46,25 +46,30 @@ export default function DocumentsPage() {
     cancelInFlight,
   });
 
-  const toggleSelectAll = () => {
+  const selectedSet = useMemo(() => new Set(selection.selectedIds), [selection.selectedIds]);
+
+  const toggleSelectAll = useCallback(() => {
     bulkActions.clearAllResults();
     selection.toggleSelectAll(allVisibleIds);
-  };
-  const toggleSelectOne = (id: string) => {
+  }, [bulkActions, selection, allVisibleIds]);
+
+  const toggleSelectOne = useCallback((id: string) => {
     bulkActions.clearAllResults();
     selection.toggleSelectOne(id);
-  };
+  }, [bulkActions, selection]);
 
   // ── Sort & display ─────────────────────────────────────────────────────────
-  const cycleSort = (field: SortField) => {
+  const cycleSort = useCallback((field: SortField) => {
     if (field !== sortField) { setSortField(field); setSortDir('desc'); return; }
     if (sortDir === 'desc') { setSortDir('asc'); return; }
     setSortField('created_at'); setSortDir('desc');
-  };
-  const sortIndicator = (field: SortField): string | null => {
+  }, [sortField, sortDir]);
+
+  const sortIndicator = useCallback((field: SortField): string | null => {
     if (field !== sortField) return null;
     return sortDir === 'asc' ? '↑' : '↓';
-  };
+  }, [sortField, sortDir]);
+
   const displayedDocs = useMemo(() => [...docs].sort((a, b) => {
     const m = sortDir === 'asc' ? 1 : -1;
     if (sortField === 'created_at') return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * m;
@@ -74,16 +79,16 @@ export default function DocumentsPage() {
     return 0;
   }), [docs, sortField, sortDir]);
 
-  const docTypeLabel = (code: string) => docTypeLabelDe(code, documentTypeOptions);
+  const docTypeLabel = useCallback((code: string) => docTypeLabelDe(code, documentTypeOptions), [documentTypeOptions]);
   const allSelected = allVisibleIds.length > 0 && selection.selectedIds.length === allVisibleIds.length;
   const noneSelected = selection.selectedIds.length === 0;
 
-  const rowActions = {
+  const rowActions = useMemo(() => ({
     handleRowWorkflowStep: bulkActions.handleRowWorkflowStep,
     handleRowDelete: bulkActions.handleRowDelete,
     handleRowArchive: bulkActions.handleRowArchive,
     handleRowRestore: bulkActions.handleRowRestore,
-  };
+  }), [bulkActions]);
 
   const hasResults =
     bulkActions.bulkDeleteResult ??
@@ -212,9 +217,9 @@ export default function DocumentsPage() {
             <table className="min-w-full border-collapse">
               <thead className="sticky top-0 z-10 bg-zinc-100 text-xs font-medium uppercase tracking-wide text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
                 <tr>
-                  {[4, 48, 16, 16, 24, 10, 24, 28, 32].map((w, i) => (
+                  {(['w-4', 'w-48', 'w-16', 'w-16', 'w-24', 'w-10', 'w-24', 'w-28', 'w-32'] as const).map((w, i) => (
                     <th key={i} className="px-3 py-2 text-left">
-                      <div className={`h-3.5 w-${w} animate-pulse rounded bg-zinc-200 dark:bg-zinc-700`} />
+                      <div className={`h-3.5 ${w} animate-pulse rounded bg-zinc-200 dark:bg-zinc-700`} />
                     </th>
                   ))}
                 </tr>
@@ -222,9 +227,9 @@ export default function DocumentsPage() {
               <tbody>
                 {Array.from({ length: 8 }).map((_, idx) => (
                   <tr key={idx} className="border-t border-zinc-200 odd:bg-white even:bg-zinc-50 dark:border-zinc-800 dark:odd:bg-zinc-900 dark:even:bg-zinc-950/30">
-                    {[4, 48, 28, 24, 28, 14, 28, 24].map((w, i) => (
+                    {(['w-4', 'w-48', 'w-28', 'w-24', 'w-28', 'w-14', 'w-28', 'w-24'] as const).map((w, i) => (
                       <td key={i} className="px-3 py-2">
-                        <div className={`h-3.5 w-${w} animate-pulse rounded bg-zinc-200 dark:bg-zinc-700`} />
+                        <div className={`h-3.5 ${w} animate-pulse rounded bg-zinc-200 dark:bg-zinc-700`} />
                       </td>
                     ))}
                   </tr>
@@ -246,7 +251,7 @@ export default function DocumentsPage() {
         {!loading && !error && docs.length > 0 && viewMode === 'table' && (
           <DocumentTableView
             displayedDocs={displayedDocs}
-            selectedIds={selection.selectedIds}
+            selectedSet={selectedSet}
             toggleSelectOne={toggleSelectOne}
             allSelected={allSelected}
             toggleSelectAll={toggleSelectAll}
@@ -255,8 +260,6 @@ export default function DocumentsPage() {
             isBusy={bulkActions.isBusy}
             docTypeLabel={docTypeLabel}
             rowActions={rowActions}
-            sortField={sortField}
-            sortDir={sortDir}
             cycleSort={cycleSort}
             sortIndicator={sortIndicator}
           />
@@ -266,7 +269,7 @@ export default function DocumentsPage() {
         {!loading && !error && docs.length > 0 && viewMode === 'cards' && (
           <DocumentCardsView
             displayedDocs={displayedDocs}
-            selectedIds={selection.selectedIds}
+            selectedSet={selectedSet}
             toggleSelectOne={toggleSelectOne}
             archiveView={archiveView}
             rowActionLoadingId={bulkActions.rowActionLoadingId}
@@ -280,7 +283,7 @@ export default function DocumentsPage() {
         {!loading && !error && docs.length > 0 && viewMode === 'compact' && (
           <DocumentCompactView
             displayedDocs={displayedDocs}
-            selectedIds={selection.selectedIds}
+            selectedSet={selectedSet}
             toggleSelectOne={toggleSelectOne}
             archiveView={archiveView}
             rowActionLoadingId={bulkActions.rowActionLoadingId}

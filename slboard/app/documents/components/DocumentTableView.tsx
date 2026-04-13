@@ -26,6 +26,13 @@ const SvgClock = () => (
   </svg>
 );
 
+const SORT_COLUMNS = [
+  { field: 'title' as const, label: 'Titel' },
+  { field: 'document_type_code' as const, label: 'Typ' },
+  { field: 'status' as const, label: 'Status' },
+  { field: 'created_at' as const, label: 'Erstellt am' },
+];
+
 const SvgDots = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
     <circle cx="12" cy="6" r="2.3" fill="currentColor" />
@@ -35,7 +42,7 @@ const SvgDots = () => (
 );
 
 export function DocumentTableView({
-  displayedDocs, selectedIds, toggleSelectOne,
+  displayedDocs, selectedSet, toggleSelectOne,
   allSelected, toggleSelectAll,
   archiveView, rowActionLoadingId, isBusy,
   docTypeLabel, rowActions,
@@ -52,15 +59,13 @@ export function DocumentTableView({
             <th className="px-3 py-2 text-left">
               <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Alle auswählen" />
             </th>
-            {(['title', 'document_type_code', 'status', 'created_at'] as const).map((field) => {
-              const labels: Record<string, string> = {
-                title: 'Titel', document_type_code: 'Typ', status: 'Status', created_at: 'Erstellt am',
-              };
+            {SORT_COLUMNS.map(({ field, label }) => {
+              const indicator = sortIndicator(field);
               return (
                 <th key={field} className="px-3 py-2 text-left">
                   <button type="button" onClick={() => cycleSort(field)} className="inline-flex items-center gap-1 hover:underline">
-                    {labels[field]}
-                    {sortIndicator(field) && <span className="text-[11px] text-zinc-500">{sortIndicator(field)}</span>}
+                    {label}
+                    {indicator && <span className="text-[11px] text-zinc-500">{indicator}</span>}
                   </button>
                 </th>
               );
@@ -84,7 +89,7 @@ export function DocumentTableView({
               <td className="px-3 py-2">
                 <input
                   type="checkbox"
-                  checked={selectedIds.includes(doc.id)}
+                  checked={selectedSet.has(doc.id)}
                   onChange={() => toggleSelectOne(doc.id)}
                   aria-label={`Dokument auswählen: ${doc.title}`}
                 />
@@ -123,19 +128,24 @@ export function DocumentTableView({
 
               {/* Status */}
               <td className="px-3 py-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${workflowStatusBadgeClass(doc.status)}`}>
-                    {statusLabelDe(doc.status)}
-                  </span>
-                  {!archiveView && getNextWorkflowTransition(doc.status) && (
-                    <button type="button"
-                      onClick={() => void handleRowWorkflowStep(doc.id, getNextWorkflowTransition(doc.status)!.next)}
-                      disabled={rowDisabled(doc.id)}
-                      className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
-                      {getNextWorkflowTransition(doc.status)!.label}
-                    </button>
-                  )}
-                </div>
+                {(() => {
+                  const next = getNextWorkflowTransition(doc.status);
+                  return (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${workflowStatusBadgeClass(doc.status)}`}>
+                        {statusLabelDe(doc.status)}
+                      </span>
+                      {!archiveView && next && (
+                        <button type="button"
+                          onClick={() => void handleRowWorkflowStep(doc.id, next.next)}
+                          disabled={rowDisabled(doc.id)}
+                          className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
+                          {next.label}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </td>
 
               {/* Erstellt am */}

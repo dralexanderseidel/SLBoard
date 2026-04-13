@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export type DocumentFilters = {
   typeFilter: string;
@@ -16,6 +16,10 @@ export type DocumentFilters = {
 
 export type UseDocumentFiltersResult = DocumentFilters & {
   searchInput: string;
+  /** Aktuell eingetippter Wert (vor Debounce) – für das Input-Feld */
+  participationInput: string;
+  /** Aktuell eingetippter Wert (vor Debounce) – für das Input-Feld */
+  gremiumInput: string;
   showAdvancedFilters: boolean;
   setTypeFilter: (v: string) => void;
   setResponsibleUnitFilter: (v: string) => void;
@@ -23,7 +27,9 @@ export type UseDocumentFiltersResult = DocumentFilters & {
   toggleStatusChip: (v: string) => void;
   setProtectionFilter: (v: string) => void;
   toggleReachScopeChip: (scope: 'intern' | 'extern') => void;
+  /** Setzt den sichtbaren Input-Wert; der API-Filter folgt nach 400 ms Debounce */
   setParticipationFilter: (v: string) => void;
+  /** Setzt den sichtbaren Input-Wert; der API-Filter folgt nach 400 ms Debounce */
   setGremiumFilter: (v: string) => void;
   setReviewFilter: (v: string) => void;
   setSummaryFilter: (v: string) => void;
@@ -34,20 +40,39 @@ export type UseDocumentFiltersResult = DocumentFilters & {
   resetFilters: () => void;
 };
 
+const DEBOUNCE_MS = 400;
+
 export function useDocumentFilters(): UseDocumentFiltersResult {
   const [typeFilter, setTypeFilter] = useState('');
   const [responsibleUnitFilter, setResponsibleUnitFilter] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
   const [protectionFilter, setProtectionFilter] = useState('');
   const [reachScopeFilters, setReachScopeFilters] = useState<Array<'intern' | 'extern'>>([]);
+
+  // Participation: separate input (immediate UI) and filter (debounced → triggers refetch)
+  const [participationInput, setParticipationInput] = useState('');
   const [participationFilter, setParticipationFilter] = useState('');
+
+  // Gremium: same pattern
+  const [gremiumInput, setGremiumInput] = useState('');
   const [gremiumFilter, setGremiumFilter] = useState('');
+
   const [reviewFilter, setReviewFilter] = useState('');
   const [summaryFilter, setSummaryFilter] = useState('');
   const [steeringFilter, setSteeringFilter] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setParticipationFilter(participationInput), DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [participationInput]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setGremiumFilter(gremiumInput), DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [gremiumInput]);
 
   const toggleStatusChip = (value: string) =>
     setStatusFilters((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
@@ -63,7 +88,9 @@ export function useDocumentFilters(): UseDocumentFiltersResult {
     setStatusFilters([]);
     setProtectionFilter('');
     setReachScopeFilters([]);
+    setParticipationInput('');
     setParticipationFilter('');
+    setGremiumInput('');
     setGremiumFilter('');
     setReviewFilter('');
     setSummaryFilter('');
@@ -78,8 +105,12 @@ export function useDocumentFilters(): UseDocumentFiltersResult {
     statusFilters, setStatusFilters, toggleStatusChip,
     protectionFilter, setProtectionFilter,
     reachScopeFilters, toggleReachScopeChip,
-    participationFilter, setParticipationFilter,
-    gremiumFilter, setGremiumFilter,
+    participationInput,
+    participationFilter,
+    setParticipationFilter: setParticipationInput,
+    gremiumInput,
+    gremiumFilter,
+    setGremiumFilter: setGremiumInput,
     reviewFilter, setReviewFilter,
     summaryFilter, setSummaryFilter,
     steeringFilter, setSteeringFilter,

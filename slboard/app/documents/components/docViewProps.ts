@@ -9,7 +9,7 @@ export type RowActions = {
 
 export type DocViewSharedProps = {
   displayedDocs: DocumentListItem[];
-  selectedIds: string[];
+  selectedSet: ReadonlySet<string>;
   toggleSelectOne: (id: string) => void;
   archiveView: boolean;
   rowActionLoadingId: string | null;
@@ -21,8 +21,6 @@ export type DocViewSharedProps = {
 export type DocTableViewProps = DocViewSharedProps & {
   allSelected: boolean;
   toggleSelectAll: () => void;
-  sortField: SortField;
-  sortDir: 'asc' | 'desc';
   cycleSort: (field: SortField) => void;
   sortIndicator: (field: SortField) => string | null;
 };

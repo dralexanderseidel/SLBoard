@@ -35,7 +35,7 @@ const SvgCheck = () => (
 );
 
 export function DocumentCardsView({
-  displayedDocs, selectedIds, toggleSelectOne,
+  displayedDocs, selectedSet, toggleSelectOne,
   archiveView, rowActionLoadingId, isBusy,
   docTypeLabel, rowActions,
 }: DocViewSharedProps) {
@@ -53,7 +53,7 @@ export function DocumentCardsView({
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-2">
-              <input type="checkbox" checked={selectedIds.includes(doc.id)} onChange={() => toggleSelectOne(doc.id)}
+              <input type="checkbox" checked={selectedSet.has(doc.id)} onChange={() => toggleSelectOne(doc.id)}
                 aria-label={`Dokument auswählen: ${doc.title}`} className="mt-1" />
               <div className="min-w-0">
                 <Link href={`/documents/${doc.id}`} className="block truncate text-sm font-semibold text-blue-700 underline-offset-2 hover:underline dark:text-blue-400">
@@ -87,19 +87,24 @@ export function DocumentCardsView({
             {doc.gremium ? ` · ${doc.gremium}` : ''}
           </p>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${workflowStatusBadgeClass(doc.status)}`}>
-              {statusLabelDe(doc.status)}
-            </span>
-            {!archiveView && getNextWorkflowTransition(doc.status) && (
-              <button type="button"
-                onClick={() => void handleRowWorkflowStep(doc.id, getNextWorkflowTransition(doc.status)!.next)}
-                disabled={rowDisabled(doc.id)}
-                className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
-                {getNextWorkflowTransition(doc.status)!.label}
-              </button>
-            )}
-          </div>
+          {(() => {
+            const next = getNextWorkflowTransition(doc.status);
+            return (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${workflowStatusBadgeClass(doc.status)}`}>
+                  {statusLabelDe(doc.status)}
+                </span>
+                {!archiveView && next && (
+                  <button type="button"
+                    onClick={() => void handleRowWorkflowStep(doc.id, next.next)}
+                    disabled={rowDisabled(doc.id)}
+                    className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-zinc-900 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
+                    {next.label}
+                  </button>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
