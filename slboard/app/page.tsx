@@ -121,54 +121,26 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void refreshRecentQueries();
-  }, [refreshRecentQueries]);
-
-  useEffect(() => {
-    const loadRecentlyPublished = async () => {
-      setPublishedLoading(true);
-      setPublishedLoadError(null);
+    const loadNotifications = async () => {
       try {
-        const res = await fetch('/api/notifications/recently-published');
-        const json = (await res.json()) as { data?: RecentlyPublished[] };
-        if (res.ok && json.data) {
-          setRecentlyPublished(json.data);
-        } else {
-          setPublishedLoadError('Neu veröffentlicht konnte nicht geladen werden.');
-        }
+        const res = await fetch('/api/notifications');
+        const json = (await res.json()) as {
+          recentlyPublished?: RecentlyPublished[];
+          reviewOverdue?: ReviewOverdue[];
+        };
+        setRecentlyPublished(json.recentlyPublished ?? []);
+        setReviewOverdue(json.reviewOverdue ?? []);
       } catch {
-        setRecentlyPublished([]);
-        setPublishedLoadError('Neu veröffentlicht konnte nicht geladen werden.');
+        setPublishedLoadError('Benachrichtigungen konnten nicht geladen werden.');
+        setReviewOverdueLoadError('Benachrichtigungen konnten nicht geladen werden.');
       } finally {
         setPublishedLoading(false);
-      }
-    };
-
-    void loadRecentlyPublished();
-  }, []);
-
-  useEffect(() => {
-    const loadReviewOverdue = async () => {
-      setReviewOverdueLoading(true);
-      setReviewOverdueLoadError(null);
-      try {
-        const res = await fetch('/api/notifications/review-overdue');
-        const json = (await res.json()) as { data?: ReviewOverdue[] };
-        if (res.ok && json.data) {
-          setReviewOverdue(json.data);
-        } else {
-          setReviewOverdueLoadError('Evaluation/Wiedervorlage-Daten konnten nicht geladen werden.');
-        }
-      } catch {
-        setReviewOverdue([]);
-        setReviewOverdueLoadError('Evaluation/Wiedervorlage-Daten konnten nicht geladen werden.');
-      } finally {
         setReviewOverdueLoading(false);
       }
     };
 
-    void loadReviewOverdue();
-  }, []);
+    void Promise.all([refreshRecentQueries(), loadNotifications()]);
+  }, [refreshRecentQueries]);
 
   const handleSuggestDocuments = async () => {
     const trimmed = question.trim();
