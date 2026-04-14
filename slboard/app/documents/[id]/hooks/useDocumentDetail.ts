@@ -35,7 +35,7 @@ export function useDocumentDetail(id: string | undefined): UseDocumentDetailResu
       setLoading(true);
       setError(null);
 
-      const res = await fetch(`/api/documents/${id}`, {
+      const res = await fetch(`/api/documents/${id}/detail`, {
         credentials: 'include',
         cache: 'no-store',
       });
@@ -60,6 +60,8 @@ export function useDocumentDetail(id: string | undefined): UseDocumentDetailResu
         const json = (await res.json()) as {
           document?: DocumentDetail;
           currentVersion?: VersionInfo | null;
+          versions?: VersionRow[];
+          auditLog?: AuditEntry[];
         };
         const typed = json.document;
         if (!typed) {
@@ -69,19 +71,8 @@ export function useDocumentDetail(id: string | undefined): UseDocumentDetailResu
           setDoc(typed);
           setInitialVersion(json.currentVersion ?? null);
           setSelectedVersionId(typed.current_version_id ?? null);
-
-          const [verRes, auditRes] = await Promise.all([
-            fetch(`/api/documents/${id}/versions`).catch(() => null),
-            fetch(`/api/documents/${id}/audit`).catch(() => null),
-          ]);
-
-          const [verJson, auditJson] = await Promise.all([
-            verRes?.ok ? (verRes.json() as Promise<{ data?: VersionRow[] }>) : Promise.resolve(null),
-            auditRes?.ok ? (auditRes.json() as Promise<{ data?: AuditEntry[] }>) : Promise.resolve(null),
-          ]);
-
-          if (verJson?.data) setAllVersions(verJson.data);
-          if (auditJson?.data) setAuditLog(auditJson.data);
+          setAllVersions(json.versions ?? []);
+          setAuditLog(json.auditLog ?? []);
         }
       }
 
