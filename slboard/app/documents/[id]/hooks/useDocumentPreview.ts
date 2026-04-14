@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { VersionInfo, VersionRow } from '../types';
 
 type UseDocumentPreviewResult = {
@@ -19,15 +19,20 @@ export function useDocumentPreview(
   const [previewText, setPreviewText] = useState<string | null>(null);
   const [previewTextLoading, setPreviewTextLoading] = useState(false);
 
+  // Immer aktuellste allVersions lesen ohne sie als Effect-Dep zu deklarieren
+  const allVersionsRef = useRef(allVersions);
+  allVersionsRef.current = allVersions;
+
   // Synchronisiere version mit initialVersion, wenn das Dokument (neu) geladen wird
   useEffect(() => {
     setVersion(initialVersion);
   }, [initialVersion]);
 
-  // Datei-URL + Versionsdaten laden wenn sich die ausgewählte Version ändert
+  // Datei-URL + Versionsdaten laden — nur wenn sich die gewählte Version (ID) ändert,
+  // nicht bei jedem reload() der allVersions-Referenz
   useEffect(() => {
     if (!id || !selectedVersionId) return;
-    const chosen = allVersions.find((v) => v.id === selectedVersionId);
+    const chosen = allVersionsRef.current.find((v) => v.id === selectedVersionId);
     if (!chosen) return;
 
     let cancelled = false;
@@ -51,7 +56,7 @@ export function useDocumentPreview(
       }
     })();
     return () => { cancelled = true; };
-  }, [id, selectedVersionId, allVersions]);
+  }, [id, selectedVersionId]);
 
   // Text-Vorschau für text/plain laden
   useEffect(() => {

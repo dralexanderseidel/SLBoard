@@ -1,9 +1,8 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useEffect } from 'react';
 import {
   WORKFLOW_STATUS_ORDER,
   getNextWorkflowTransition,
@@ -29,7 +28,131 @@ import { useDocumentSummary } from './hooks/useDocumentSummary';
 import { useDocumentSteering } from './hooks/useDocumentSteering';
 import { useDocumentAsk } from './hooks/useDocumentAsk';
 import { useDocumentMetadataOptions } from './hooks/useDocumentMetadataOptions';
-import type { DocumentDetail } from './types';
+import type { AuditEntry, DocumentDetail } from './types';
+
+// ── Reine Hilfsfunktionen (kein Component-State) ─────────────────────────────
+
+function trafficLight(score: 'niedrig' | 'mittel' | 'hoch', invert = false) {
+  if (invert) {
+    if (score === 'niedrig') return 'bg-red-500';
+    if (score === 'mittel') return 'bg-amber-400';
+    return 'bg-emerald-500';
+  }
+  if (score === 'niedrig') return 'bg-emerald-500';
+  if (score === 'mittel') return 'bg-amber-400';
+  return 'bg-red-500';
+}
+
+function whoLabel(email: string) {
+  const base = (email ?? '').trim();
+  if (!base) return 'Unbekannt';
+  const local = base.split('@')[0] ?? base;
+  return local.replace(/[._-]+/g, ' ').trim() || base;
+}
+
+function startOfDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function auditBucketLabel(iso: string) {
+  const ts = new Date(iso);
+  const day = startOfDay(ts);
+  const today = startOfDay(new Date());
+  const diffDays = Math.floor((today.getTime() - day.getTime()) / (24 * 60 * 60 * 1000));
+  if (diffDays === 0) return 'Heute';
+  if (diffDays === 1) return 'Gestern';
+  if (diffDays >= 2 && diffDays <= 7) return 'Letzte 7 Tage';
+  return 'Älter';
+}
+
+function isImportantAuditEntry(entry: AuditEntry) {
+  if (entry.action === 'version.upload') return false;
+  if (entry.action !== 'document.update') return false;
+  const oldVals = entry.old_values ?? {};
+  const newVals = entry.new_values ?? {};
+  if (
+    Object.prototype.hasOwnProperty.call(newVals, 'status') &&
+    !auditValuesEqual(oldVals.status, newVals.status)
+  ) {
+    return true;
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(newVals, 'archived_at') &&
+    !auditValuesEqual(oldVals.archived_at, newVals.archived_at)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function formatAuditSummary(entry: AuditEntry): string {
+  const who = whoLabel(entry.user_email);
+  const oldVals = entry.old_values ?? {};
+  const newVals = entry.new_values ?? {};
+
+  if (entry.action === 'version.upload') {
+    const vn = (entry.new_values as { version_number?: string } | null)?.version_number;
+    return vn ? `${who} hat eine neue Version (${vn}) hochgeladen.` : `${who} hat eine neue Version hochgeladen.`;
+  }
+
+  if (entry.action === 'document.update') {
+    const changes: string[] = [];
+
+    if (Object.prototype.hasOwnProperty.call(newVals, 'status')) {
+      if (!auditValuesEqual(oldVals.status, newVals.status)) {
+        const from = typeof oldVals.status === 'string' ? statusLabelDe(oldVals.status) : '—';
+        const to = typeof newVals.status === 'string' ? statusLabelDe(newVals.status) : '—';
+        changes.push(`Status von „${from}" zu „${to}" geändert`);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(newVals, 'title')) {
+      if (!auditValuesEqual(oldVals.title, newVals.title)) {
+        const from = formatAuditScalarDe('title', oldVals.title);
+        const to = formatAuditScalarDe('title', newVals.title);
+        changes.push(`Titel von „${from}" zu „${to}" geändert`);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(newVals, 'archived_at')) {
+      if (!auditValuesEqual(oldVals.archived_at, newVals.archived_at)) {
+        const hadArchive = oldVals.archived_at != null && String(oldVals.archived_at).length > 0;
+        const hasArchive = newVals.archived_at != null && String(newVals.archived_at).length > 0;
+        if (hasArchive && !hadArchive) {
+          changes.push('dieses Dokument ins Archiv gelegt');
+        } else if (!hasArchive && hadArchive) {
+          changes.push('dieses Dokument aus dem Archiv wiederhergestellt');
+        } else {
+          changes.push(
+            `„${auditMetadataFieldLabelDe('archived_at')}" von „${formatAuditScalarDe('archived_at', oldVals.archived_at)}" zu „${formatAuditScalarDe('archived_at', newVals.archived_at)}" geändert`,
+          );
+        }
+      }
+    }
+
+    const otherKeys = Object.keys(newVals).filter(
+      (k) => k !== 'status' && k !== 'title' && k !== 'archived_at',
+    );
+    for (const k of otherKeys.sort()) {
+      if (auditValuesEqual(oldVals[k], newVals[k])) continue;
+      const label = auditMetadataFieldLabelDe(k);
+      const from = formatAuditScalarDe(k, oldVals[k]);
+      const to = formatAuditScalarDe(k, newVals[k]);
+      changes.push(`„${label}" von „${from}" zu „${to}" geändert`);
+    }
+
+    if (changes.length === 0) {
+      return `${who} hat Metadaten geändert (ohne erkennbare Feldänderung).`;
+    }
+    return `${who} hat ${changes.join('; ')}.`;
+  }
+
+  return `${who} hat eine Änderung vorgenommen (${entry.action}).`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function DocumentDetailPage() {
   const params = useParams<{ id: string }>();
@@ -110,16 +233,16 @@ export default function DocumentDetailPage() {
   const [auditImportantOnly, setAuditImportantOnly] = useState(false);
 
   // ── Scroll-to-section via ?focus= ──────────────────────────────────────────
+  const focusParam = searchParams.get('focus');
   useEffect(() => {
-    const focus = searchParams.get('focus');
-    if (focus !== 'summary' && focus !== 'steering') return;
+    if (focusParam !== 'summary' && focusParam !== 'steering') return;
     if (!doc) return;
     const t = window.setTimeout(() => {
-      const el = document.getElementById(focus === 'steering' ? 'steering-section' : 'summary-section');
+      const el = document.getElementById(focusParam === 'steering' ? 'steering-section' : 'summary-section');
       el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 80);
     return () => window.clearTimeout(t);
-  }, [searchParams, doc]);
+  }, [focusParam, doc?.id]);
 
   // ── Handler ─────────────────────────────────────────────────────────────────
 
@@ -328,125 +451,25 @@ export default function DocumentDetailPage() {
 
   // ── Hilfs-Funktionen ────────────────────────────────────────────────────────
 
-  const trafficLight = (score: 'niedrig' | 'mittel' | 'hoch', invert = false) => {
-    if (invert) {
-      if (score === 'niedrig') return 'bg-red-500';
-      if (score === 'mittel') return 'bg-amber-400';
-      return 'bg-emerald-500';
+  // ── Audit-Buckets (nur neu berechnen wenn auditLog oder Filter sich ändern) ──
+  const auditBuckets = useMemo(() => {
+    const sorted = [...auditLog].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+    const filtered = auditImportantOnly ? sorted.filter(isImportantAuditEntry) : sorted;
+    const buckets: Array<{ label: string; items: AuditEntry[] }> = [
+      { label: 'Heute', items: [] },
+      { label: 'Gestern', items: [] },
+      { label: 'Letzte 7 Tage', items: [] },
+      { label: 'Älter', items: [] },
+    ];
+    for (const e of filtered) {
+      const label = auditBucketLabel(e.created_at);
+      const bucket = buckets.find((b) => b.label === label);
+      if (bucket) bucket.items.push(e);
     }
-    if (score === 'niedrig') return 'bg-emerald-500';
-    if (score === 'mittel') return 'bg-amber-400';
-    return 'bg-red-500';
-  };
-
-  const whoLabel = (email: string) => {
-    const base = (email ?? '').trim();
-    if (!base) return 'Unbekannt';
-    const local = base.split('@')[0] ?? base;
-    return local.replace(/[._-]+/g, ' ').trim() || base;
-  };
-
-  const startOfDay = (d: Date) => {
-    const x = new Date(d);
-    x.setHours(0, 0, 0, 0);
-    return x;
-  };
-
-  const auditBucketLabel = (iso: string) => {
-    const ts = new Date(iso);
-    const day = startOfDay(ts);
-    const today = startOfDay(new Date());
-    const diffDays = Math.floor((today.getTime() - day.getTime()) / (24 * 60 * 60 * 1000));
-    if (diffDays === 0) return 'Heute';
-    if (diffDays === 1) return 'Gestern';
-    if (diffDays >= 2 && diffDays <= 7) return 'Letzte 7 Tage';
-    return 'Älter';
-  };
-
-  const isImportantAuditEntry = (entry: (typeof auditLog)[number]) => {
-    if (entry.action === 'version.upload') return false;
-    if (entry.action !== 'document.update') return false;
-    const oldVals = entry.old_values ?? {};
-    const newVals = entry.new_values ?? {};
-    if (
-      Object.prototype.hasOwnProperty.call(newVals, 'status') &&
-      !auditValuesEqual(oldVals.status, newVals.status)
-    ) {
-      return true;
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(newVals, 'archived_at') &&
-      !auditValuesEqual(oldVals.archived_at, newVals.archived_at)
-    ) {
-      return true;
-    }
-    return false;
-  };
-
-  const formatAuditSummary = (entry: (typeof auditLog)[number]) => {
-    const who = whoLabel(entry.user_email);
-    const oldVals = entry.old_values ?? {};
-    const newVals = entry.new_values ?? {};
-
-    if (entry.action === 'version.upload') {
-      const vn = (entry.new_values as { version_number?: string } | null)?.version_number;
-      return vn ? `${who} hat eine neue Version (${vn}) hochgeladen.` : `${who} hat eine neue Version hochgeladen.`;
-    }
-
-    if (entry.action === 'document.update') {
-      const changes: string[] = [];
-
-      if (Object.prototype.hasOwnProperty.call(newVals, 'status')) {
-        if (!auditValuesEqual(oldVals.status, newVals.status)) {
-          const from = typeof oldVals.status === 'string' ? statusLabelDe(oldVals.status) : '—';
-          const to = typeof newVals.status === 'string' ? statusLabelDe(newVals.status) : '—';
-          changes.push(`Status von „${from}" zu „${to}" geändert`);
-        }
-      }
-
-      if (Object.prototype.hasOwnProperty.call(newVals, 'title')) {
-        if (!auditValuesEqual(oldVals.title, newVals.title)) {
-          const from = formatAuditScalarDe('title', oldVals.title);
-          const to = formatAuditScalarDe('title', newVals.title);
-          changes.push(`Titel von „${from}" zu „${to}" geändert`);
-        }
-      }
-
-      if (Object.prototype.hasOwnProperty.call(newVals, 'archived_at')) {
-        if (!auditValuesEqual(oldVals.archived_at, newVals.archived_at)) {
-          const hadArchive = oldVals.archived_at != null && String(oldVals.archived_at).length > 0;
-          const hasArchive = newVals.archived_at != null && String(newVals.archived_at).length > 0;
-          if (hasArchive && !hadArchive) {
-            changes.push('dieses Dokument ins Archiv gelegt');
-          } else if (!hasArchive && hadArchive) {
-            changes.push('dieses Dokument aus dem Archiv wiederhergestellt');
-          } else {
-            changes.push(
-              `„${auditMetadataFieldLabelDe('archived_at')}" von „${formatAuditScalarDe('archived_at', oldVals.archived_at)}" zu „${formatAuditScalarDe('archived_at', newVals.archived_at)}" geändert`,
-            );
-          }
-        }
-      }
-
-      const otherKeys = Object.keys(newVals).filter(
-        (k) => k !== 'status' && k !== 'title' && k !== 'archived_at',
-      );
-      for (const k of otherKeys.sort()) {
-        if (auditValuesEqual(oldVals[k], newVals[k])) continue;
-        const label = auditMetadataFieldLabelDe(k);
-        const from = formatAuditScalarDe(k, oldVals[k]);
-        const to = formatAuditScalarDe(k, newVals[k]);
-        changes.push(`„${label}" von „${from}" zu „${to}" geändert`);
-      }
-
-      if (changes.length === 0) {
-        return `${who} hat Metadaten geändert (ohne erkennbare Feldänderung).`;
-      }
-      return `${who} hat ${changes.join('; ')}.`;
-    }
-
-    return `${who} hat eine Änderung vorgenommen (${entry.action}).`;
-  };
+    return { buckets, empty: filtered.length === 0 };
+  }, [auditLog, auditImportantOnly]);
 
   // ── JSX ─────────────────────────────────────────────────────────────────────
 
@@ -917,9 +940,9 @@ export default function DocumentDetailPage() {
 
                   <div className="mb-3">
                     <div className="grid grid-cols-4 gap-x-1 gap-y-1 sm:gap-x-2">
-                      {WORKFLOW_STATUS_ORDER.map((step, idx) => {
-                        const stepIdx = WORKFLOW_STATUS_ORDER.indexOf(doc.status as WorkflowStatus);
-                        const currentIdx = stepIdx >= 0 ? stepIdx : -1;
+                      {(() => {
+                        const currentIdx = WORKFLOW_STATUS_ORDER.indexOf(doc.status as WorkflowStatus);
+                        return WORKFLOW_STATUS_ORDER.map((step, idx) => {
                         const isActive = doc.status === step;
                         const isDone = currentIdx > idx;
                         const circleBase =
@@ -956,7 +979,8 @@ export default function DocumentDetailPage() {
                             </span>
                           </div>
                         );
-                      })}
+                      });
+                      })()}
                     </div>
                   </div>
 
@@ -1339,61 +1363,38 @@ export default function DocumentDetailPage() {
                     </label>
                   </div>
 
-                  {(() => {
-                    const sorted = [...auditLog].sort(
-                      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                    );
-                    const filtered = auditImportantOnly ? sorted.filter(isImportantAuditEntry) : sorted;
-                    const buckets: Array<{ label: string; items: typeof filtered }> = [
-                      { label: 'Heute', items: [] as typeof filtered },
-                      { label: 'Gestern', items: [] as typeof filtered },
-                      { label: 'Letzte 7 Tage', items: [] as typeof filtered },
-                      { label: 'Älter', items: [] as typeof filtered },
-                    ];
-
-                    for (const e of filtered) {
-                      const label = auditBucketLabel(e.created_at);
-                      const bucket = buckets.find((b) => b.label === label);
-                      if (bucket) bucket.items.push(e);
-                    }
-
-                    if (filtered.length === 0) {
-                      return (
-                        <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
-                          Keine passenden Einträge für den aktuellen Filter.
-                        </p>
-                      );
-                    }
-
-                    return (
-                      <div className="space-y-3">
-                        {buckets
-                          .filter((b) => b.items.length > 0)
-                          .map((b) => (
-                            <div key={b.label}>
-                              <p className="mb-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">
-                                {b.label}
-                              </p>
-                              <ul className="space-y-2">
-                                {b.items.map((entry, i) => (
-                                  <li
-                                    key={`${entry.created_at}-${i}`}
-                                    className="rounded border border-zinc-200 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/50"
-                                  >
-                                    <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
-                                      {new Date(entry.created_at).toLocaleString('de-DE')}
-                                    </p>
-                                    <p className="mt-0.5 font-medium text-zinc-800 dark:text-zinc-200">
-                                      {formatAuditSummary(entry)}
-                                    </p>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
-                      </div>
-                    );
-                  })()}
+                  {auditBuckets.empty ? (
+                    <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                      Keine passenden Einträge für den aktuellen Filter.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {auditBuckets.buckets
+                        .filter((b) => b.items.length > 0)
+                        .map((b) => (
+                          <div key={b.label}>
+                            <p className="mb-1 text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">
+                              {b.label}
+                            </p>
+                            <ul className="space-y-2">
+                              {b.items.map((entry, i) => (
+                                <li
+                                  key={`${entry.created_at}-${i}`}
+                                  className="rounded border border-zinc-200 bg-zinc-50/80 p-2 dark:border-zinc-700 dark:bg-zinc-800/50"
+                                >
+                                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+                                    {new Date(entry.created_at).toLocaleString('de-DE')}
+                                  </p>
+                                  <p className="mt-0.5 font-medium text-zinc-800 dark:text-zinc-200">
+                                    {formatAuditSummary(entry)}
+                                  </p>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        ))}
+                    </div>
+                  )}
                 </div>
               )}
 

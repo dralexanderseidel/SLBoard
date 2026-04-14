@@ -75,15 +75,13 @@ export function useDocumentDetail(id: string | undefined): UseDocumentDetailResu
             fetch(`/api/documents/${id}/audit`).catch(() => null),
           ]);
 
-          if (verRes?.ok) {
-            const verJson = (await verRes.json()) as { data?: VersionRow[] };
-            if (verJson.data) setAllVersions(verJson.data);
-          }
+          const [verJson, auditJson] = await Promise.all([
+            verRes?.ok ? (verRes.json() as Promise<{ data?: VersionRow[] }>) : Promise.resolve(null),
+            auditRes?.ok ? (auditRes.json() as Promise<{ data?: AuditEntry[] }>) : Promise.resolve(null),
+          ]);
 
-          if (auditRes?.ok) {
-            const auditJson = (await auditRes.json()) as { data?: AuditEntry[] };
-            if (auditJson.data) setAuditLog(auditJson.data);
-          }
+          if (verJson?.data) setAllVersions(verJson.data);
+          if (auditJson?.data) setAuditLog(auditJson.data);
         }
       }
 
