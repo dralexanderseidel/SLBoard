@@ -29,12 +29,21 @@ type CallLlmOptions = {
 const DEFAULT_TIMEOUT_MS = 45_000;
 const DEFAULT_MAX_ATTEMPTS = 3;
 
+/** Kapazitätsfehler brauchen deutlich längere Wartezeiten bis der Provider sich erholt. */
+const CAPACITY_MAX_ATTEMPTS = 5;
+const CAPACITY_BACKOFF_BASE_MS = 3_000; // 3s → 6s → 12s → 24s
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isRetryableStatus(status: number): boolean {
   return status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+/** 503/429 = Provider-Überlastung: langer Backoff nötig */
+function isCapacityError(status: number): boolean {
+  return status === 503 || status === 429;
 }
 
 function stringifyDetails(raw: string): string {
@@ -98,7 +107,11 @@ export async function callLlm(
   }
 
   let lastErr: Error | null = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+  // Dynamisch erhöht beim ersten Kapazitätsfehler (503/429)
+  let currentMaxAttempts = maxAttempts;
+  let backoffBase = 600;
+
+  for (let attempt = 1; attempt <= currentMaxAttempts; attempt += 1) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -111,8 +124,15 @@ export async function callLlm(
         const text = await res.text();
         const details = stringifyDetails(text);
         const err = new Error(`LLM-Anfrage fehlgeschlagen: ${res.status} - ${details}`);
-        if (attempt < maxAttempts && isRetryableStatus(res.status)) {
-          const backoffMs = 600 * 2 ** (attempt - 1);
+
+        // Beim ersten Kapazitätsfehler: mehr Versuche + langer Backoff
+        if (isCapacityError(res.status)) {
+          currentMaxAttempts = Math.max(currentMaxAttempts, CAPACITY_MAX_ATTEMPTS);
+          backoffBase = CAPACITY_BACKOFF_BASE_MS;
+        }
+
+        if (attempt < currentMaxAttempts && isRetryableStatus(res.status)) {
+          const backoffMs = backoffBase * 2 ** (attempt - 1);
           await sleep(backoffMs);
           continue;
         }
@@ -141,10 +161,18 @@ export async function callLlm(
           ? err
           : new Error('Unbekannter LLM-Fehler.');
       lastErr = wrapped;
+
+      // Auch über Fehlermeldung erkennen (nach res.ok-Block) und Backoff anpassen
+      const isCapacity503 = /LLM-Anfrage fehlgeschlagen: (503|429)\b/.test(wrapped.message);
+      if (isCapacity503) {
+        currentMaxAttempts = Math.max(currentMaxAttempts, CAPACITY_MAX_ATTEMPTS);
+        backoffBase = CAPACITY_BACKOFF_BASE_MS;
+      }
+
       const retryableByMessage =
         /LLM-Anfrage fehlgeschlagen: (408|429|500|502|503|504)\b/.test(wrapped.message);
-      if (attempt < maxAttempts && (isAbort || retryableByMessage)) {
-        const backoffMs = 600 * 2 ** (attempt - 1);
+      if (attempt < currentMaxAttempts && (isAbort || retryableByMessage)) {
+        const backoffMs = backoffBase * 2 ** (attempt - 1);
         await sleep(backoffMs);
         continue;
       }
