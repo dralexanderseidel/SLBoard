@@ -3,6 +3,7 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { DRAFT_DOC_TYPES, getDraftDocTypeConfig } from '@/lib/draftDocTypes';
 
 type SourceDoc = {
   id: string;
@@ -21,8 +22,9 @@ function DraftAssistantContent() {
   const sourceIdParam = searchParams.get('sourceId');
   const subjectParam = searchParams.get('subject');
 
+  const [docType, setDocType] = useState('ELTERNBRIEF');
   const [subject, setSubject] = useState('');
-  const [audience, setAudience] = useState('Adressaten (z.Ã¢â‚¬Â¯B. Kollegium, Eltern, Gremium)');
+  const [audience, setAudience] = useState('');
   const [context, setContext] = useState('');
   const [body, setBody] = useState('');
   const [sources, setSources] = useState<SourceDoc[]>([]);
@@ -38,31 +40,37 @@ function DraftAssistantContent() {
   const [error, setError] = useState<string | null>(null);
   const [showAfterSaveActions, setShowAfterSaveActions] = useState(false);
   const [confirmOverwrite, setConfirmOverwrite] = useState(false);
-  const [docTypeOptions, setDocTypeOptions] = useState<Array<{ code: string; label: string }>>([]);
+  const [savedDocumentId, setSavedDocumentId] = useState<string | null>(null);
 
   const draftAbortControllerRef = useRef<AbortController | null>(null);
+  // Track whether audience was manually changed by the user
+  const audienceCustomizedRef = useRef(false);
 
-  // Ausstehende KI-Anfrage beim Unmount abbrechen
+  // Abort pending KI request on unmount
   useEffect(() => {
     return () => { draftAbortControllerRef.current?.abort(); };
   }, []);
 
   const selectedSet = useMemo(() => new Set(selectedSourceIds), [selectedSourceIds]);
 
+  // Initialize from URL params
   useEffect(() => {
     if (subjectParam) setSubject(decodeURIComponent(subjectParam));
   }, [subjectParam]);
 
+  // When docType changes, reset audience to the new default (unless manually customized)
   useEffect(() => {
-    fetch('/api/metadata/options', { credentials: 'include', cache: 'no-store' })
-      .then((r) => r.json())
-      .then((data: { documentTypes?: Array<{ code: string; label: string }> }) => {
-        if (Array.isArray(data.documentTypes) && data.documentTypes.length > 0) {
-          setDocTypeOptions(data.documentTypes);
-        }
-      })
-      .catch(() => {});
+    if (!audienceCustomizedRef.current) {
+      setAudience(getDraftDocTypeConfig(docType).defaultAudience);
+    }
+  }, [docType]);
+
+  // Also set audience default on first mount
+  useEffect(() => {
+    setAudience(getDraftDocTypeConfig('ELTERNBRIEF').defaultAudience);
   }, []);
+
+  const typeConfig = getDraftDocTypeConfig(docType);
 
   useEffect(() => {
     const loadSources = async () => {
@@ -133,11 +141,10 @@ function DraftAssistantContent() {
     );
   }, []);
 
-  const [savedDocumentId, setSavedDocumentId] = useState<string | null>(null);
-
-  const resetDraftForm = () => {
+  const resetDraftForm = useCallback(() => {
     setSubject('');
-    setAudience('Adressaten (z.Ã¢â‚¬Â¯B. Kollegium, Eltern, Gremium)');
+    audienceCustomizedRef.current = false;
+    setAudience(getDraftDocTypeConfig(docType).defaultAudience);
     setContext('');
     setBody('');
     setSelectedSourceIds([]);
@@ -146,7 +153,8 @@ function DraftAssistantContent() {
     setMessage(null);
     setError(null);
     setSavedDocumentId(null);
-  };
+    setConfirmOverwrite(false);
+  }, [docType]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,9 +176,10 @@ function DraftAssistantContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subject: subject.trim(),
-          audience: audience.trim() || 'Adressaten (z.Ã¢â‚¬Â¯B. Kollegium, Eltern, Gremium)',
+          audience: audience.trim() || typeConfig.defaultAudience,
           context: context.trim(),
           body: body.trim(),
+          documentType: docType,
         }),
       });
       const data = (await res.json()) as { documentId?: string; message?: string; error?: string };
@@ -196,7 +205,7 @@ function DraftAssistantContent() {
       setError('Bitte geben Sie mindestens einen Betreff ein, damit die KI einen Vorschlag erstellen kann.');
       return;
     }
-    // Inline-BestÃƒÂ¤tigung statt window.confirm
+    // Inline-Bestätigung statt window.confirm
     if (body.trim().length > 0 && !confirmOverwrite) {
       setConfirmOverwrite(true);
       return;
@@ -210,13 +219,14 @@ function DraftAssistantContent() {
 
     setDraftLoading(true);
     try {
-      const res = await fetch('/api/ai/drafts/parent-letter', {
+      const res = await fetch('/api/ai/drafts/document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           topic: subject,
           targetAudience: audience,
           purpose: context,
+          documentType: docType,
           sourceIds: selectedSourceIds.length > 0 ? selectedSourceIds : undefined,
         }),
         signal: controller.signal,
@@ -230,7 +240,7 @@ function DraftAssistantContent() {
       setSubject(data.suggestedTitle ?? subject);
       setBody(nextBody);
       setLastUsedSources(data.sources ?? []);
-      setMessage('KI-Vorschlag wurde eingefÃƒÂ¼gt. Bitte prÃƒÂ¼fen und ggf. anpassen.');
+      setMessage('KI-Vorschlag wurde eingefügt. Bitte prüfen und ggf. anpassen.');
     } catch (err: unknown) {
       if ((err as { name?: string }).name === 'AbortError') return;
       setError(err instanceof Error ? err.message : 'Fehler beim KI-Vorschlag.');
@@ -246,17 +256,45 @@ function DraftAssistantContent() {
           <div>
             <h1 className="text-xl font-semibold">Entwurfsassistent</h1>
             <p className="text-xs text-zinc-600 dark:text-zinc-400">
-              Entwurf fÃƒÂ¼r ein Dokument auf Basis vorhandener Vorlagen erstellen. Die KI kann einen
-              Vorschlag generieren.
+              Entwurf für ein schulisches Dokument auf Basis vorhandener Vorlagen erstellen.
+              Die KI kann einen Vorschlag generieren.
             </p>
           </div>
           <Link
             href="/"
             className="text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
           >
-            Ã¢â€ Â Zur Startseite
+            ← Zur Startseite
           </Link>
         </header>
+
+        {/* Dokumenttyp-Auswahl */}
+        <section className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <p className="mb-3 text-xs font-semibold text-zinc-700 dark:text-zinc-200">
+            Welches Dokument möchten Sie erstellen?
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {DRAFT_DOC_TYPES.map((t) => (
+              <button
+                key={t.code}
+                type="button"
+                onClick={() => {
+                  setDocType(t.code);
+                  setError(null);
+                  setMessage(null);
+                  setConfirmOverwrite(false);
+                }}
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                  docType === t.code
+                    ? 'border-blue-500 bg-blue-600 text-white shadow-sm'
+                    : 'border-zinc-300 bg-white text-zinc-700 hover:border-blue-400 hover:bg-blue-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:border-blue-500 dark:hover:bg-blue-950/30'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </section>
 
         <section className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           {/* Linke Seite: Eingabe und Entwurfstext */}
@@ -265,21 +303,18 @@ function DraftAssistantContent() {
             className="space-y-4 rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
           >
             <div className="flex flex-wrap items-center gap-2 text-[11px]">
-              <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200">
-                1) Thema & Zielgruppe
-              </span>
-              <span className="text-zinc-400">Ã¢â€ â€™</span>
-              <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
-                2) Quellen (optional)
-              </span>
-              <span className="text-zinc-400">Ã¢â€ â€™</span>
-              <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
-                3) KI/Manuell
-              </span>
-              <span className="text-zinc-400">Ã¢â€ â€™</span>
-              <span className="inline-flex items-center rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
-                4) Speichern
-              </span>
+              {(['1) Thema & Zielgruppe', '2) Quellen (optional)', '3) KI/Manuell', '4) Speichern'] as const).map((step, i) => (
+                <React.Fragment key={step}>
+                  {i > 0 && <span className="text-zinc-400">→</span>}
+                  <span className={`inline-flex items-center rounded-full border px-2 py-0.5 ${
+                    i === 0
+                      ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200'
+                      : 'border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300'
+                  }`}>
+                    {step}
+                  </span>
+                </React.Fragment>
+              ))}
             </div>
 
             <div className="flex flex-col gap-1">
@@ -290,7 +325,7 @@ function DraftAssistantContent() {
                 type="text"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="z.Ã¢â‚¬Â¯B. Hinweis zur Handynutzung in Pausen / Ablauf der Medienwoche / Beschluss der Schulkonferenz"
+                placeholder={typeConfig.subjectPlaceholder}
                 className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
               />
             </div>
@@ -303,7 +338,11 @@ function DraftAssistantContent() {
                 <input
                   type="text"
                   value={audience}
-                  onChange={(e) => setAudience(e.target.value)}
+                  onChange={(e) => {
+                    audienceCustomizedRef.current = true;
+                    setAudience(e.target.value);
+                  }}
+                  placeholder={typeConfig.defaultAudience}
                   className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                 />
               </div>
@@ -315,7 +354,7 @@ function DraftAssistantContent() {
                   value={context}
                   onChange={(e) => setContext(e.target.value)}
                   rows={3}
-                  placeholder="z.Ã¢â‚¬Â¯B. Anlass, Ziel, Rahmenbedingungen, gewÃƒÂ¼nschter Ton, konkrete Regeln/Termine."
+                  placeholder={typeConfig.contextPlaceholder}
                   className="w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                 />
               </div>
@@ -328,7 +367,7 @@ function DraftAssistantContent() {
                 disabled={draftLoading}
                 className="rounded border border-blue-400 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-60 dark:border-blue-600 dark:bg-blue-950 dark:text-blue-300 dark:hover:bg-blue-900"
               >
-                {draftLoading ? 'KI erstellt VorschlagÃ¢â‚¬Â¦' : 'KI-Vorschlag erstellen'}
+                {draftLoading ? 'KI erstellt Vorschlag…' : 'KI-Vorschlag erstellen'}
               </button>
               {confirmOverwrite && (
                 <span className="flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-200">
@@ -361,13 +400,13 @@ function DraftAssistantContent() {
                   onChange={(e) => setBody(e.target.value)}
                   rows={10}
                   className="w-full rounded border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-                  placeholder="Anrede,&#10;&#10;kurzer Einstieg (Anlass).&#10;&#10;Kernpunkte / Regelungen / Termine.&#10;&#10;RÃƒÂ¼ckfragen / Kontakt.&#10;&#10;GruÃƒÅ¸formel"
+                  placeholder={typeConfig.bodyPlaceholder}
                 />
                 {draftLoading && (
                   <div className="pointer-events-none absolute inset-0 rounded border border-blue-200 bg-white/70 p-3 text-[11px] text-zinc-600 backdrop-blur-sm dark:border-blue-900/40 dark:bg-zinc-950/60 dark:text-zinc-300">
                     <div className="mb-2 flex items-center gap-2">
                       <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-zinc-300 border-t-blue-600 dark:border-zinc-700 dark:border-t-blue-300" />
-                      <span>KI erstellt einen VorschlagÃ¢â‚¬Â¦</span>
+                      <span>KI erstellt einen Vorschlag…</span>
                     </div>
                     <div className="space-y-2">
                       <div className="h-2 w-11/12 rounded bg-zinc-200 dark:bg-zinc-800" />
@@ -406,27 +445,28 @@ function DraftAssistantContent() {
                   href={`/documents/${savedDocumentId}`}
                   className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
                 >
-                  Dokument ÃƒÂ¶ffnen Ã¢â€ â€™
+                  Dokument öffnen →
                 </Link>
               </p>
             )}
 
             <div className="pt-2">
               <p className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-400">
-                Beim Speichern wird ein Dokument mit <span className="font-medium">Status Ã¢â‚¬Å¾EntwurfÃ¢â‚¬Å“</span> angelegt
-                (Schutzklasse 2). Der Dokumenttyp ist aktuell fest hinterlegt.
+                Beim Speichern wird ein Dokument vom Typ{' '}
+                <span className="font-medium">{typeConfig.label}</span> mit{' '}
+                <span className="font-medium">Status „Entwurf"</span> angelegt (Schutzklasse 2).
               </p>
               <button
                 type="submit"
                 disabled={saving}
                 className="h-9 rounded bg-blue-600 px-4 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
               >
-                {saving ? 'Wird gespeichertÃ¢â‚¬Â¦' : 'Entwurf als Dokument speichern'}
+                {saving ? 'Wird gespeichert…' : 'Entwurf als Dokument speichern'}
               </button>
             </div>
           </form>
 
-          {/* Rechte Seite: Verwendete Quellen + Auswahl fÃƒÂ¼r nÃƒÂ¤chsten Vorschlag */}
+          {/* Rechte Seite: Verwendete Quellen + Auswahl für nächsten Vorschlag */}
           <aside className="rounded-lg border border-zinc-200 bg-white p-4 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
             <h2 className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
               Verwendete Quellen
@@ -451,12 +491,11 @@ function DraftAssistantContent() {
               </div>
             )}
             <p className="mb-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-              Quellen fÃƒÂ¼r nÃƒÂ¤chsten Vorschlag auswÃƒÂ¤hlen (optional):
+              Quellen für nächsten Vorschlag auswählen (optional):
             </p>
             <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
-              Gleiche Suche und Leserechte wie beim Dashboard (Ã¢â‚¬Å¾Relevante Dokumente findenÃ¢â‚¬Å“): nur Ihre Schule,
-              nur Dokumente, die Sie lesen dÃƒÂ¼rfen; nicht archiviert; alle Workflow-Status. Optional nach
-              Dokumenttyp eingrenzen.
+              Nur Dokumente Ihrer Schule, die Sie lesen dürfen; nicht archiviert.
+              Optional nach Dokumenttyp eingrenzen.
             </p>
 
             <div className="mb-3 grid gap-2">
@@ -470,19 +509,7 @@ function DraftAssistantContent() {
                   className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                 >
                   <option value="">Alle</option>
-                  {(docTypeOptions.length > 0
-                    ? docTypeOptions
-                    : [
-                        { code: 'ELTERNBRIEF', label: 'Elternbrief' },
-                        { code: 'RUNDSCHREIBEN', label: 'Rundschreiben' },
-                        { code: 'KONZEPT', label: 'Konzept' },
-                        { code: 'PROTOKOLL', label: 'Protokoll' },
-                        { code: 'BESCHLUSSVORLAGE', label: 'Beschlussvorlage' },
-                        { code: 'CURRICULUM', label: 'Curriculum' },
-                        { code: 'VEREINBARUNG', label: 'Vereinbarung' },
-                        { code: 'SITUATIVE_REGELUNG', label: 'Situative Regelung' },
-                      ]
-                  ).map((t) => (
+                  {DRAFT_DOC_TYPES.map((t) => (
                     <option key={t.code} value={t.code}>{t.label}</option>
                   ))}
                 </select>
@@ -493,7 +520,7 @@ function DraftAssistantContent() {
                   Suche
                 </label>
                 <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
-                  Geben Sie einen Suchbegriff ein und klicken Sie auf Ã¢â‚¬Å¾SuchenÃ¢â‚¬Å“.
+                  Geben Sie einen Suchbegriff ein und klicken Sie auf „Suchen".
                 </p>
                 <div className="flex gap-2">
                   <input
@@ -506,7 +533,7 @@ function DraftAssistantContent() {
                         setSourceSearchQuery(sourceSearchInput.trim());
                       }
                     }}
-                    placeholder="z.Ã¢â‚¬Â¯B. Handynutzung, MedienwocheÃ¢â‚¬Â¦"
+                    placeholder="z. B. Handynutzung, Medienwoche…"
                     className="h-8 w-full rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                   />
                   <button
@@ -541,8 +568,8 @@ function DraftAssistantContent() {
                 ) : (
                   <>
                     <p className="text-zinc-600 dark:text-zinc-400">
-                      Keine lesbaren Vorlagen für diese Suche. Prüfen Sie die Schreibweise oder laden Sie passende
-                      Dokumente hoch.
+                      Keine lesbaren Vorlagen für diese Suche. Prüfen Sie die Schreibweise oder
+                      laden Sie passende Dokumente hoch.
                     </p>
                     <Link
                       href="/upload"
@@ -592,7 +619,7 @@ export default function DraftAssistantPage() {
     <Suspense fallback={
       <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
         <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">Lade EntwurfsassistentÃ¢â‚¬Â¦</p>
+          <p className="text-sm text-zinc-600 dark:text-zinc-400">Lade Entwurfsassistent…</p>
         </div>
       </main>
     }>
@@ -600,4 +627,3 @@ export default function DraftAssistantPage() {
     </Suspense>
   );
 }
-

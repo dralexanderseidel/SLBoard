@@ -3,6 +3,7 @@ import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
+import { DRAFT_DOC_TYPE_CODES } from '../../../../lib/draftDocTypes';
 
 /**
  * Entwurf als echtes Dokument übernehmen: Dokument anlegen + Entwurfstext als erste Version (.txt).
@@ -25,9 +26,11 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const subject = (body.subject as string)?.trim();
-    const audience = (body.audience as string)?.trim() || 'Eltern der Klassen 5–8';
+    const audience = (body.audience as string)?.trim() || 'Schulgemeinschaft';
     const context = (body.context as string)?.trim() || '';
     const draftBody = (body.body as string)?.trim();
+    const rawDocType = (body.documentType as string)?.trim();
+    const documentTypeCode = rawDocType && DRAFT_DOC_TYPE_CODES.has(rawDocType) ? rawDocType : 'ELTERNBRIEF';
 
     if (!subject || !draftBody) {
       return apiError(400, 'VALIDATION_ERROR', 'Betreff und Entwurfstext sind Pflicht.');
@@ -41,7 +44,7 @@ export async function POST(req: NextRequest) {
       .insert({
         school_number: schoolNumber,
         title: subject,
-        document_type_code: 'ELTERNBRIEF',
+        document_type_code: documentTypeCode,
         created_at: today,
         created_by_id: createdById,
         responsible_person_id: createdById,
