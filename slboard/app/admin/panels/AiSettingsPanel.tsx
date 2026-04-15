@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CollapsibleSection } from './CollapsibleSection';
 
 type AiForm = {
@@ -30,8 +30,11 @@ export function AiSettingsPanel({ open, onToggle }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState<AiForm>(DEFAULT_FORM);
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
+    if (!open || hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     const load = async () => {
       setLoading(true);
       setError(null);
@@ -56,7 +59,7 @@ export function AiSettingsPanel({ open, onToggle }: Props) {
       }
     };
     void load();
-  }, []);
+  }, [open]);
 
   const handleSave = async () => {
     setLoading(true);

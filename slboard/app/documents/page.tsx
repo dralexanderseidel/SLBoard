@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { docTypeLabelDe } from '@/lib/documentMeta';
@@ -21,9 +21,21 @@ export default function DocumentsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const archiveView = searchParams.get('archive') === '1';
+  const urlQ = searchParams.get('q') ?? '';
 
   // ── Filter & view state ────────────────────────────────────────────────────
-  const filters = useDocumentFilters();
+  const filters = useDocumentFilters(urlQ);
+
+  // Sync URL ?q param to filters on subsequent client-side navigations
+  // (e.g. from the global header search). Initial value is already handled
+  // by the useDocumentFilters initializer above.
+  const prevUrlQ = useRef(urlQ);
+  useEffect(() => {
+    if (urlQ !== prevUrlQ.current) {
+      prevUrlQ.current = urlQ;
+      filters.setSearchDirect(urlQ);
+    }
+  }, [urlQ, filters.setSearchDirect]);
   const [viewMode, setViewMode] = useViewMode();
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -95,6 +107,20 @@ export default function DocumentsPage() {
     bulkActions.bulkUpdateResult ??
     bulkActions.bulkSummarizeResult ??
     bulkActions.bulkSteeringResult;
+
+  const hasActiveFilters = !!(
+    filters.searchQuery ||
+    filters.typeFilter ||
+    filters.responsibleUnitFilter ||
+    filters.statusFilters.length > 0 ||
+    filters.protectionFilter ||
+    filters.reachScopeFilters.length > 0 ||
+    filters.participationFilter ||
+    filters.gremiumFilter ||
+    filters.reviewFilter ||
+    filters.summaryFilter ||
+    filters.steeringFilter
+  );
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -244,7 +270,92 @@ export default function DocumentsPage() {
 
         {/* Leer */}
         {!loading && !error && docs.length === 0 && (
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">Es wurden noch keine Dokumente gefunden.</p>
+          hasActiveFilters ? (
+            /* Kein Treffer für aktive Filter */
+            <div className="flex flex-col items-center gap-4 rounded-lg border border-zinc-200 bg-white px-6 py-12 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800">
+                <svg className="h-6 w-6 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0Z" />
+                </svg>
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Keine Treffer</h2>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  Kein Dokument entspricht den aktiven Filtern oder dem Suchbegriff.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={filters.resetFilters}
+                className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+              >
+                Filter zurücksetzen
+              </button>
+            </div>
+          ) : (
+            /* Neue Schule – noch keine Dokumente vorhanden */
+            <div className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="flex flex-col items-center gap-4 border-b border-zinc-100 px-6 py-10 text-center dark:border-zinc-800">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-950/40">
+                  <svg className="h-7 w-7 text-blue-600 dark:text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                  </svg>
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                    Noch keine Dokumente vorhanden
+                  </h2>
+                  <p className="mt-1.5 max-w-sm text-xs text-zinc-500 dark:text-zinc-400">
+                    Laden Sie das erste schulische Dokument hoch, um die Dokumentenbasis aufzubauen.
+                    Anschließend stehen KI-Suche, Zusammenfassungen und Steuerungsanalyse zur Verfügung.
+                  </p>
+                </div>
+                <Link
+                  href="/upload"
+                  className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path d="M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" />
+                    <path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" />
+                  </svg>
+                  Jetzt hochladen
+                </Link>
+              </div>
+              <div className="grid divide-x divide-zinc-100 sm:grid-cols-3 dark:divide-zinc-800">
+                {([
+                  {
+                    step: '1',
+                    title: 'Metadaten einrichten',
+                    desc: 'Dokumenttypen und Organisationseinheiten im Admin-Bereich anlegen.',
+                    href: '/admin',
+                    color: 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-950/40',
+                  },
+                  {
+                    step: '2',
+                    title: 'Dokument hochladen',
+                    desc: 'PDF oder Word-Datei mit Metadaten in die Dokumentenbasis aufnehmen.',
+                    href: '/upload',
+                    color: 'text-blue-600 bg-blue-50 dark:text-blue-300 dark:bg-blue-950/40',
+                  },
+                  {
+                    step: '3',
+                    title: 'KI nutzen',
+                    desc: 'Fragen stellen, Zusammenfassungen abrufen und Steuerungsrelevanz analysieren.',
+                    href: '/',
+                    color: 'text-emerald-600 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/40',
+                  },
+                ] as const).map(({ step, title, desc, href, color }) => (
+                  <Link key={step} href={href} className="flex flex-col gap-2 p-5 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                    <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold ${color}`}>
+                      {step}
+                    </span>
+                    <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-100">{title}</p>
+                    <p className="text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">{desc}</p>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )
         )}
 
         {/* Tabellenansicht */}

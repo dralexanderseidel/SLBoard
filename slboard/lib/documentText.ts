@@ -83,7 +83,7 @@ async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<PdfJsResult> {
   }
 }
 
-async function extractTextFromBuffer(
+export async function extractTextFromBuffer(
   buffer: Buffer,
   mimeType: string
 ): Promise<{

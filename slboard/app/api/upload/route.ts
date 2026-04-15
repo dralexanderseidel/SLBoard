@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
-import { getDocumentText } from '../../../lib/documentText';
+import { extractTextFromBuffer } from '../../../lib/documentText';
 import { buildSearchIndex } from '../../../lib/indexing';
 import { resolveUserAccess } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
 import { WORKFLOW_STATUS_ORDER } from '../../../lib/documentWorkflow';
+import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
+import { getAiSettingsForSchool } from '../../../lib/aiSettings';
+import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../lib/aiPromptTemplates';
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const ALLOWED_MIME_TYPES = [
@@ -14,7 +17,6 @@ const ALLOWED_MIME_TYPES = [
   'application/msword', // .doc
   'application/vnd.oasis.opendocument.text', // .odt
 ];
-const ALLOWED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.odt'];
 
 function getExtension(mimeType: string): string {
   const map: Record<string, string> = {
@@ -188,28 +190,66 @@ export async function POST(req: NextRequest) {
       return apiError(500, 'INTERNAL_ERROR', updateDocError.message ?? 'current_version_id konnte nicht gesetzt werden.');
     }
 
-    // 5) Phase A: Dokument indexieren (search_text + keywords)
-    try {
-      const extractedText = await getDocumentText(documentId);
-      const { keywords, searchText } = buildSearchIndex({
-        title,
-        documentType: type,
-        gremium,
-        responsibleUnit,
-        reachScope,
-        participationGroups,
-        summary: null,
-        legalReference: null,
-        extractedText,
-      });
-      await supabase
-        .from('documents')
-        .update({ search_text: searchText, keywords, indexed_at: new Date().toISOString() })
-        .eq('id', documentId)
-        .eq('school_number', schoolNumber);
-    } catch {
-      // Indexing ist Best-Effort; Upload soll nicht scheitern, wenn Extraktion/Indexing fehlschlägt
-    }
+    // 5) Indexierung + KI-Zusammenfassung fire-and-forget — Antwort wird sofort gesendet,
+    //    Extraktion und LLM-Aufruf laufen im Hintergrund. Buffer ist bereits im Speicher.
+    const indexBuffer = Buffer.from(buffer);
+    void (async () => {
+      try {
+        const extracted = await extractTextFromBuffer(indexBuffer, mimeType);
+        const { keywords, searchText } = buildSearchIndex({
+          title,
+          documentType: type,
+          gremium,
+          responsibleUnit,
+          reachScope,
+          participationGroups,
+          summary: null,
+          legalReference: null,
+          extractedText: extracted.text,
+        });
+        await supabase
+          .from('documents')
+          .update({ search_text: searchText, keywords, indexed_at: new Date().toISOString() })
+          .eq('id', documentId)
+          .eq('school_number', schoolNumber);
+
+        // Automatische KI-Zusammenfassung, wenn LLM konfiguriert und Text vorhanden
+        if (isLlmConfigured() && extracted.text && extracted.text.length > 100) {
+          try {
+            const MAX_SUMMARY_CHARS = 12_000;
+            const basisText = extracted.text.length > MAX_SUMMARY_CHARS
+              ? extracted.text.slice(0, MAX_SUMMARY_CHARS) + '…'
+              : extracted.text;
+            const aiSettings = await getAiSettingsForSchool(schoolNumber);
+            const promptTemplate = await getSchoolPromptTemplate(schoolNumber, 'summary');
+            const systemPrompt = [promptTemplate.system_locked, promptTemplate.system_editable]
+              .filter(Boolean).join('\n\n').trim();
+            const userPromptTemplate = [promptTemplate.user_locked, promptTemplate.user_editable]
+              .filter(Boolean).join('\n\n').trim();
+            const userPrompt = renderPromptTemplate(userPromptTemplate, {
+              school_profile_block: '',
+              document_title: title,
+              document_text: `Titel: ${title} · Typ: ${type}\n\n${basisText}`,
+            });
+            const summary = await callLlm(systemPrompt, userPrompt, {
+              timeoutMs: aiSettings.llm_timeout_ms,
+              usage: { supabase, schoolNumber, useCase: 'summary', metadata: { document_id: documentId } },
+            });
+            if (summary) {
+              await supabase
+                .from('documents')
+                .update({ summary, summary_updated_at: new Date().toISOString() })
+                .eq('id', documentId)
+                .eq('school_number', schoolNumber);
+            }
+          } catch {
+            // KI-Zusammenfassung ist Best-Effort; kein Rollback nötig
+          }
+        }
+      } catch {
+        // Indexierung ist Best-Effort; kein Rollback nötig
+      }
+    })();
 
     return NextResponse.json({
       success: true,

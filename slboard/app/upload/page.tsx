@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PARTICIPATION_GROUP_OPTIONS } from '@/lib/documentMeta';
 
@@ -8,19 +8,28 @@ type Status = 'ENTWURF' | 'FREIGEGEBEN' | 'BESCHLUSS' | 'VEROEFFENTLICHT';
 type ReachScope = 'intern' | 'extern';
 
 type UploadItem = {
+  id: string;
   file: File;
   title: string;
+  /** Client-seitiger Validierungsfehler (Größe / MIME) */
+  validationError?: string;
 };
 
+const MAX_FILE_MB = 20;
+const ALLOWED_MIME_TYPES_CLIENT = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/vnd.oasis.opendocument.text',
+]);
+
+function getTodayISODateLocal(): string {
+  const d = new Date();
+  const localDate = new Date(d.getTime() - d.getTimezoneOffset() * 60 * 1000);
+  return localDate.toISOString().slice(0, 10);
+}
 
 export default function UploadPage() {
-  const getTodayISODateLocal = () => {
-    // HTML <input type="date"> erwartet YYYY-MM-DD in *lokaler* Zeit.
-    const d = new Date();
-    const tzOffsetMinutes = d.getTimezoneOffset();
-    const localDate = new Date(d.getTime() - tzOffsetMinutes * 60 * 1000);
-    return localDate.toISOString().slice(0, 10);
-  };
 
   const [type, setType] = useState('PROTOKOLL');
   const [typeOptions, setTypeOptions] = useState<Array<{ code: string; label: string }>>([]);
@@ -37,6 +46,12 @@ export default function UploadPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Laufende Upload-Requests beim Unmount abbrechen
+  const uploadControllersRef = useRef<AbortController[]>([]);
+  useEffect(() => {
+    return () => { uploadControllersRef.current.forEach((c) => c.abort()); };
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -83,10 +98,14 @@ export default function UploadPage() {
     }
 
     setSubmitting(true);
+    uploadControllersRef.current = [];
 
     try {
       const results = await Promise.all(
         items.map(async (it) => {
+          const controller = new AbortController();
+          uploadControllersRef.current.push(controller);
+
           const formData = new FormData();
           formData.set('file', it.file);
           formData.set('title', it.title);
@@ -99,34 +118,40 @@ export default function UploadPage() {
           formData.set('responsibleUnit', responsibleUnit);
           formData.set('participationGroups', JSON.stringify(participationGroups));
 
-          const res = await fetch('/api/upload', { method: 'POST', body: formData });
+          const res = await fetch('/api/upload', { method: 'POST', body: formData, signal: controller.signal });
           const data = (await res.json()) as { success?: boolean; error?: string; message?: string };
-          return { ok: res.ok, error: data.error, message: data.message, title: it.title };
+          return { ok: res.ok, error: data.error, message: data.message, id: it.id, title: it.title };
         })
       );
+      uploadControllersRef.current = [];
 
       const okCount = results.filter((r) => r.ok).length;
       const fail = results.filter((r) => !r.ok);
+
       if (fail.length > 0) {
+        // Nur erfolgreiche Dateien aus der Liste entfernen — fehlgeschlagene bleiben zum Wiederholen
+        const successIds = new Set(results.filter((r) => r.ok).map((r) => r.id));
+        setItems((prev) => prev.filter((it) => !successIds.has(it.id)));
         setError(
           `Upload teilweise fehlgeschlagen: ${okCount}/${results.length} erfolgreich. ` +
             `Fehler: ${fail.slice(0, 3).map((f) => `${f.title}: ${f.error ?? 'unbekannt'}`).join(' | ')}` +
-            (fail.length > 3 ? ' …' : '')
+            (fail.length > 3 ? ' …' : ''),
         );
       } else {
         setMessage(`${okCount}/${results.length} Dokument(e) erfolgreich hochgeladen.`);
+        setDate('');
+        setGremium('');
+        setReachScope('intern');
+        setParticipationGroups([]);
+        setParticipationInput('');
+        setItems([]);
+        const fileInput = document.getElementById('file') as HTMLInputElement | null;
+        if (fileInput) fileInput.value = '';
       }
-
-      setDate('');
-      setGremium('');
-      setReachScope('intern');
-      setParticipationGroups([]);
-      setParticipationInput('');
-      setItems([]);
-      const fileInput = document.getElementById('file') as HTMLInputElement | null;
-      if (fileInput) fileInput.value = '';
-    } catch (err: any) {
-      setError(err.message ?? 'Unbekannter Fehler beim Hochladen.');
+    } catch (err: unknown) {
+      if ((err as { name?: string }).name !== 'AbortError') {
+        setError(err instanceof Error ? err.message : 'Unbekannter Fehler beim Hochladen.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -351,7 +376,7 @@ export default function UploadPage() {
           <div className="pt-2">
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || items.some((it) => !!it.validationError)}
               className="h-9 rounded bg-blue-600 px-4 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
             >
               {submitting ? 'Wird hochgeladen…' : `Dokumente hochladen${items.length ? ` (${items.length})` : ''}`}
@@ -368,12 +393,31 @@ export default function UploadPage() {
               accept=".pdf,.doc,.docx,.odt"
               multiple
               onChange={(e) => {
+                setError(null);
                 const list = Array.from(e.target.files ?? []);
-                const mapped: UploadItem[] = list.map((f) => ({
-                  file: f,
-                  title: (f.name ?? '').replace(/\.[^/.]+$/, ''),
-                }));
+                const mapped: UploadItem[] = list.map((f) => {
+                  let validationError: string | undefined;
+                  if (f.size > MAX_FILE_MB * 1024 * 1024) {
+                    validationError = `Zu groß (max. ${MAX_FILE_MB} MB)`;
+                  } else if (!ALLOWED_MIME_TYPES_CLIENT.has(f.type)) {
+                    validationError = 'Nur PDF / Word (.pdf, .doc, .docx, .odt)';
+                  }
+                  return {
+                    id: crypto.randomUUID(),
+                    file: f,
+                    title: f.name.replace(/\.[^/.]+$/, ''),
+                    validationError,
+                  };
+                });
                 setItems(mapped);
+                const invalid = mapped.filter((m) => m.validationError);
+                if (invalid.length > 0) {
+                  setError(
+                    `${invalid.length} Datei(en) ungültig: ` +
+                      invalid.slice(0, 3).map((m) => `${m.file.name} – ${m.validationError}`).join(' | ') +
+                      (invalid.length > 3 ? ' …' : ''),
+                  );
+                }
               }}
               className="text-xs text-zinc-700 file:mr-2 file:rounded file:border-none file:bg-zinc-200 file:px-2 file:py-1 file:text-xs file:font-medium file:text-zinc-800 hover:file:bg-zinc-300 dark:text-zinc-200 dark:file:bg-zinc-700 dark:file:text-zinc-100 dark:hover:file:bg-zinc-600"
             />
@@ -385,8 +429,12 @@ export default function UploadPage() {
                 <ul className="space-y-2">
                   {items.map((it, idx) => (
                     <li
-                      key={`${it.file.name}-${it.file.size}`}
-                      className="rounded border border-zinc-200 bg-white p-2 dark:border-zinc-800 dark:bg-zinc-900"
+                      key={it.id}
+                      className={`rounded border p-2 ${
+                        it.validationError
+                          ? 'border-red-300 bg-red-50 dark:border-red-900/40 dark:bg-red-950/20'
+                          : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900'
+                      }`}
                     >
                       <div className="flex items-center justify-between gap-3">
                         <span className="min-w-0 truncate font-medium">{it.file.name}</span>
@@ -394,6 +442,9 @@ export default function UploadPage() {
                           {(it.file.size / 1024 / 1024).toFixed(1)} MB
                         </span>
                       </div>
+                      {it.validationError && (
+                        <p className="mt-1 text-[11px] text-red-600 dark:text-red-400">{it.validationError}</p>
+                      )}
                       <div className="mt-2 grid gap-1">
                         <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
                           Titel

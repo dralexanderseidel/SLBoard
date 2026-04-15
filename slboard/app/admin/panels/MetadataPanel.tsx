@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CollapsibleSection } from './CollapsibleSection';
 import type { DocumentTypeOption, ResponsibleUnitOption } from '../types';
 
@@ -15,8 +15,11 @@ export function MetadataPanel({ open, onToggle }: Props) {
   const [newDocTypeCode, setNewDocTypeCode] = useState('');
   const [newDocTypeLabel, setNewDocTypeLabel] = useState('');
   const [newRespUnit, setNewRespUnit] = useState('');
+  const hasFetchedRef = useRef(false);
 
   useEffect(() => {
+    if (!open || hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     const load = async () => {
       setLoading(true);
       setError(null);
@@ -34,7 +37,7 @@ export function MetadataPanel({ open, onToggle }: Props) {
       }
     };
     void load();
-  }, []);
+  }, [open]);
 
   const handleSave = async () => {
     setLoading(true);

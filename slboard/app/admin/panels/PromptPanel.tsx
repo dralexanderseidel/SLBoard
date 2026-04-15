@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { CollapsibleSection } from './CollapsibleSection';
 import type { PromptTemplateConfig, PromptUseCase } from '../types';
 
@@ -18,10 +18,22 @@ export function PromptPanel({ open, onToggle }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [templates, setTemplates] = useState<PromptTemplateConfig[]>([]);
   const [activeUseCase, setActiveUseCase] = useState<PromptUseCase>('steering');
-  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewMode, setPreviewMode] = useState<'prompt_only' | 'llm_test' | null>(null);
   const [previewResult, setPreviewResult] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const hasFetchedRef = useRef(false);
+  const previewAreaRef = useRef<HTMLDivElement>(null);
+
+  // Ergebnis oder Fehler automatisch in den sichtbaren Bereich scrollen
+  useEffect(() => {
+    if ((previewResult != null || previewError) && previewAreaRef.current) {
+      previewAreaRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [previewResult, previewError]);
 
   useEffect(() => {
+    if (!open || hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
     const load = async () => {
       setLoading(true);
       setError(null);
@@ -38,7 +50,7 @@ export function PromptPanel({ open, onToggle }: Props) {
       }
     };
     void load();
-  }, []);
+  }, [open]);
 
   const handleSave = async () => {
     setLoading(true);
@@ -69,32 +81,43 @@ export function PromptPanel({ open, onToggle }: Props) {
   };
 
   const handlePreview = async (mode: 'prompt_only' | 'llm_test') => {
-    setPreviewLoading(true);
-    setError(null);
-    setMessage(null);
+    setPreviewMode(mode);
     setPreviewResult(null);
+    setPreviewError(null);
     try {
       const res = await fetch('/api/admin/ai-prompts/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ use_case: activeUseCase, mode }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Prompt-Preview fehlgeschlagen.');
+
+      let data: Record<string, unknown>;
+      try {
+        data = (await res.json()) as Record<string, unknown>;
+      } catch {
+        throw new Error(
+          res.status === 504 || res.status === 502
+            ? `Server-Timeout (HTTP ${res.status}). Der LLM-Aufruf hat zu lange gedauert.`
+            : `Ungültige Serverantwort (HTTP ${res.status}).`,
+        );
+      }
+
+      if (!res.ok) throw new Error((data.error as string | undefined) ?? 'Prompt-Preview fehlgeschlagen.');
+
       const showSteeringFormat = activeUseCase === 'steering' && (data.mode ?? mode) === 'llm_test';
       const formatInfo = showSteeringFormat ? ` · JSON-Format ok: ${data.steeringFormatOk ? 'ja' : 'nein'}` : '';
       const errorInfo =
-        showSteeringFormat && Array.isArray(data.steeringFormatErrors) && data.steeringFormatErrors.length > 0
+        showSteeringFormat && Array.isArray(data.steeringFormatErrors) && (data.steeringFormatErrors as unknown[]).length > 0
           ? `\nFehler:\n- ${(data.steeringFormatErrors as string[]).join('\n- ')}`
           : '';
       setPreviewResult(
-        `Use Case: ${data.use_case} · Modus: ${data.mode ?? mode}${formatInfo}${errorInfo}\n\n` +
-        `--- Prompt-Ausgabe (gekürzt) ---\n${(data.outputPreview as string | undefined) ?? 'Keine Ausgabe (nur Vorschau.)'}`,
+        `Use Case: ${String(data.use_case)} · Modus: ${String(data.mode ?? mode)}${formatInfo}${errorInfo}\n\n` +
+        `--- Prompt-Ausgabe (gekürzt) ---\n${(data.outputPreview as string | undefined) || 'Keine Ausgabe erhalten.'}`,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Prompt-Preview fehlgeschlagen.');
+      setPreviewError(e instanceof Error ? e.message : 'Prompt-Preview fehlgeschlagen.');
     } finally {
-      setPreviewLoading(false);
+      setPreviewMode(null);
     }
   };
 
@@ -222,14 +245,14 @@ export function PromptPanel({ open, onToggle }: Props) {
           {loading ? 'Speichere Prompt-Bausteine…' : 'Prompt-Bausteine speichern'}
         </button>
         <button type="button" onClick={() => void handlePreview('prompt_only')}
-          disabled={previewLoading || templates.length === 0}
+          disabled={previewMode === 'prompt_only' || templates.length === 0}
           className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800">
-          {previewLoading ? 'Lade Vorschau…' : 'Prompt-Vorschau (ohne LLM)'}
+          {previewMode === 'prompt_only' ? 'Lade Vorschau…' : 'Prompt-Vorschau (ohne LLM)'}
         </button>
         <button type="button" onClick={() => void handlePreview('llm_test')}
-          disabled={previewLoading || templates.length === 0}
+          disabled={previewMode === 'llm_test' || templates.length === 0}
           className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800">
-          {previewLoading ? 'Teste Prompt…' : 'Prompt testen (LLM)'}
+          {previewMode === 'llm_test' ? 'Teste Prompt…' : 'Prompt testen (LLM)'}
         </button>
         <button type="button" onClick={() => void handleReset()}
           disabled={loading || templates.length === 0}
@@ -238,11 +261,23 @@ export function PromptPanel({ open, onToggle }: Props) {
         </button>
       </div>
 
-      {previewResult && (
-        <pre className="mt-3 max-h-64 overflow-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
-          {previewResult}
-        </pre>
-      )}
+      <div ref={previewAreaRef}>
+        {previewMode === 'llm_test' && (
+          <p className="mt-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+            LLM-Anfrage läuft — das kann einige Sekunden dauern…
+          </p>
+        )}
+        {previewError && (
+          <p className="mt-3 rounded border border-red-200 bg-red-50 px-2 py-2 text-[11px] text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+            Fehler: {previewError}
+          </p>
+        )}
+        {previewResult != null && (
+          <pre className="mt-3 max-h-96 overflow-auto rounded border border-zinc-200 bg-zinc-50 p-2 text-[11px] text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
+            {previewResult}
+          </pre>
+        )}
+      </div>
     </CollapsibleSection>
   );
 }

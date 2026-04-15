@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { MIN_APP_PASSWORD_LENGTH } from '@/lib/authPasswordConstants';
 import { DEFAULT_ORG_UNIT_NAMES } from '@/lib/documentMeta';
 import { CollapsibleSection } from './CollapsibleSection';
@@ -27,6 +27,8 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
     username: '', full_name: '', email: '', org_unit: 'Schulleitung', school_number: '', temporary_password: '',
   });
   const [saving, setSaving] = useState(false);
+  const [savingRoleUserIds, setSavingRoleUserIds] = useState(new Set<string>());
+  const roleAbortControllers = useRef(new Map<string, AbortController>());
   const [activeOrgUnits, setActiveOrgUnits] = useState<string[]>(DEFAULT_ORG_UNIT_NAMES);
 
   useEffect(() => {
@@ -40,11 +42,11 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
       .catch(() => {});
   }, []);
 
-  const orgUnitSelectOptions = (current?: string): string[] => {
+  const orgUnitSelectOptions = useCallback((current?: string): string[] => {
     const cur = (current ?? '').trim();
     if (!cur) return activeOrgUnits;
     return activeOrgUnits.includes(cur) ? activeOrgUnits : [cur, ...activeOrgUnits];
-  };
+  }, [activeOrgUnits]);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -139,23 +141,37 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
   };
 
   const handleRolesChange = async (userId: string, newRoles: string[]) => {
-    setSaving(true);
+    // Sofortiges optimistisches Update – kein globales Sperren der Oberfläche
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, roles: newRoles } : u)));
+
+    // Laufende Anfrage für denselben Nutzer abbrechen
+    roleAbortControllers.current.get(userId)?.abort();
+    const controller = new AbortController();
+    roleAbortControllers.current.set(userId, controller);
+    setSavingRoleUserIds((prev) => new Set([...prev, userId]));
     setError(null);
     setMessage(null);
+
     try {
       const res = await fetch(`/api/admin/users/${userId}/roles`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roles: newRoles }),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Fehler beim Speichern der Rollen.');
-      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, roles: newRoles } : u)));
       setMessage('Rollen aktualisiert.');
     } catch (e) {
+      if ((e as { name?: string }).name === 'AbortError') return;
       setError(e instanceof Error ? e.message : 'Fehler beim Speichern.');
     } finally {
-      setSaving(false);
+      roleAbortControllers.current.delete(userId);
+      setSavingRoleUserIds((prev) => {
+        const next = new Set(prev);
+        next.delete(userId);
+        return next;
+      });
     }
   };
 
@@ -438,7 +454,7 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
                                     : u.roles.filter((r) => r !== role);
                                   void handleRolesChange(u.id, newRoles);
                                 }}
-                                disabled={saving}
+                                disabled={savingRoleUserIds.has(u.id)}
                                 className="rounded"
                               />
                               {role}

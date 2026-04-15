@@ -8,6 +8,7 @@ import { AiSettingsPanel } from './panels/AiSettingsPanel';
 import { PromptPanel } from './panels/PromptPanel';
 import { MetadataPanel } from './panels/MetadataPanel';
 import { StatsPanel } from './panels/StatsPanel';
+import { useReindex } from './hooks/useReindex';
 
 export default function AdminPage() {
   const router = useRouter();
@@ -21,10 +22,7 @@ export default function AdminPage() {
   const [metadataPanelOpen, setMetadataPanelOpen] = useState(true);
   const [statsPanelOpen, setStatsPanelOpen] = useState(true);
 
-  const [reindexLoading, setReindexLoading] = useState(false);
-  const [reindexProgress, setReindexProgress] = useState<string | null>(null);
-  const [reindexError, setReindexError] = useState<string | null>(null);
-  const [reindexMessage, setReindexMessage] = useState<string | null>(null);
+  const { loading: reindexLoading, progress: reindexProgress, error: reindexError, message: reindexMessage, handleReindex } = useReindex();
 
   useEffect(() => {
     const p = new URLSearchParams(searchParams.toString());
@@ -48,44 +46,6 @@ export default function AdminPage() {
     if (typeof next.stats === 'boolean') p.set('statsPanel', next.stats ? '1' : '0');
     const q = p.toString();
     router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
-  };
-
-  const handleReindex = async () => {
-    const ok = window.confirm(
-      'Dokumente neu indizieren?\n\nDies extrahiert Text aus Dateien und setzt search_text/keywords.\nJe nach Anzahl und Dateigröße kann das etwas dauern.'
-    );
-    if (!ok) return;
-    setReindexLoading(true);
-    setReindexProgress('Starte…');
-    setReindexError(null);
-    setReindexMessage(null);
-    try {
-      let offset = 0;
-      let totalOk = 0;
-      let totalFailed = 0;
-      const limit = 10;
-      for (let i = 0; i < 200; i++) {
-        setReindexProgress(`Bearbeite Batch ab Offset ${offset}…`);
-        const res = await fetch('/api/admin/reindex', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ offset, limit }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? 'Reindex fehlgeschlagen.');
-        totalOk += data.ok ?? 0;
-        totalFailed += data.failed ?? 0;
-        offset = data.nextOffset ?? (offset + limit);
-        setReindexProgress(`Fortschritt: ${totalOk} ok, ${totalFailed} Fehler…`);
-        if (data.done) break;
-      }
-      setReindexMessage(`Reindex abgeschlossen. OK: ${totalOk}, Fehler: ${totalFailed}.`);
-      setReindexProgress(null);
-    } catch (e) {
-      setReindexError(e instanceof Error ? e.message : 'Reindex fehlgeschlagen.');
-    } finally {
-      setReindexLoading(false);
-    }
   };
 
   if (adminAllowed === false) {

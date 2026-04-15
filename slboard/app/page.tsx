@@ -71,7 +71,18 @@ export default function Home() {
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [suggestedDocuments, setSuggestedDocuments] = useState<SuggestedDoc[]>([]);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(true);
   const dashboardAiGenRef = useRef(0);
+
+  // Show onboarding when all notification sections are empty (likely a new school).
+  // Dismissed state is persisted in localStorage to avoid repeated display.
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem('onboarding_dismissed')) {
+        setOnboardingDismissed(false);
+      }
+    } catch { /* localStorage not available */ }
+  }, []);
 
   useEffect(() => {
     if (!question.trim()) {
@@ -413,6 +424,80 @@ export default function Home() {
             </div>
           )}
         </section>
+
+        {/* Erste Schritte – nur für neue Schulen sichtbar (alle Benachrichtigungsfelder leer) */}
+        {!onboardingDismissed &&
+          !publishedLoading &&
+          !reviewOverdueLoading &&
+          recentlyPublished.length === 0 &&
+          reviewOverdue.length === 0 &&
+          recentQueries.length === 0 &&
+          !publishedLoadError && (
+          <section className="rounded-lg border border-blue-200 bg-blue-50/60 p-5 shadow-sm dark:border-blue-900/40 dark:bg-blue-950/20">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                  Willkommen – Erste Schritte
+                </h2>
+                <p className="mt-0.5 text-xs text-blue-700 dark:text-blue-300">
+                  Richten Sie Ihre Schule in drei Schritten ein:
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setOnboardingDismissed(true);
+                  try { localStorage.setItem('onboarding_dismissed', '1'); } catch { /* ignore */ }
+                }}
+                aria-label="Hinweis schließen"
+                className="rounded p-1 text-blue-400 transition hover:bg-blue-100 hover:text-blue-600 dark:hover:bg-blue-900/40"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
+              </button>
+            </div>
+            <ol className="mt-4 grid gap-3 sm:grid-cols-3">
+              {([
+                {
+                  n: 1,
+                  title: 'Metadaten einrichten',
+                  desc: 'Dokumenttypen, Organisationseinheiten und KI-Einstellungen im Admin-Bereich konfigurieren.',
+                  href: '/admin',
+                  cta: 'Zum Admin-Bereich',
+                },
+                {
+                  n: 2,
+                  title: 'Dokumente hochladen',
+                  desc: 'PDFs oder Word-Dateien mit Metadaten hochladen – Texte werden automatisch indiziert.',
+                  href: '/upload',
+                  cta: 'Dokument hochladen',
+                },
+                {
+                  n: 3,
+                  title: 'KI & Analyse nutzen',
+                  desc: 'Dokumente zusammenfassen, Steuerungsrelevanz analysieren und Fragen per KI beantworten.',
+                  href: '/#ki-anfrage',
+                  cta: 'KI-Anfrage stellen',
+                },
+              ] as const).map(({ n, title, desc, href, cta }) => (
+                <li key={n} className="flex flex-col gap-2 rounded-md border border-blue-200 bg-white p-4 dark:border-blue-900/40 dark:bg-zinc-900">
+                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white">
+                    {n}
+                  </span>
+                  <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-100">{title}</p>
+                  <p className="flex-1 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">{desc}</p>
+                  <Link
+                    href={href}
+                    className="mt-1 inline-flex items-center text-[11px] font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                  >
+                    {cta} →
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
 
         {/* Navigation */}
         <section className="grid gap-3 md:grid-cols-3">

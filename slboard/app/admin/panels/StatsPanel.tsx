@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CollapsibleSection } from './CollapsibleSection';
 import type { AdminStats } from '../types';
 import { formatStatsDayUtc } from '../types';
@@ -53,6 +53,7 @@ export function StatsPanel({ open, onToggle }: Props) {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasFetchedRef = useRef(false);
 
   const loadStats = async () => {
     setLoading(true);
@@ -70,7 +71,14 @@ export function StatsPanel({ open, onToggle }: Props) {
     }
   };
 
-  useEffect(() => { void loadStats(); }, []);
+  useEffect(() => {
+    if (!open || hasFetchedRef.current) return;
+    hasFetchedRef.current = true;
+    void loadStats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const aiQueriesByDay = useMemo(() => stats?.aiQueriesByDay ?? [], [stats]);
 
   const avg14 = (days: { count: number }[]) =>
     (days.reduce((a, x) => a + x.count, 0) / Math.max(days.length, 1))
@@ -153,39 +161,13 @@ export function StatsPanel({ open, onToggle }: Props) {
               <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
                 <p className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Ø pro Tag (14 Tage)</p>
                 <p className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
-                  {avg14(stats.aiQueriesByDay ?? [])}
+                  {avg14(aiQueriesByDay)}
                 </p>
               </div>
             </div>
             <div className="mt-3">
               <p className="mb-2 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Pro Tag (14 Tage)</p>
-              <div className="flex h-24 items-end gap-0.5 border-b border-zinc-200 pb-1 dark:border-zinc-700">
-                {(stats.aiQueriesByDay ?? []).map((day) => {
-                  const max = Math.max(1, ...(stats.aiQueriesByDay ?? []).map((x) => x.count));
-                  return (
-                    <div
-                      key={`dash-${day.date}`}
-                      className="group flex min-w-0 flex-1 flex-col items-center justify-end"
-                      title={`${formatStatsDayUtc(day.date)}: ${day.count}`}
-                    >
-                      <span className="mb-0.5 hidden text-[9px] text-zinc-500 group-hover:block dark:text-zinc-400">
-                        {day.count}
-                      </span>
-                      <div
-                        className="w-full max-w-[20px] rounded-t bg-violet-500/70 dark:bg-violet-400/60"
-                        style={{ height: `${(day.count / max) * 100}%`, minHeight: day.count > 0 ? 4 : 0 }}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="mt-1 flex gap-0.5 text-[9px] text-zinc-500 dark:text-zinc-400">
-                {(stats.aiQueriesByDay ?? []).map((day) => (
-                  <div key={`lbl-dash-${day.date}`} className="min-w-0 flex-1 truncate text-center">
-                    {day.date.slice(8, 10)}.{day.date.slice(5, 7)}
-                  </div>
-                ))}
-              </div>
+              <MiniBarChart days={aiQueriesByDay} color="bg-violet-500/70 dark:bg-violet-400/60" />
             </div>
           </div>
 

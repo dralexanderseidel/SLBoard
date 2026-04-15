@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 export type DocumentFilters = {
   typeFilter: string;
@@ -35,6 +35,8 @@ export type UseDocumentFiltersResult = DocumentFilters & {
   setSummaryFilter: (v: string) => void;
   setSteeringFilter: (v: string) => void;
   setSearchInput: (v: string) => void;
+  /** Setzt searchInput und searchQuery gleichzeitig (z. B. bei URL-Navigation). */
+  setSearchDirect: (v: string) => void;
   applySearch: () => void;
   setShowAdvancedFilters: (v: boolean) => void;
   resetFilters: () => void;
@@ -42,7 +44,7 @@ export type UseDocumentFiltersResult = DocumentFilters & {
 
 const DEBOUNCE_MS = 400;
 
-export function useDocumentFilters(): UseDocumentFiltersResult {
+export function useDocumentFilters(initialSearchQuery = ''): UseDocumentFiltersResult {
   const [typeFilter, setTypeFilter] = useState('');
   const [responsibleUnitFilter, setResponsibleUnitFilter] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
@@ -60,8 +62,8 @@ export function useDocumentFilters(): UseDocumentFiltersResult {
   const [reviewFilter, setReviewFilter] = useState('');
   const [summaryFilter, setSummaryFilter] = useState('');
   const [steeringFilter, setSteeringFilter] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState(initialSearchQuery);
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   useEffect(() => {
@@ -81,6 +83,11 @@ export function useDocumentFilters(): UseDocumentFiltersResult {
     setReachScopeFilters((prev) => (prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]));
 
   const applySearch = () => setSearchQuery(searchInput.trim());
+
+  const setSearchDirect = useCallback((v: string) => {
+    setSearchInput(v);
+    setSearchQuery(v.trim());
+  }, []);
 
   const resetFilters = () => {
     setTypeFilter('');
@@ -114,7 +121,7 @@ export function useDocumentFilters(): UseDocumentFiltersResult {
     reviewFilter, setReviewFilter,
     summaryFilter, setSummaryFilter,
     steeringFilter, setSteeringFilter,
-    searchInput, setSearchInput, applySearch,
+    searchInput, setSearchInput, setSearchDirect, applySearch,
     searchQuery,
     showAdvancedFilters, setShowAdvancedFilters,
     resetFilters,

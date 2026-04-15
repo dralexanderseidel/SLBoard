@@ -6,6 +6,7 @@ import { UserMenu } from '../components/UserMenu';
 import { HeaderAccessProvider } from '../components/HeaderAccessContext';
 import { SuperAdminNavLink } from '../components/SuperAdminNavLink';
 import { NomosLogo } from '../components/NomosLogo';
+import { GlobalSearch } from '../components/GlobalSearch';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -66,6 +67,8 @@ export default function RootLayout({
                     </Link>
                     <SuperAdminNavLink />
                   </nav>
+
+                  <GlobalSearch />
 
                   <div className="flex shrink-0 items-center border-l border-zinc-200 pl-4 sm:pl-6 dark:border-zinc-700">
                     <UserMenu />
