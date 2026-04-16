@@ -222,8 +222,12 @@ function DraftAssistantContent() {
     setSavedDocumentId(null);
     setShowAfterSaveActions(false);
 
-    if (!subject.trim() || !body.trim()) {
-      setError('Bitte geben Sie mindestens Betreff und Entwurfstext ein.');
+    if (!subject.trim()) {
+      setError('Bitte geben Sie einen Betreff ein.');
+      return;
+    }
+    if (!body.trim()) {
+      setError('Bitte geben Sie einen Entwurfstext ein.');
       return;
     }
 
