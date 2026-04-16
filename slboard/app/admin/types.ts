@@ -11,7 +11,15 @@ export type AppUser = {
   deletable?: boolean;
 };
 
-export type DocumentTypeOption = { code: string; label: string; active: boolean; sort_order: number };
+export type DocumentTypeOption = {
+  code: string;
+  label: string;
+  active: boolean;
+  sort_order: number;
+  draft_audience?: string | null;
+  draft_tone?: string | null;
+  draft_format_hint?: string | null;
+};
 export type ResponsibleUnitOption = { name: string; active: boolean; sort_order: number };
 export type PromptUseCase = 'qa' | 'summary' | 'steering';
 

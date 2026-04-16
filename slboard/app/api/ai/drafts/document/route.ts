@@ -13,7 +13,7 @@ import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
 import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../../lib/aiQueryDebugLog';
 import { apiError } from '../../../../../lib/apiError';
-import { getDraftDocTypeConfig, DRAFT_DOC_TYPE_CODES } from '../../../../../lib/draftDocTypes';
+import { getDraftDocTypeConfig } from '../../../../../lib/draftDocTypes';
 
 type Payload = {
   topic?: string;
@@ -47,9 +47,10 @@ export async function POST(req: NextRequest) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'LLM-Konfiguration fehlt.');
     }
 
-    // Typ validieren und Konfiguration laden
-    const typeCode = documentType && DRAFT_DOC_TYPE_CODES.has(documentType) ? documentType : 'ELTERNBRIEF';
-    const typeConfig = getDraftDocTypeConfig(typeCode);
+    // Typ-Code normalisieren: jeder nicht-leere String ist gültig
+    const typeCode = typeof documentType === 'string' && documentType.trim()
+      ? documentType.trim().toUpperCase()
+      : 'ELTERNBRIEF';
 
     const supabase = supabaseServer();
     if (!supabase) {
@@ -57,7 +58,34 @@ export async function POST(req: NextRequest) {
     }
 
     const access = await resolveUserAccess(user.email, supabase);
-    const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
+
+    // Hardcoded-Defaults (für bekannte Typen aus draftDocTypes.ts)
+    const hardcodedConfig = getDraftDocTypeConfig(typeCode);
+
+    // Schulspezifische Entwurfs-Konfiguration aus DB laden (parallel zu aiSettings)
+    const [aiSettings, dbDocTypeRes] = await Promise.all([
+      getAiSettingsForSchool(access.schoolNumber),
+      supabase
+        .from('school_document_type_options')
+        .select('label, draft_audience, draft_tone, draft_format_hint')
+        .eq('school_number', access.schoolNumber)
+        .eq('code', typeCode)
+        .maybeSingle(),
+    ]);
+
+    const dbDocType = dbDocTypeRes.data as {
+      label?: string | null;
+      draft_audience?: string | null;
+      draft_tone?: string | null;
+      draft_format_hint?: string | null;
+    } | null;
+
+    // DB-Werte überschreiben Hardcode-Defaults (Fallback: hardcoded → generic)
+    const typeLabel          = dbDocType?.label              || hardcodedConfig.label;
+    const typeSystemRole     = hardcodedConfig.systemRole    || typeLabel;
+    const typeTone           = dbDocType?.draft_tone         || hardcodedConfig.tone;
+    const typeDefaultAudience = dbDocType?.draft_audience    || hardcodedConfig.defaultAudience;
+    const typeFormatHint     = dbDocType?.draft_format_hint  || hardcodedConfig.formatInstructions;
     const schoolProfile = await getSchoolProfileText(access.schoolNumber);
     const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
 
@@ -127,14 +155,14 @@ export async function POST(req: NextRequest) {
             .join('\n\n')
         : `Es stehen keine Vorlagen zur Verfügung. Erstelle einen allgemeinen Entwurf.`;
 
-    const systemPrompt = `Du bist ein deutscher Assistent für schulische ${typeConfig.systemRole}.
-Erstelle Entwürfe in ${typeConfig.tone} Ton, auf Deutsch.
+    const systemPrompt = `Du bist ein deutscher Assistent für schulische ${typeSystemRole}.
+Erstelle Entwürfe in ${typeTone} Ton, auf Deutsch.
 Antworte NUR mit dem geforderten Format, ohne zusätzliche Erklärungen.`;
 
     const schoolContextBlock = schoolProfile ? `Schul-Steckbrief:\n${schoolProfile}\n\n` : '';
-    const audienceValue = targetAudience?.trim() || typeConfig.defaultAudience;
+    const audienceValue = targetAudience?.trim() || typeDefaultAudience;
 
-    const userPrompt = `Erstelle einen Entwurf für: ${typeConfig.label}
+    const userPrompt = `Erstelle einen Entwurf für: ${typeLabel}
 
 Thema/Betreff: ${topic}
 Zielgruppe: ${audienceValue}
@@ -144,7 +172,7 @@ ${schoolContextBlock}Nutze folgende Vorlagen als Inspiration (Stil, Formulierung
 
 ${vorlagenBlock}
 
-${typeConfig.formatInstructions}
+${typeFormatHint}
 
 Antworte ausschließlich in diesem Format (keine anderen Zeichen davor oder danach):
 
@@ -162,6 +190,7 @@ TEXT:
           documentType: typeCode,
           topic: topic ?? '',
           targetAudience: audienceValue,
+          typeLabel,
           purpose: purpose ?? '',
           sourceCount: sourceTexts.length,
           sourceIds: docsToUse.map((d) => d.id),

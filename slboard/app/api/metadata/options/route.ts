@@ -42,7 +42,7 @@ export async function GET() {
     const [typesRes, unitsRes] = await Promise.all([
       supabase
         .from('school_document_type_options')
-        .select('code, label, sort_order, active')
+        .select('code, label, sort_order, active, draft_audience, draft_tone, draft_format_hint')
         .eq('school_number', schoolNumber)
         .eq('active', true)
         .order('sort_order', { ascending: true }),
@@ -54,14 +54,22 @@ export async function GET() {
         .order('sort_order', { ascending: true }),
     ]);
 
-    const types = (typesRes.data ?? []).map((t) => ({
-      code: (t as { code: string }).code,
-      label: (t as { label: string }).label,
-    }));
+    const types = (typesRes.data ?? []).map((t) => {
+      const row = t as { code: string; label: string; draft_audience?: string | null; draft_tone?: string | null; draft_format_hint?: string | null };
+      return {
+        code: row.code,
+        label: row.label,
+        draft_audience: row.draft_audience ?? null,
+        draft_tone: row.draft_tone ?? null,
+        draft_format_hint: row.draft_format_hint ?? null,
+      };
+    });
     const responsibleUnits = (unitsRes.data ?? []).map((u) => (u as { name: string }).name);
 
     // Fallback: falls die Tabellen/Migrationen noch nicht vorhanden sind oder leer sind
-    const outTypes = types.length > 0 ? types : DEFAULT_TYPES.map(({ code, label }) => ({ code, label }));
+    const outTypes = types.length > 0 ? types : DEFAULT_TYPES.map(({ code, label }) => ({
+      code, label, draft_audience: null, draft_tone: null, draft_format_hint: null,
+    }));
     const outUnits = responsibleUnits.length > 0 ? responsibleUnits : DEFAULT_RESP_UNITS.map((u) => u.name);
 
     return NextResponse.json({ documentTypes: outTypes, responsibleUnits: outUnits, schoolNumber });

@@ -8,7 +8,15 @@ import { apiError } from '../../../../lib/apiError';
 export const runtime = 'nodejs';
 
 type UpdatePayload = {
-  documentTypes?: Array<{ code: string; label: string; active?: boolean; sort_order?: number }>;
+  documentTypes?: Array<{
+    code: string;
+    label: string;
+    active?: boolean;
+    sort_order?: number;
+    draft_audience?: string | null;
+    draft_tone?: string | null;
+    draft_format_hint?: string | null;
+  }>;
   responsibleUnits?: Array<{ name: string; active?: boolean; sort_order?: number }>;
 };
 
@@ -28,7 +36,7 @@ export async function GET() {
     const [typesRes, unitsRes] = await Promise.all([
       supabase
         .from('school_document_type_options')
-        .select('code, label, sort_order, active')
+        .select('code, label, sort_order, active, draft_audience, draft_tone, draft_format_hint')
         .eq('school_number', schoolNumber)
         .order('sort_order', { ascending: true }),
       supabase
@@ -79,6 +87,9 @@ export async function PUT(req: NextRequest) {
         label: t.label.trim(),
         sort_order: clampInt(t.sort_order, idx * 10),
         active: t.active !== false,
+        draft_audience: typeof t.draft_audience === 'string' ? t.draft_audience.trim() || null : t.draft_audience ?? null,
+        draft_tone: typeof t.draft_tone === 'string' ? t.draft_tone.trim() || null : t.draft_tone ?? null,
+        draft_format_hint: typeof t.draft_format_hint === 'string' ? t.draft_format_hint.trim() || null : t.draft_format_hint ?? null,
         updated_at: new Date().toISOString(),
       })).filter((r) => r.code && r.label);
 

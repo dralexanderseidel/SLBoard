@@ -3,7 +3,16 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { DRAFT_DOC_TYPES, getDraftDocTypeConfig } from '@/lib/draftDocTypes';
+import { getDraftDocTypeConfig } from '@/lib/draftDocTypes';
+import { METADATA_BROADCAST_CHANNEL } from '@/lib/metadataBroadcast';
+
+type DbDocType = {
+  code: string;
+  label: string;
+  draft_audience: string | null;
+  draft_tone: string | null;
+  draft_format_hint: string | null;
+};
 
 type SourceDoc = {
   id: string;
@@ -23,6 +32,8 @@ function DraftAssistantContent() {
   const subjectParam = searchParams.get('subject');
 
   const [docType, setDocType] = useState('ELTERNBRIEF');
+  const [dbDocTypes, setDbDocTypes] = useState<DbDocType[]>([]);
+  const metadataFetchedAtRef = useRef<number>(0);
   const [subject, setSubject] = useState('');
   const [audience, setAudience] = useState('');
   const [context, setContext] = useState('');
@@ -43,13 +54,49 @@ function DraftAssistantContent() {
   const [savedDocumentId, setSavedDocumentId] = useState<string | null>(null);
 
   const draftAbortControllerRef = useRef<AbortController | null>(null);
-  // Track whether audience was manually changed by the user
   const audienceCustomizedRef = useRef(false);
 
   // Abort pending KI request on unmount
   useEffect(() => {
     return () => { draftAbortControllerRef.current?.abort(); };
   }, []);
+
+  // Metadaten (Dokumenttypen + Draft-Config) aus DB laden
+  const loadMetadata = useCallback(async () => {
+    try {
+      const res = await fetch('/api/metadata/options', { credentials: 'include', cache: 'no-store' });
+      if (!res.ok) return;
+      const data = (await res.json()) as { documentTypes?: DbDocType[] };
+      if (Array.isArray(data.documentTypes) && data.documentTypes.length > 0) {
+        setDbDocTypes(data.documentTypes);
+        metadataFetchedAtRef.current = Date.now();
+      }
+    } catch { /* Metadaten sind Best-Effort */ }
+  }, []);
+
+  // Initialload + BroadcastChannel (cross-tab) + visibilitychange (focus-revalidation)
+  useEffect(() => {
+    void loadMetadata();
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(METADATA_BROADCAST_CHANNEL);
+      channel.onmessage = () => void loadMetadata();
+    } catch { /* BroadcastChannel nicht unterstützt */ }
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const ageMs = Date.now() - metadataFetchedAtRef.current;
+        if (ageMs > 3 * 60 * 1000) void loadMetadata();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      channel?.close();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [loadMetadata]);
 
   const selectedSet = useMemo(() => new Set(selectedSourceIds), [selectedSourceIds]);
 
@@ -58,19 +105,31 @@ function DraftAssistantContent() {
     if (subjectParam) setSubject(decodeURIComponent(subjectParam));
   }, [subjectParam]);
 
-  // When docType changes, reset audience to the new default (unless manually customized)
+  // typeConfig: DB-Werte überschreiben die hardcodierten Defaults aus draftDocTypes.ts
+  const typeConfig = useMemo(() => {
+    const hardcoded = getDraftDocTypeConfig(docType);
+    const db = dbDocTypes.find((t) => t.code === docType);
+    return {
+      ...hardcoded,
+      defaultAudience: db?.draft_audience || hardcoded.defaultAudience,
+      tone:            db?.draft_tone     || hardcoded.tone,
+      formatInstructions: db?.draft_format_hint || hardcoded.formatInstructions,
+    };
+  }, [docType, dbDocTypes]);
+
+  // Sicherstellen, dass der aktuelle docType noch in den DB-Typen vorhanden ist
+  useEffect(() => {
+    if (dbDocTypes.length > 0 && !dbDocTypes.some((t) => t.code === docType)) {
+      setDocType(dbDocTypes[0].code);
+    }
+  }, [dbDocTypes, docType]);
+
+  // Zielgruppe zurücksetzen wenn docType oder DB-Default sich ändert (sofern nicht manuell überschrieben)
   useEffect(() => {
     if (!audienceCustomizedRef.current) {
-      setAudience(getDraftDocTypeConfig(docType).defaultAudience);
+      setAudience(typeConfig.defaultAudience);
     }
-  }, [docType]);
-
-  // Also set audience default on first mount
-  useEffect(() => {
-    setAudience(getDraftDocTypeConfig('ELTERNBRIEF').defaultAudience);
-  }, []);
-
-  const typeConfig = getDraftDocTypeConfig(docType);
+  }, [typeConfig.defaultAudience]);
 
   useEffect(() => {
     const loadSources = async () => {
@@ -144,7 +203,7 @@ function DraftAssistantContent() {
   const resetDraftForm = useCallback(() => {
     setSubject('');
     audienceCustomizedRef.current = false;
-    setAudience(getDraftDocTypeConfig(docType).defaultAudience);
+    setAudience(typeConfig.defaultAudience);
     setContext('');
     setBody('');
     setSelectedSourceIds([]);
@@ -154,7 +213,7 @@ function DraftAssistantContent() {
     setError(null);
     setSavedDocumentId(null);
     setConfirmOverwrite(false);
-  }, [docType]);
+  }, [typeConfig]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -273,27 +332,36 @@ function DraftAssistantContent() {
           <p className="mb-3 text-xs font-semibold text-zinc-700 dark:text-zinc-200">
             Welches Dokument möchten Sie erstellen?
           </p>
-          <div className="flex flex-wrap gap-2">
-            {DRAFT_DOC_TYPES.map((t) => (
-              <button
-                key={t.code}
-                type="button"
-                onClick={() => {
-                  setDocType(t.code);
-                  setError(null);
-                  setMessage(null);
-                  setConfirmOverwrite(false);
-                }}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-                  docType === t.code
-                    ? 'border-blue-500 bg-blue-600 text-white shadow-sm'
-                    : 'border-zinc-300 bg-white text-zinc-700 hover:border-blue-400 hover:bg-blue-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:border-blue-500 dark:hover:bg-blue-950/30'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          {dbDocTypes.length === 0 ? (
+            <div className="flex gap-2">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-7 w-20 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-700" />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {dbDocTypes.map((t) => (
+                <button
+                  key={t.code}
+                  type="button"
+                  onClick={() => {
+                    setDocType(t.code);
+                    audienceCustomizedRef.current = false;
+                    setError(null);
+                    setMessage(null);
+                    setConfirmOverwrite(false);
+                  }}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                    docType === t.code
+                      ? 'border-blue-500 bg-blue-600 text-white shadow-sm'
+                      : 'border-zinc-300 bg-white text-zinc-700 hover:border-blue-400 hover:bg-blue-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:border-blue-500 dark:hover:bg-blue-950/30'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -509,7 +577,7 @@ function DraftAssistantContent() {
                   className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
                 >
                   <option value="">Alle</option>
-                  {DRAFT_DOC_TYPES.map((t) => (
+                  {dbDocTypes.map((t) => (
                     <option key={t.code} value={t.code}>{t.label}</option>
                   ))}
                 </select>
