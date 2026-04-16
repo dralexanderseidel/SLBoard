@@ -324,7 +324,6 @@ export default function DocumentDetailPage() {
     }
     setVersionLoading(true);
     setVersionError(null);
-    setVersionStatusReset(null);
     try {
       const fd = new FormData();
       fd.set('file', file);
