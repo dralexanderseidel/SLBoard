@@ -218,6 +218,7 @@ export default function DocumentDetailPage() {
   const [versionLoading, setVersionLoading] = useState(false);
   const [versionError, setVersionError] = useState<string | null>(null);
   const [versionFileName, setVersionFileName] = useState<string | null>(null);
+  const [versionStatusReset, setVersionStatusReset] = useState<{ previousStatus: string } | null>(null);
 
   // ── Löschen / Archiv ────────────────────────────────────────────────────────
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -324,6 +325,7 @@ export default function DocumentDetailPage() {
     }
     setVersionLoading(true);
     setVersionError(null);
+    setVersionStatusReset(null);
     try {
       const fd = new FormData();
       fd.set('file', file);
@@ -332,14 +334,24 @@ export default function DocumentDetailPage() {
         credentials: 'include',
         body: fd,
       });
-      const data = await res.json();
+      const data = (await res.json()) as {
+        error?: string;
+        statusReset?: boolean;
+        previousStatus?: string | null;
+      };
       if (!res.ok) throw new Error(data.error ?? 'Fehler beim Hochladen.');
       versionFileRef.current = null;
       setVersionFileName(null);
       versionFormRef.current?.reset();
       if (versionInputRef.current) versionInputRef.current.value = '';
-      // Zusammenfassung beim nächsten Reload leeren (über doc.summary → useDocumentSummary synct)
-      setDoc((prev) => (prev ? { ...prev, summary: null, summary_updated_at: null } : null));
+      if (data.statusReset && data.previousStatus) {
+        setVersionStatusReset({ previousStatus: data.previousStatus });
+        setDoc((prev) =>
+          prev ? { ...prev, status: 'ENTWURF', summary: null, summary_updated_at: null } : null,
+        );
+      } else {
+        setDoc((prev) => (prev ? { ...prev, summary: null, summary_updated_at: null } : null));
+      }
       reload();
     } catch (err) {
       setVersionError(err instanceof Error ? err.message : 'Fehler beim Hochladen.');
@@ -1343,6 +1355,27 @@ export default function DocumentDetailPage() {
                     {versionLoading ? 'Wird hochgeladen…' : 'Version hochladen'}
                   </button>
                   {versionError && <p className="mt-1 text-[11px] text-red-500">{versionError}</p>}
+                  {versionStatusReset && (
+                    <div className="mt-2 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-800/40 dark:bg-amber-950/30 dark:text-amber-200">
+                      <svg className="mt-0.5 h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+                      </svg>
+                      <span>
+                        Status wurde von{' '}
+                        <span className="font-semibold">{versionStatusReset.previousStatus}</span>{' '}
+                        auf{' '}
+                        <span className="font-semibold">ENTWURF</span>{' '}
+                        zurückgesetzt. Nach Prüfung können Sie den Status manuell neu setzen.
+                        <button
+                          type="button"
+                          onClick={() => setVersionStatusReset(null)}
+                          className="ml-2 underline underline-offset-2 hover:no-underline"
+                        >
+                          Schließen
+                        </button>
+                      </span>
+                    </div>
+                  )}
                 </form>
               </div>
 

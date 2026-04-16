@@ -55,7 +55,7 @@ export async function POST(
 
     const { data: doc, error: docError } = await supabase
       .from('documents')
-      .select('id, responsible_unit, current_version_id, protection_class_id, school_number')
+      .select('id, responsible_unit, current_version_id, protection_class_id, school_number, status')
       .eq('id', documentId)
       .single();
 
@@ -174,9 +174,21 @@ export async function POST(
       );
     }
 
+    const previousStatus = (doc as { status?: string | null }).status ?? 'ENTWURF';
+    const statusReset = previousStatus !== 'ENTWURF';
+
+    const docUpdate: Record<string, unknown> = {
+      current_version_id: verData.id,
+      summary: null,
+      summary_updated_at: null,
+    };
+    if (statusReset) {
+      docUpdate.status = 'ENTWURF';
+    }
+
     let updateDocQuery = supabase
       .from('documents')
-      .update({ current_version_id: verData.id, summary: null, summary_updated_at: null })
+      .update(docUpdate)
       .eq('id', documentId);
     if (docSchool) updateDocQuery = updateDocQuery.eq('school_number', docSchool);
     const { error: updateError } = await updateDocQuery;
@@ -225,7 +237,12 @@ export async function POST(
       entity_type: 'document',
       entity_id: documentId,
       school_number: docSchool,
-      new_values: { version_id: verData.id, version_number: newVersion, comment },
+      new_values: {
+        version_id: verData.id,
+        version_number: newVersion,
+        comment,
+        ...(statusReset ? { status_reset_from: previousStatus, status_reset_to: 'ENTWURF' } : {}),
+      },
     });
     if (auditErr) {
       // audit_log optional
@@ -236,7 +253,11 @@ export async function POST(
       versionId: verData.id,
       versionNumber: verData.version_number,
       createdAt: verData.created_at,
-      message: 'Neue Version wurde hochgeladen.',
+      statusReset,
+      previousStatus: statusReset ? previousStatus : null,
+      message: statusReset
+        ? `Neue Version wurde hochgeladen. Status wurde von „${previousStatus}" auf „ENTWURF" zurückgesetzt.`
+        : 'Neue Version wurde hochgeladen.',
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
