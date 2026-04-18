@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 
 type SchoolUsage = {
@@ -32,6 +32,18 @@ type Draft = {
   quota_max_ai_queries_per_month: string;
 };
 
+/** API-Shape von PATCH /api/super-admin/schools/[id] (ohne usage) */
+type SchoolPatchPayload = {
+  school_number: string;
+  name: string;
+  active: boolean;
+  created_at: string;
+  initial_admin_app_user_id: string | null;
+  quota_max_users: number | null;
+  quota_max_documents: number | null;
+  quota_max_ai_queries_per_month: number | null;
+};
+
 function fmtQuota(used: number, max: number | null): string {
   if (max === null || max === undefined) return `${used.toLocaleString('de-DE')} / ∞`;
   return `${used.toLocaleString('de-DE')} / ${max.toLocaleString('de-DE')}`;
@@ -45,10 +57,122 @@ function parseDraftInt(s: string): number | null | undefined {
   return Math.floor(n);
 }
 
+function draftFromSchoolPayload(s: SchoolPatchPayload): Draft {
+  return {
+    name: s.name,
+    active: s.active,
+    quota_max_users: s.quota_max_users === null ? '' : String(s.quota_max_users),
+    quota_max_documents: s.quota_max_documents === null ? '' : String(s.quota_max_documents),
+    quota_max_ai_queries_per_month:
+      s.quota_max_ai_queries_per_month === null ? '' : String(s.quota_max_ai_queries_per_month),
+  };
+}
+
+type SchoolRowProps = {
+  school: SchoolRow;
+  draft: Draft;
+  schoolNumber: string;
+  saving: boolean;
+  updateDraft: (schoolNumber: string, patch: Partial<Draft>) => void;
+  onSave: (schoolNumber: string) => void;
+};
+
+const SuperAdminSchoolRow = memo(function SuperAdminSchoolRow({
+  school,
+  draft,
+  schoolNumber,
+  saving,
+  updateDraft,
+  onSave,
+}: SchoolRowProps) {
+  const qUsers = school.quota_max_users;
+  const qDocs = school.quota_max_documents;
+
+  return (
+    <tr className="border-b border-zinc-100 dark:border-zinc-800">
+      <td className="p-2 font-mono text-[11px]">{school.school_number}</td>
+      <td className="p-2">
+        <input
+          value={draft.name}
+          onChange={(e) => updateDraft(schoolNumber, { name: e.target.value })}
+          className="w-full min-w-[140px] rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
+        />
+      </td>
+      <td className="p-2">
+        <input
+          type="checkbox"
+          checked={draft.active}
+          onChange={(e) => updateDraft(schoolNumber, { active: e.target.checked })}
+          className="rounded"
+        />
+      </td>
+      <td className="p-2 tabular-nums" title="Ist-Nutzer / Quota">
+        {fmtQuota(school.usage.userCount, qUsers)}
+      </td>
+      <td className="p-2 tabular-nums" title="Ist-Dokumente / Quota">
+        {fmtQuota(school.usage.documentCount, qDocs)}
+      </td>
+      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
+        {(school.usage.llmCallsTotal ?? 0).toLocaleString('de-DE')}
+      </td>
+      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
+        {(school.usage.llmCallsThisMonth ?? 0).toLocaleString('de-DE')}
+      </td>
+      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
+        {(school.usage.aiQueriesTotal ?? 0).toLocaleString('de-DE')}
+      </td>
+      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
+        {(school.usage.aiQueriesThisMonth ?? 0).toLocaleString('de-DE')}
+      </td>
+      <td className="p-2">
+        <input
+          value={draft.quota_max_users}
+          onChange={(e) => updateDraft(schoolNumber, { quota_max_users: e.target.value })}
+          className="w-16 rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
+          inputMode="numeric"
+          placeholder="∞"
+        />
+      </td>
+      <td className="p-2">
+        <input
+          value={draft.quota_max_documents}
+          onChange={(e) => updateDraft(schoolNumber, { quota_max_documents: e.target.value })}
+          className="w-16 rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
+          inputMode="numeric"
+          placeholder="∞"
+        />
+      </td>
+      <td className="p-2">
+        <input
+          value={draft.quota_max_ai_queries_per_month}
+          onChange={(e) => updateDraft(schoolNumber, { quota_max_ai_queries_per_month: e.target.value })}
+          className="w-20 rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
+          inputMode="numeric"
+          placeholder="∞"
+        />
+      </td>
+      <td className="p-2">
+        <button
+          type="button"
+          onClick={() => onSave(schoolNumber)}
+          disabled={saving}
+          className="whitespace-nowrap rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
+        >
+          {saving ? '…' : 'Speichern'}
+        </button>
+      </td>
+    </tr>
+  );
+});
+
 export default function SuperAdminPage() {
   const [schools, setSchools] = useState<SchoolRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
-  const [loading, setLoading] = useState(true);
+  const draftsRef = useRef(drafts);
+  draftsRef.current = drafts;
+
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -65,10 +189,23 @@ export default function SuperAdminPage() {
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const loadSchools = useCallback(async () => {
-    setLoading(true);
+  const updateDraft = useCallback((schoolNumber: string, patch: Partial<Draft>) => {
+    setDrafts((prev) => ({
+      ...prev,
+      [schoolNumber]: { ...prev[schoolNumber], ...patch },
+    }));
+  }, []);
+
+  const loadSchools = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
+    if (mode === 'initial') {
+      setInitialLoading(true);
+    } else {
+      setRefreshing(true);
+    }
     setError(null);
-    setForbidden(false);
+    if (mode === 'initial') {
+      setForbidden(false);
+    }
     try {
       const res = await fetch('/api/super-admin/schools', { credentials: 'include' });
       const data = await res.json();
@@ -96,16 +233,20 @@ export default function SuperAdminPage() {
       setError(e instanceof Error ? e.message : 'Daten konnten nicht geladen werden.');
       setSchools([]);
     } finally {
-      setLoading(false);
+      if (mode === 'initial') {
+        setInitialLoading(false);
+      } else {
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    void loadSchools();
+    void loadSchools('initial');
   }, [loadSchools]);
 
-  const saveSchool = async (schoolNumber: string) => {
-    const d = drafts[schoolNumber];
+  const saveSchool = useCallback(async (schoolNumber: string) => {
+    const d = draftsRef.current[schoolNumber];
     if (!d) return;
     const qu = parseDraftInt(d.quota_max_users);
     const qd = parseDraftInt(d.quota_max_documents);
@@ -129,15 +270,40 @@ export default function SuperAdminPage() {
           quota_max_ai_queries_per_month: qa,
         }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as { error?: string; school?: SchoolPatchPayload };
       if (!res.ok) throw new Error(data.error ?? 'Speichern fehlgeschlagen.');
-      await loadSchools();
+
+      const updated = data.school;
+      if (updated) {
+        setSchools((prev) =>
+          prev.map((row) =>
+            row.school_number === schoolNumber
+              ? {
+                  ...row,
+                  name: updated.name,
+                  active: updated.active,
+                  created_at: updated.created_at,
+                  initial_admin_app_user_id: updated.initial_admin_app_user_id,
+                  quota_max_users: updated.quota_max_users,
+                  quota_max_documents: updated.quota_max_documents,
+                  quota_max_ai_queries_per_month: updated.quota_max_ai_queries_per_month,
+                }
+              : row
+          )
+        );
+        setDrafts((prev) => ({
+          ...prev,
+          [schoolNumber]: draftFromSchoolPayload(updated),
+        }));
+      } else {
+        await loadSchools('refresh');
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Speichern fehlgeschlagen.');
     } finally {
       setSavingId(null);
     }
-  };
+  }, [loadSchools]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,7 +345,7 @@ export default function SuperAdminPage() {
       setCreateQUsers('');
       setCreateQDocs('');
       setCreateQAi('');
-      await loadSchools();
+      await loadSchools('refresh');
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : 'Anlage fehlgeschlagen.');
     } finally {
@@ -332,14 +498,19 @@ export default function SuperAdminPage() {
       </section>
 
       <section className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Schulen & Statistik</h2>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-            KI „Monat“ = Kalendermonat (Serverzeit). Quotas: leeres Feld = unbegrenzt.
-          </p>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Schulen & Statistik</h2>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              KI „Monat“ = Kalendermonat (Serverzeit). Quotas: leeres Feld = unbegrenzt.
+            </p>
+          </div>
+          {refreshing && (
+            <span className="text-[11px] font-medium text-amber-700 dark:text-amber-400">Liste wird aktualisiert…</span>
+          )}
         </div>
         <div className="overflow-x-auto p-2">
-          {loading ? (
+          {initialLoading ? (
             <p className="p-4 text-sm text-zinc-500">Lade…</p>
           ) : (
             <table className="min-w-[1200px] w-full border-collapse text-left text-xs">
@@ -348,12 +519,27 @@ export default function SuperAdminPage() {
                   <th className="p-2 font-medium">Nr.</th>
                   <th className="p-2 font-medium">Name</th>
                   <th className="p-2 font-medium">Aktiv</th>
-                  <th className="p-2 font-medium" title="Ist-Nutzer / Quota">Nutzer</th>
-                  <th className="p-2 font-medium" title="Ist-Dokumente / Quota">Dokumente</th>
-                  <th className="p-2 font-medium" title="Direkte LLM-Aufrufe (Zusammenfassungen, Entwürfe, Q&A …) gesamt">LLM-Aufrufe ges.</th>
-                  <th className="p-2 font-medium" title="Direkte LLM-Aufrufe im laufenden Monat">LLM-Aufrufe Mo.</th>
-                  <th className="p-2 font-medium" title="Dashboard-KI-Fragen gesamt">KI-Anfragen ges.</th>
-                  <th className="p-2 font-medium" title="Dashboard-KI-Fragen im laufenden Monat">KI-Anfragen Mo.</th>
+                  <th className="p-2 font-medium" title="Ist-Nutzer / Quota">
+                    Nutzer
+                  </th>
+                  <th className="p-2 font-medium" title="Ist-Dokumente / Quota">
+                    Dokumente
+                  </th>
+                  <th
+                    className="p-2 font-medium"
+                    title="Direkte LLM-Aufrufe (Zusammenfassungen, Entwürfe, Q&A …) gesamt"
+                  >
+                    LLM-Aufrufe ges.
+                  </th>
+                  <th className="p-2 font-medium" title="Direkte LLM-Aufrufe im laufenden Monat">
+                    LLM-Aufrufe Mo.
+                  </th>
+                  <th className="p-2 font-medium" title="Dashboard-KI-Fragen gesamt">
+                    KI-Anfragen ges.
+                  </th>
+                  <th className="p-2 font-medium" title="Dashboard-KI-Fragen im laufenden Monat">
+                    KI-Anfragen Mo.
+                  </th>
                   <th className="p-2 font-medium">Quota Nutzer</th>
                   <th className="p-2 font-medium">Quota Dok.</th>
                   <th className="p-2 font-medium">Quota KI/Monat</th>
@@ -364,111 +550,16 @@ export default function SuperAdminPage() {
                 {schools.map((s) => {
                   const d = drafts[s.school_number];
                   if (!d) return null;
-                  const qUsers = s.quota_max_users;
-                  const qDocs = s.quota_max_documents;
-                  const qAi = s.quota_max_ai_queries_per_month;
                   return (
-                    <tr key={s.school_number} className="border-b border-zinc-100 dark:border-zinc-800">
-                      <td className="p-2 font-mono text-[11px]">{s.school_number}</td>
-                      <td className="p-2">
-                        <input
-                          value={d.name}
-                          onChange={(e) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [s.school_number]: { ...d, name: e.target.value },
-                            }))
-                          }
-                          className="w-full min-w-[140px] rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          type="checkbox"
-                          checked={d.active}
-                          onChange={(e) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [s.school_number]: { ...d, active: e.target.checked },
-                            }))
-                          }
-                          className="rounded"
-                        />
-                      </td>
-                      {/* Ist-Werte (mit Quota-Anzeige) */}
-                      <td className="p-2 tabular-nums" title="Ist-Nutzer / Quota">
-                        {fmtQuota(s.usage.userCount, qUsers)}
-                      </td>
-                      <td className="p-2 tabular-nums" title="Ist-Dokumente / Quota">
-                        {fmtQuota(s.usage.documentCount, qDocs)}
-                      </td>
-                      {/* Nutzungsstatistik */}
-                      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
-                        {(s.usage.llmCallsTotal ?? 0).toLocaleString('de-DE')}
-                      </td>
-                      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
-                        {(s.usage.llmCallsThisMonth ?? 0).toLocaleString('de-DE')}
-                      </td>
-                      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
-                        {(s.usage.aiQueriesTotal ?? 0).toLocaleString('de-DE')}
-                      </td>
-                      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
-                        {(s.usage.aiQueriesThisMonth ?? 0).toLocaleString('de-DE')}
-                      </td>
-                      {/* Editierbare Quotas */}
-                      <td className="p-2">
-                        <input
-                          value={d.quota_max_users}
-                          onChange={(e) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [s.school_number]: { ...d, quota_max_users: e.target.value },
-                            }))
-                          }
-                          className="w-16 rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
-                          inputMode="numeric"
-                          placeholder="∞"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          value={d.quota_max_documents}
-                          onChange={(e) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [s.school_number]: { ...d, quota_max_documents: e.target.value },
-                            }))
-                          }
-                          className="w-16 rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
-                          inputMode="numeric"
-                          placeholder="∞"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          value={d.quota_max_ai_queries_per_month}
-                          onChange={(e) =>
-                            setDrafts((prev) => ({
-                              ...prev,
-                              [s.school_number]: { ...d, quota_max_ai_queries_per_month: e.target.value },
-                            }))
-                          }
-                          className="w-20 rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
-                          inputMode="numeric"
-                          placeholder="∞"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <button
-                          type="button"
-                          onClick={() => void saveSchool(s.school_number)}
-                          disabled={savingId === s.school_number}
-                          className="whitespace-nowrap rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
-                        >
-                          {savingId === s.school_number ? '…' : 'Speichern'}
-                        </button>
-                      </td>
-                    </tr>
+                    <SuperAdminSchoolRow
+                      key={s.school_number}
+                      schoolNumber={s.school_number}
+                      school={s}
+                      draft={d}
+                      saving={savingId === s.school_number}
+                      updateDraft={updateDraft}
+                      onSave={saveSchool}
+                    />
                   );
                 })}
               </tbody>
@@ -479,4 +570,3 @@ export default function SuperAdminPage() {
     </main>
   );
 }
-
