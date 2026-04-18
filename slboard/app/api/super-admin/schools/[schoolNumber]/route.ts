@@ -3,6 +3,7 @@ import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { isSuperAdmin } from '../../../../../lib/superAdminAuth';
 import { apiError } from '../../../../../lib/apiError';
+import { deleteSchoolAsSuperAdmin } from '../../../../../lib/superAdminDeleteSchool';
 
 function parseQuota(n: unknown): number | null | undefined {
   if (n === undefined) return undefined;
@@ -91,6 +92,46 @@ export async function PATCH(
     }
 
     return NextResponse.json({ school: updated });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
+    return apiError(500, 'INTERNAL_ERROR', msg);
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ schoolNumber: string }> }
+) {
+  try {
+    const client = await createServerSupabaseClient();
+    const {
+      data: { user },
+    } = (await client?.auth.getUser()) ?? { data: { user: null } };
+    if (!user?.email) {
+      return apiError(401, 'AUTH_REQUIRED', 'Anmeldung erforderlich.');
+    }
+
+    const supabase = supabaseServer();
+    if (!supabase) {
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
+    }
+
+    if (!(await isSuperAdmin(user.email, supabase))) {
+      return apiError(403, 'FORBIDDEN', 'Keine Super-Admin-Berechtigung.');
+    }
+
+    const { schoolNumber: rawSn } = await params;
+    const schoolNumber = (rawSn ?? '').trim();
+
+    const result = await deleteSchoolAsSuperAdmin(supabase, schoolNumber);
+    if (!result.ok) {
+      const { error } = result;
+      if (error.code === 'NOT_FOUND') return apiError(404, 'NOT_FOUND', error.message);
+      if (error.code === 'VALIDATION_ERROR') return apiError(400, 'VALIDATION_ERROR', error.message);
+      return apiError(500, 'INTERNAL_ERROR', error.message);
+    }
+
+    return NextResponse.json({ ok: true, message: 'Schule wurde gelöscht.' });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return apiError(500, 'INTERNAL_ERROR', msg);

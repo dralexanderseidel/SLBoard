@@ -68,13 +68,26 @@ function draftFromSchoolPayload(s: SchoolPatchPayload): Draft {
   };
 }
 
+/** UI-Hinweis: gleiche Regeln wie API (Dokumente 0, genau ein Nutzer = Erst-Admin). */
+function schoolRowDeletable(s: SchoolRow): boolean {
+  return (
+    s.school_number !== '000000' &&
+    s.initial_admin_app_user_id != null &&
+    s.usage.documentCount === 0 &&
+    s.usage.userCount === 1
+  );
+}
+
 type SchoolRowProps = {
   school: SchoolRow;
   draft: Draft;
   schoolNumber: string;
   saving: boolean;
+  deleting: boolean;
+  canDelete: boolean;
   updateDraft: (schoolNumber: string, patch: Partial<Draft>) => void;
   onSave: (schoolNumber: string) => void;
+  onDelete: (schoolNumber: string, displayName: string) => void;
 };
 
 const SuperAdminSchoolRow = memo(function SuperAdminSchoolRow({
@@ -82,8 +95,11 @@ const SuperAdminSchoolRow = memo(function SuperAdminSchoolRow({
   draft,
   schoolNumber,
   saving,
+  deleting,
+  canDelete,
   updateDraft,
   onSave,
+  onDelete,
 }: SchoolRowProps) {
   const qUsers = school.quota_max_users;
   const qDocs = school.quota_max_documents;
@@ -152,14 +168,29 @@ const SuperAdminSchoolRow = memo(function SuperAdminSchoolRow({
         />
       </td>
       <td className="p-2">
-        <button
-          type="button"
-          onClick={() => onSave(schoolNumber)}
-          disabled={saving}
-          className="whitespace-nowrap rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
-        >
-          {saving ? '…' : 'Speichern'}
-        </button>
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            onClick={() => onSave(schoolNumber)}
+            disabled={saving || deleting}
+            className="whitespace-nowrap rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
+          >
+            {saving ? '…' : 'Speichern'}
+          </button>
+          <button
+            type="button"
+            title={
+              canDelete
+                ? 'Schule und Schuladmin endgültig löschen'
+                : 'Nur möglich ohne Dokumente und mit genau einem Nutzer (Erst-Admin). Pilotschule 000000 nie.'
+            }
+            onClick={() => onDelete(schoolNumber, draft.name.trim() || school.name)}
+            disabled={!canDelete || saving || deleting}
+            className="whitespace-nowrap rounded border border-red-300 px-2 py-1 text-[11px] text-red-800 hover:bg-red-50 disabled:opacity-40 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
+          >
+            {deleting ? '…' : 'Löschen'}
+          </button>
+        </div>
       </td>
     </tr>
   );
@@ -176,6 +207,7 @@ export default function SuperAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [createSchoolNumber, setCreateSchoolNumber] = useState('');
   const [createSchoolName, setCreateSchoolName] = useState('');
@@ -304,6 +336,34 @@ export default function SuperAdminPage() {
       setSavingId(null);
     }
   }, [loadSchools]);
+
+  const deleteSchool = useCallback(
+    async (schoolNumber: string, displayName: string) => {
+      if (
+        !window.confirm(
+          `Schule unwiderruflich löschen?\n\n„${displayName}“ (${schoolNumber})\n\nEs werden die Schule, der Schuladmin (Auth) und schulspezifische Daten entfernt. Voraussetzungen: keine Dokumente, nur der Erst-Admin als Nutzer.`
+        )
+      ) {
+        return;
+      }
+      setDeletingId(schoolNumber);
+      setError(null);
+      try {
+        const res = await fetch(`/api/super-admin/schools/${encodeURIComponent(schoolNumber)}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        const data = (await res.json()) as { error?: string; message?: string };
+        if (!res.ok) throw new Error(data.error ?? 'Löschen fehlgeschlagen.');
+        await loadSchools('refresh');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Löschen fehlgeschlagen.');
+      } finally {
+        setDeletingId(null);
+      }
+    },
+    [loadSchools]
+  );
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -502,7 +562,8 @@ export default function SuperAdminPage() {
           <div>
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Schulen & Statistik</h2>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              KI „Monat“ = Kalendermonat (Serverzeit). Quotas: leeres Feld = unbegrenzt.
+              KI „Monat“ = Kalendermonat (Serverzeit). Quotas: leeres Feld = unbegrenzt. Löschen nur wenn keine
+              Dokumente und genau ein Nutzer (Erst-Admin); Pilotschule 000000 ist geschützt.
             </p>
           </div>
           {refreshing && (
@@ -543,7 +604,12 @@ export default function SuperAdminPage() {
                   <th className="p-2 font-medium">Quota Nutzer</th>
                   <th className="p-2 font-medium">Quota Dok.</th>
                   <th className="p-2 font-medium">Quota KI/Monat</th>
-                  <th className="p-2 font-medium" />
+                  <th
+                    className="p-2 font-medium"
+                    title="Speichern · Löschen (nur ohne Dokumente, ein Nutzer = Erst-Admin)"
+                  >
+                    Aktionen
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -557,8 +623,11 @@ export default function SuperAdminPage() {
                       school={s}
                       draft={d}
                       saving={savingId === s.school_number}
+                      deleting={deletingId === s.school_number}
+                      canDelete={schoolRowDeletable(s)}
                       updateDraft={updateDraft}
                       onSave={saveSchool}
+                      onDelete={deleteSchool}
                     />
                   );
                 })}
