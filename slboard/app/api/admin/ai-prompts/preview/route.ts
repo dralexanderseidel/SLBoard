@@ -80,6 +80,36 @@ function validateSteeringShape(raw: unknown): { ok: boolean; errors: string[] } 
   return { ok: errors.length === 0, errors };
 }
 
+function validateTodosShape(raw: unknown): { ok: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (!raw || typeof raw !== 'object') {
+    return { ok: false, errors: ['Antwort ist kein gueltiges JSON-Objekt.'] };
+  }
+  const o = raw as Record<string, unknown>;
+  if (!Array.isArray(o.aufgaben)) {
+    errors.push('"aufgaben" fehlt oder ist kein Array.');
+    return { ok: false, errors };
+  }
+  for (let i = 0; i < o.aufgaben.length; i++) {
+    const item = o.aufgaben[i];
+    if (!item || typeof item !== 'object') {
+      errors.push(`aufgaben[${i}] ist kein Objekt.`);
+      continue;
+    }
+    const it = item as Record<string, unknown>;
+    if (typeof it.titel !== 'string' || !it.titel.trim()) {
+      errors.push(`aufgaben[${i}].titel fehlt oder ist leer.`);
+    }
+    if (it.prioritaet !== undefined && it.prioritaet !== null) {
+      const p = it.prioritaet;
+      if (p !== 'niedrig' && p !== 'mittel' && p !== 'hoch') {
+        errors.push(`aufgaben[${i}].prioritaet ungueltig (niedrig|mittel|hoch).`);
+      }
+    }
+  }
+  return { ok: errors.length === 0, errors };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const client = await createServerSupabaseClient();
@@ -93,7 +123,13 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => ({}))) as PreviewPayload;
-    const useCase: PromptUseCase = body.use_case === 'qa' || body.use_case === 'summary' ? body.use_case : 'steering';
+    const uc = body.use_case;
+    const useCase: PromptUseCase =
+      uc === 'qa' || uc === 'summary'
+        ? uc
+        : uc === 'todos'
+          ? 'todos'
+          : 'steering';
     const mode = body.mode === 'prompt_only' ? 'prompt_only' : 'llm_test';
     const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
@@ -155,6 +191,7 @@ export async function POST(req: NextRequest) {
     });
     const parsed = extractJsonObject(raw);
     const steeringValidation = useCase === 'steering' ? validateSteeringShape(parsed) : null;
+    const todosValidation = useCase === 'todos' ? validateTodosShape(parsed) : null;
     return NextResponse.json({
       use_case: useCase,
       mode,
@@ -163,6 +200,8 @@ export async function POST(req: NextRequest) {
       outputPreview: raw.slice(0, 2000),
       steeringFormatOk: steeringValidation?.ok ?? null,
       steeringFormatErrors: steeringValidation?.errors ?? [],
+      todosFormatOk: todosValidation?.ok ?? null,
+      todosFormatErrors: todosValidation?.errors ?? [],
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';

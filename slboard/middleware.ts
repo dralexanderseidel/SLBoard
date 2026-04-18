@@ -2,6 +2,8 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { SCHOOL_INACTIVE_API_MESSAGE } from './lib/schoolInactiveMessages'
+import { PASSWORD_CHANGE_REQUIRED_API_MESSAGE } from './lib/passwordChangeRequiredMessages'
+import { normalizeAuthEmail } from './lib/schoolSession'
 
 /** Muss mit ACTIVE_SCHOOL_COOKIE in lib/schoolSession.ts übereinstimmen. */
 const SCHOOL_COOKIE = 'slb_active_school'
@@ -12,7 +14,7 @@ function makeAdminClient(url: string, key: string) {
 }
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({ request })
+  const response = NextResponse.next({ request })
 
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim()
   const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '').trim()
@@ -80,6 +82,32 @@ export async function middleware(request: NextRequest) {
           const redirect = NextResponse.redirect(loginUrl)
           redirect.cookies.set(SCHOOL_COOKIE, '', { maxAge: 0, path: '/' })
           return redirect
+        }
+
+        const { data: appRow } = await admin
+          .from('app_users')
+          .select('password_change_required')
+          .eq('email', normalizeAuthEmail(user.email!))
+          .eq('school_number', schoolNumber)
+          .maybeSingle()
+
+        if (
+          appRow &&
+          (appRow as { password_change_required?: boolean }).password_change_required
+        ) {
+          const exempt =
+            pathname === '/change-password' ||
+            pathname === '/api/auth/change-password' ||
+            pathname === '/api/auth/set-school-context'
+          if (!exempt) {
+            if (isApi) {
+              return NextResponse.json(
+                { error: PASSWORD_CHANGE_REQUIRED_API_MESSAGE, code: 'PASSWORD_CHANGE_REQUIRED' },
+                { status: 403 }
+              )
+            }
+            return NextResponse.redirect(new URL('/change-password', request.url))
+          }
         }
       } catch {
         // Schul-Check fehlgeschlagen – fail-open, Zugriff nicht sperren

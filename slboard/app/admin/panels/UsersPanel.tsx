@@ -420,7 +420,14 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
                           onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
                           className="w-full rounded border px-2 py-1 text-xs" />
                       ) : (
-                        <span className="text-zinc-700 dark:text-zinc-300">{u.email}</span>
+                        <div>
+                          <span className="text-zinc-700 dark:text-zinc-300">{u.email}</span>
+                          {u.password_change_required && (
+                            <p className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-300">
+                              Muss initiales Passwort bei der Anmeldung wechseln
+                            </p>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="p-3">

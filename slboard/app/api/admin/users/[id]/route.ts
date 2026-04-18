@@ -176,6 +176,7 @@ export async function PATCH(
             password: tempPwd,
             schoolNumber: targetSchool ?? '',
             lookupEmail: previousEmail,
+            requirePasswordChange: true,
           });
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'Passwort konnte nicht gesetzt werden.';
@@ -192,6 +193,7 @@ export async function PATCH(
           email: previousEmail,
           password: tempPwd,
           schoolNumber: targetSchool ?? '',
+          requirePasswordChange: true,
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Passwort konnte nicht gesetzt werden.';

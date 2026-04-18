@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 export type ApiErrorCode =
   | 'AUTH_REQUIRED'
+  | 'AUTH_INVALID'
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'BAD_REQUEST'

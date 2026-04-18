@@ -194,6 +194,10 @@ export default function DocumentDetailPage() {
     steeringUpdatedAt,
     steeringLoading, steeringError,
     handleSteeringAnalysis,
+    steeringTodos,
+    steeringTodosUpdatedAt,
+    todosLoading, todosError,
+    handleSteeringTodos,
   } = useDocumentSteering(params?.id, doc);
 
   const {
@@ -763,9 +767,10 @@ export default function DocumentDetailPage() {
                       type="button"
                       onClick={() => void handleAskAboutThisDocument()}
                       disabled={docAskLoading || !docQuestionInput.trim()}
-                      className="h-8 rounded bg-blue-600 px-3 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
+                      aria-busy={docAskLoading}
+                      className="h-8 shrink-0 whitespace-nowrap rounded bg-blue-600 px-3 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
                     >
-                      {docAskLoading ? '…' : 'fragen'}
+                      {docAskLoading ? 'Anfrage läuft…' : 'fragen'}
                     </button>
                   </div>
                   {docAskError && <p className="mt-1 text-[11px] text-red-500">{docAskError}</p>}
@@ -869,15 +874,72 @@ export default function DocumentDetailPage() {
                       </div>
                     </div>
                   )}
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 flex flex-wrap items-start gap-2">
                     <button
                       type="button"
-                      disabled
-                      className="rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] font-medium text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-600"
+                      onClick={() => void handleSteeringTodos(Boolean(steeringTodos))}
+                      disabled={todosLoading}
+                      className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-60 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-200 dark:hover:bg-blue-950"
                     >
-                      ToDos/Aufgaben extrahieren
+                      {todosLoading
+                        ? 'Extraktion läuft…'
+                        : steeringTodos
+                          ? 'ToDos/Aufgaben aktualisieren'
+                          : 'ToDos/Aufgaben extrahieren'}
                     </button>
                   </div>
+                  <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Ermittelt aus dem Dokument konkrete Aufgaben, Fristen und Zuständigkeitshinweise als Liste.
+                  </p>
+                  {todosError && <p className="mt-2 text-[11px] text-red-500">{todosError}</p>}
+                  {steeringTodosUpdatedAt && (
+                    <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Letzte Extraktion: {new Date(steeringTodosUpdatedAt).toLocaleString('de-DE')}
+                    </p>
+                  )}
+                  {steeringTodos && steeringTodos.aufgaben.length > 0 && (
+                    <div className="mt-2 rounded border border-zinc-200 bg-zinc-50/80 p-2 dark:border-zinc-800 dark:bg-zinc-900/40">
+                      <p className="mb-2 text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
+                        Aufgaben / ToDos
+                      </p>
+                      <ul className="space-y-2">
+                        {steeringTodos.aufgaben.map((a, idx) => (
+                          <li
+                            key={`${a.titel}-${idx}`}
+                            className="rounded border border-zinc-200 bg-white p-2 text-[11px] dark:border-zinc-700 dark:bg-zinc-950"
+                          >
+                            <div className="flex flex-wrap items-baseline gap-2">
+                              <span className="font-semibold text-zinc-800 dark:text-zinc-100">{a.titel}</span>
+                              {a.prioritaet && (
+                                <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                                  {a.prioritaet}
+                                </span>
+                              )}
+                            </div>
+                            {a.beschreibung && (
+                              <p className="mt-1 text-zinc-600 dark:text-zinc-300">{a.beschreibung}</p>
+                            )}
+                            {(a.verantwortlich_hint || a.frist_hint) && (
+                              <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                                {a.verantwortlich_hint && <>Zuständigkeit: {a.verantwortlich_hint}</>}
+                                {a.verantwortlich_hint && a.frist_hint && ' · '}
+                                {a.frist_hint && <>Frist: {a.frist_hint}</>}
+                              </p>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      {steeringTodos.hinweis && (
+                        <p className="mt-2 text-[11px] text-zinc-600 dark:text-zinc-300">{steeringTodos.hinweis}</p>
+                      )}
+                    </div>
+                  )}
+                  {steeringTodos && steeringTodos.aufgaben.length === 0 && !todosError && (
+                    <p className="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Keine belastbaren Aufgaben im Dokument gefunden.
+                      {steeringTodos.hinweis ? ` ${steeringTodos.hinweis}` : ''}
+                    </p>
+                  )}
                 </div>
               </div>
 

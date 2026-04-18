@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     const [{ data: row }, { data: school }] = await Promise.all([
       supabase
         .from('app_users')
-        .select('id')
+        .select('id, password_change_required')
         .eq('email', normalizeAuthEmail(user.email))
         .eq('school_number', schoolNumber)
         .maybeSingle(),
@@ -48,18 +48,23 @@ export async function POST(req: NextRequest) {
       return apiError(403, 'SCHOOL_INACTIVE', SCHOOL_INACTIVE_API_MESSAGE);
     }
 
+    const passwordChangeRequired = Boolean(
+      (row as { password_change_required?: boolean }).password_change_required,
+    );
+
     const prevMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
     const { error: updErr } = await supabase.auth.admin.updateUserById(user.id, {
       user_metadata: {
         ...prevMeta,
         school_number: schoolNumber,
+        password_change_required: passwordChangeRequired,
       },
     });
     if (updErr) {
       return apiError(500, 'INTERNAL_ERROR', updErr.message);
     }
 
-    const res = NextResponse.json({ ok: true });
+    const res = NextResponse.json({ ok: true, passwordChangeRequired });
     res.cookies.set(ACTIVE_SCHOOL_COOKIE, schoolNumber, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

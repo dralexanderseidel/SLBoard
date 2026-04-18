@@ -1,6 +1,6 @@
 import { supabaseServer } from './supabaseServer';
 
-export type PromptUseCase = 'qa' | 'summary' | 'steering';
+export type PromptUseCase = 'qa' | 'summary' | 'steering' | 'todos';
 
 type PromptTemplateParts = {
   system_locked: string;
@@ -104,9 +104,47 @@ Nutze fuer score ausschliesslich diese Werte:
       'Bewerte streng anhand klarer Textindizien. Bei Unklarheit konservativ bleiben.',
     user_editable_default: '',
   },
+  todos: {
+    system_locked: `Du extrahierst aus schulischen Verwaltungsdokumenten konkrete Aufgaben, To-dos und nächste Schritte.
+
+Regeln:
+- Nur Inhalte verwenden, die sich aus Dokumenttext oder Metadaten belegen lassen; nichts erfinden.
+- Jede Aufgabe muss sich klar auf Formulierungen oder eindeutige Anforderungen im Dokument stützen; bei Unklarheit konservativ formulieren und im Feld "beschreibung" die Unsicherheit benennen.
+- Doppelte oder inhaltsgleiche Punkte zusammenfassen.
+- Keine Bewertung des Steuerungsbedarfs (das ist ein anderer Use Case); hier nur Aufgabenlisten.
+- Antwort ausschließlich als JSON-Objekt gemäß dem vorgegebenen Schema im User-Block.`,
+    user_locked: `Extrahiere aus dem folgenden Dokument die wesentlichen Aufgaben, Fristen und Zuständigkeiten als strukturierte Liste.
+
+Dokumenttitel: {{document_title}}
+
+{{document_metadata_block}}
+
+{{school_profile_block}}Dokumenttext:
+{{document_text}}
+
+Antwortformat (MUSS exakt eingehalten werden — gültiges JSON):
+{
+  "aufgaben": [
+    {
+      "titel": "Kurzer Aufgabentitel",
+      "beschreibung": "Optional: Details, Paraphrase oder kurzes Zitat aus dem Dokument",
+      "prioritaet": "niedrig|mittel|hoch",
+      "verantwortlich_hint": "Optional: wer handeln soll, falls im Text erkennbar",
+      "frist_hint": "Optional: Datum oder Frist, falls erkennbar"
+    }
+  ],
+  "hinweis": "Optional: Gesamthinweis (z. B. fehlende Angaben zu Zuständigkeiten)"
+}
+
+Nutze fuer "prioritaet" ausschließlich: niedrig, mittel oder hoch (nach Dringlichkeit/Einordnung im Dokument).
+Wenn keine belastbaren Aufgaben gefunden werden: "aufgaben": [] und kurzer "hinweis".`,
+    system_editable_default:
+      'Formuliere knapp und handlungsorientiert; nutze für Titel die im Dokument übliche Verwaltungssprache.',
+    user_editable_default: '',
+  },
 };
 
-const USE_CASES: PromptUseCase[] = ['qa', 'summary', 'steering'];
+const USE_CASES: PromptUseCase[] = ['qa', 'summary', 'steering', 'todos'];
 
 export function getLockedTemplate(useCase: PromptUseCase): PromptTemplateParts {
   return LOCKED_TEMPLATES[useCase];

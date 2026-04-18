@@ -16,6 +16,8 @@ export type DocumentDetail = {
   summary_updated_at?: string | null;
   steering_analysis?: SteeringAnalysis | null;
   steering_analysis_updated_at?: string | null;
+  steering_todos?: SteeringTodosResult | null;
+  steering_todos_updated_at?: string | null;
   current_version_id?: string | null;
 };
 
@@ -42,6 +44,19 @@ export type AuditEntry = {
   old_values: Record<string, unknown> | null;
   new_values: Record<string, unknown> | null;
   created_at: string;
+};
+
+export type SteeringTodoItem = {
+  titel: string;
+  beschreibung?: string;
+  prioritaet?: 'niedrig' | 'mittel' | 'hoch';
+  verantwortlich_hint?: string;
+  frist_hint?: string;
+};
+
+export type SteeringTodosResult = {
+  aufgaben: SteeringTodoItem[];
+  hinweis?: string;
 };
 
 export type SteeringAnalysis = {

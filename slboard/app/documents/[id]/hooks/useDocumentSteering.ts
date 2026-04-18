@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { DocumentDetail, SteeringAnalysis } from '../types';
+import type { DocumentDetail, SteeringAnalysis, SteeringTodosResult } from '../types';
 
 type UseDocumentSteeringResult = {
   steeringAnalysis: SteeringAnalysis | null;
@@ -8,6 +8,12 @@ type UseDocumentSteeringResult = {
   steeringLoading: boolean;
   steeringError: string | null;
   handleSteeringAnalysis: (force?: boolean) => Promise<void>;
+  steeringTodos: SteeringTodosResult | null;
+  setSteeringTodos: React.Dispatch<React.SetStateAction<SteeringTodosResult | null>>;
+  steeringTodosUpdatedAt: string | null;
+  todosLoading: boolean;
+  todosError: string | null;
+  handleSteeringTodos: (force?: boolean) => Promise<void>;
 };
 
 export function useDocumentSteering(
@@ -19,11 +25,24 @@ export function useDocumentSteering(
   const [steeringLoading, setSteeringLoading] = useState(false);
   const [steeringError, setSteeringError] = useState<string | null>(null);
 
+  const [steeringTodos, setSteeringTodos] = useState<SteeringTodosResult | null>(null);
+  const [steeringTodosUpdatedAt, setSteeringTodosUpdatedAt] = useState<string | null>(null);
+  const [todosLoading, setTodosLoading] = useState(false);
+  const [todosError, setTodosError] = useState<string | null>(null);
+
   // Initialisierung aus dem geladenen Dokument
   useEffect(() => {
     setSteeringAnalysis((doc?.steering_analysis as SteeringAnalysis | null) ?? null);
     setSteeringUpdatedAt(doc?.steering_analysis_updated_at ?? null);
-  }, [doc?.id, doc?.steering_analysis, doc?.steering_analysis_updated_at]);
+    setSteeringTodos((doc?.steering_todos as SteeringTodosResult | null) ?? null);
+    setSteeringTodosUpdatedAt(doc?.steering_todos_updated_at ?? null);
+  }, [
+    doc?.id,
+    doc?.steering_analysis,
+    doc?.steering_analysis_updated_at,
+    doc?.steering_todos,
+    doc?.steering_todos_updated_at,
+  ]);
 
   const handleSteeringAnalysis = async (force = false) => {
     if (!id) return;
@@ -56,6 +75,37 @@ export function useDocumentSteering(
     }
   };
 
+  const handleSteeringTodos = async (force = false) => {
+    if (!id) return;
+    setTodosLoading(true);
+    setTodosError(null);
+    try {
+      const res = await fetch(`/api/documents/${id}/steering-todos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force }),
+      });
+      const data = (await res.json()) as {
+        todos?: SteeringTodosResult;
+        error?: string;
+        updatedAt?: string | null;
+      };
+      if (!res.ok || !data.todos) {
+        throw new Error(data.error ?? 'Aufgaben konnten nicht extrahiert werden.');
+      }
+      setSteeringTodos(data.todos);
+      if (data.updatedAt !== undefined) {
+        setSteeringTodosUpdatedAt(data.updatedAt ?? null);
+      } else if (force) {
+        setSteeringTodosUpdatedAt(new Date().toISOString());
+      }
+    } catch (e) {
+      setTodosError(e instanceof Error ? e.message : 'Aufgaben konnten nicht extrahiert werden.');
+    } finally {
+      setTodosLoading(false);
+    }
+  };
+
   return {
     steeringAnalysis,
     setSteeringAnalysis,
@@ -63,5 +113,11 @@ export function useDocumentSteering(
     steeringLoading,
     steeringError,
     handleSteeringAnalysis,
+    steeringTodos,
+    setSteeringTodos,
+    steeringTodosUpdatedAt,
+    todosLoading,
+    todosError,
+    handleSteeringTodos,
   };
 }

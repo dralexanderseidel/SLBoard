@@ -69,7 +69,7 @@ export async function PUT(req: NextRequest) {
 
     const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
-    const allowed: PromptUseCase[] = ['qa', 'summary', 'steering'];
+    const allowed: PromptUseCase[] = ['qa', 'summary', 'steering', 'todos'];
     for (const row of updates) {
       if (!allowed.includes(row.use_case)) continue;
       await saveSchoolPromptTemplate(schoolNumber, row.use_case, {
@@ -100,7 +100,7 @@ export async function DELETE(req: NextRequest) {
 
     const body = (await req.json().catch(() => ({}))) as ResetPayload;
     const useCase = body.use_case;
-    const allowed: PromptUseCase[] = ['qa', 'summary', 'steering'];
+    const allowed: PromptUseCase[] = ['qa', 'summary', 'steering', 'todos'];
     if (!useCase || !allowed.includes(useCase)) {
       return apiError(400, 'VALIDATION_ERROR', 'Ungueltiger use_case.');
     }

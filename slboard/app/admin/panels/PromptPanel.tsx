@@ -10,6 +10,7 @@ const USE_CASE_LABELS: Record<PromptUseCase, string> = {
   qa: 'Q&A',
   summary: 'Zusammenfassung',
   steering: 'Steuerungsanalyse',
+  todos: 'ToDos / Aufgaben',
 };
 
 export function PromptPanel({ open, onToggle }: Props) {
@@ -105,10 +106,21 @@ export function PromptPanel({ open, onToggle }: Props) {
       if (!res.ok) throw new Error((data.error as string | undefined) ?? 'Prompt-Preview fehlgeschlagen.');
 
       const showSteeringFormat = activeUseCase === 'steering' && (data.mode ?? mode) === 'llm_test';
-      const formatInfo = showSteeringFormat ? ` · JSON-Format ok: ${data.steeringFormatOk ? 'ja' : 'nein'}` : '';
+      const showTodosFormat = activeUseCase === 'todos' && (data.mode ?? mode) === 'llm_test';
+      const formatInfo = showSteeringFormat
+        ? ` · JSON-Format ok: ${data.steeringFormatOk ? 'ja' : 'nein'}`
+        : showTodosFormat
+          ? ` · JSON-Format ok: ${data.todosFormatOk ? 'ja' : 'nein'}`
+          : '';
+      const steeringErrList = showSteeringFormat && Array.isArray(data.steeringFormatErrors)
+        ? (data.steeringFormatErrors as string[])
+        : [];
+      const todosErrList = showTodosFormat && Array.isArray(data.todosFormatErrors)
+        ? (data.todosFormatErrors as string[])
+        : [];
       const errorInfo =
-        showSteeringFormat && Array.isArray(data.steeringFormatErrors) && (data.steeringFormatErrors as unknown[]).length > 0
-          ? `\nFehler:\n- ${(data.steeringFormatErrors as string[]).join('\n- ')}`
+        (showSteeringFormat && steeringErrList.length > 0) || (showTodosFormat && todosErrList.length > 0)
+          ? `\nFehler:\n- ${[...steeringErrList, ...todosErrList].join('\n- ')}`
           : '';
       setPreviewResult(
         `Use Case: ${String(data.use_case)} · Modus: ${String(data.mode ?? mode)}${formatInfo}${errorInfo}\n\n` +
@@ -173,7 +185,7 @@ export function PromptPanel({ open, onToggle }: Props) {
 
       {/* Use-Case-Tabs */}
       <div className="mt-3 flex flex-wrap gap-2">
-        {(['qa', 'summary', 'steering'] as PromptUseCase[]).map((uc) => (
+        {(['qa', 'summary', 'steering', 'todos'] as PromptUseCase[]).map((uc) => (
           <button
             key={uc}
             type="button"

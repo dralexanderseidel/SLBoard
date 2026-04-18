@@ -28,7 +28,7 @@ export async function GET() {
 
     let usersQuery = supabase
       .from('app_users')
-      .select('id, username, full_name, email, org_unit, school_number, created_at')
+      .select('id, username, full_name, email, org_unit, school_number, created_at, password_change_required')
       .order('username');
     if (adminSchool) usersQuery = usersQuery.eq('school_number', adminSchool);
     const { data: users, error } = await usersQuery;
@@ -170,6 +170,7 @@ export async function POST(req: NextRequest) {
           email,
           password: tempPwd,
           schoolNumber,
+          requirePasswordChange: true,
         });
       } catch (e) {
         await supabase.from('app_users').delete().eq('id', newUser.id);

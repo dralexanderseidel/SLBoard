@@ -34,7 +34,7 @@ export async function GET(
     const { data: doc, error: docError } = await supabase
       .from('documents')
       .select(
-        'id, title, document_type_code, created_at, archived_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, legal_reference, summary, summary_updated_at, review_date, current_version_id, steering_analysis, steering_analysis_updated_at, school_number',
+        'id, title, document_type_code, created_at, archived_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, legal_reference, summary, summary_updated_at, review_date, current_version_id, steering_analysis, steering_analysis_updated_at, steering_todos, steering_todos_updated_at, school_number',
       )
       .eq('id', documentId)
       .single();

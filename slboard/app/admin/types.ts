@@ -7,6 +7,8 @@ export type AppUser = {
   school_number: string | null;
   created_at: string;
   roles: string[];
+  /** true = Anmeldung mit Admin-Passwort, Wechsel noch offen */
+  password_change_required?: boolean;
   /** false = bei Schulregistrierung angelegter Admin (nicht löschbar) */
   deletable?: boolean;
 };
@@ -21,7 +23,7 @@ export type DocumentTypeOption = {
   draft_format_hint?: string | null;
 };
 export type ResponsibleUnitOption = { name: string; active: boolean; sort_order: number };
-export type PromptUseCase = 'qa' | 'summary' | 'steering';
+export type PromptUseCase = 'qa' | 'summary' | 'steering' | 'todos';
 
 export type PromptTemplateConfig = {
   use_case: PromptUseCase;

@@ -53,7 +53,7 @@ export default function LoginPage() {
       credentials: 'include',
       body: JSON.stringify({ schoolNumber: sn }),
     });
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    const data = (await res.json().catch(() => ({}))) as { error?: string; passwordChangeRequired?: boolean };
 
     if (!res.ok) {
       await supabase.auth.signOut();
@@ -64,6 +64,11 @@ export default function LoginPage() {
 
     await supabase.auth.refreshSession();
     setLoading(false);
+    if (data.passwordChangeRequired) {
+      setMessage('Angemeldet. Bitte legen Sie zuerst Ihr neues Passwort fest.');
+      router.push('/change-password?first=1');
+      return;
+    }
     setMessage('Erfolgreich angemeldet.');
     router.push('/');
   };

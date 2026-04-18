@@ -6,6 +6,7 @@ export type LlmUseCase =
   | 'summary'
   | 'summarize_batch'
   | 'steering'
+  | 'todos'
   | 'parent_letter'
   | 'prompt_preview';
 
