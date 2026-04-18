@@ -52,10 +52,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(appUrl)
   }
 
-  // Schul-Deaktivierung prüfen – nur wenn Nutzer angemeldet, Schulcookie gesetzt
-  // und Service-Role-Key vorhanden (umgeht RLS zuverlässig).
+  // Schul-Deaktivierung prüfen – nur wenn Nutzer angemeldet und Service-Role-Key vorhanden.
+  // Schulnummer: zuerst Cookie, dann user_metadata (Fallback für alte Sessions ohne Cookie).
   if (user && serviceKey) {
-    const schoolNumber = request.cookies.get(SCHOOL_COOKIE)?.value?.trim() ?? ''
+    const cookieSchool = request.cookies.get(SCHOOL_COOKIE)?.value?.trim() ?? ''
+    const metaSchool = ((user.user_metadata as Record<string, unknown> | null)?.school_number as string | undefined)?.trim() ?? ''
+    const schoolNumber = /^\d{6}$/.test(cookieSchool) ? cookieSchool : metaSchool
     if (/^\d{6}$/.test(schoolNumber)) {
       try {
         const admin = makeAdminClient(supabaseUrl, serviceKey)
