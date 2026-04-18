@@ -75,11 +75,8 @@ export function GlobalSearch() {
           onChange={(e) => setValue(e.target.value)}
           placeholder="Suchen …"
           aria-label="Dokumente suchen"
-          className="w-28 rounded-full border border-zinc-200 bg-zinc-50 py-1 pl-7 pr-2 text-xs text-zinc-800 placeholder-zinc-400 transition focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:w-40 md:w-52 md:pr-14 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500 dark:focus:border-zinc-600"
+          className="w-28 rounded-full border border-zinc-200 bg-zinc-50 py-1 pl-7 pr-2 text-xs text-zinc-800 placeholder-zinc-400 transition focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:w-40 md:w-52 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500 dark:focus:border-zinc-600"
         />
-        <kbd className="pointer-events-none absolute right-2.5 hidden items-center gap-0.5 rounded border border-zinc-200 bg-zinc-100 px-1 py-0.5 font-mono text-[9px] text-zinc-400 md:flex dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-500">
-          Ctrl K
-        </kbd>
       </div>
     </form>
   );
