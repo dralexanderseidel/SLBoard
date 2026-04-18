@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
+import { AppNavLink } from './AppNavLink';
 import { useHeaderAccess } from './HeaderAccessContext';
 
 export function SuperAdminNavLink() {
@@ -10,11 +10,11 @@ export function SuperAdminNavLink() {
   if (accessLoading || !access?.superAdmin) return null;
 
   return (
-    <Link
+    <AppNavLink
       href="/super-admin"
       className="rounded-full px-3 py-1 text-amber-800 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-950/60"
     >
       Super-Admin
-    </Link>
+    </AppNavLink>
   );
 }

@@ -42,7 +42,11 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
   const isApi = pathname.startsWith('/api/')
-  const isPublicPath = pathname === '/login' || pathname === '/register-school'
+  const isPublicPath =
+    pathname === '/login' ||
+    pathname === '/register-school' ||
+    pathname === '/hilfe' ||
+    pathname.startsWith('/hilfe/')
 
   // API-Requests und öffentliche Routen nicht umleiten.
   if (!isApi && !isPublicPath && !user) {
@@ -97,6 +101,8 @@ export async function middleware(request: NextRequest) {
         ) {
           const exempt =
             pathname === '/change-password' ||
+            pathname === '/hilfe' ||
+            pathname.startsWith('/hilfe/') ||
             pathname === '/api/auth/change-password' ||
             pathname === '/api/auth/set-school-context'
           if (!exempt) {
