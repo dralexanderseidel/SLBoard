@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabaseClient';
+import { SCHOOL_INACTIVE_BODY, SCHOOL_INACTIVE_TITLE } from '../../lib/schoolInactiveMessages';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -86,9 +87,15 @@ export default function LoginPage() {
         </header>
 
         {schoolInactive && (
-          <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
-            Ihre Schule wurde deaktiviert. Bitte wenden Sie sich an den Plattform-Administrator.
-          </p>
+          <div
+            role="alert"
+            className="rounded border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+          >
+            <p className="font-semibold text-amber-950 dark:text-amber-100">{SCHOOL_INACTIVE_TITLE}</p>
+            <p className="mt-2 text-xs leading-relaxed text-amber-900/95 dark:text-amber-200/95">
+              {SCHOOL_INACTIVE_BODY}
+            </p>
+          </div>
         )}
 
         <form

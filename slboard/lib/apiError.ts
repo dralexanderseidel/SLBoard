@@ -8,7 +8,8 @@ export type ApiErrorCode =
   | 'VALIDATION_ERROR'
   | 'SERVICE_UNAVAILABLE'
   | 'STORAGE_ERROR'
-  | 'INTERNAL_ERROR';
+  | 'INTERNAL_ERROR'
+  | 'SCHOOL_INACTIVE';
 
 export function apiError(
   status: number,

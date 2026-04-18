@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
+import { SCHOOL_INACTIVE_API_MESSAGE } from './lib/schoolInactiveMessages'
 
 /** Muss mit ACTIVE_SCHOOL_COOKIE in lib/schoolSession.ts übereinstimmen. */
 const SCHOOL_COOKIE = 'slb_active_school'
@@ -70,7 +71,7 @@ export async function middleware(request: NextRequest) {
         if (school !== null && (school as { active?: boolean }).active === false) {
           if (isApi) {
             return NextResponse.json(
-              { error: 'Diese Schule ist deaktiviert. Bitte wenden Sie sich an den Plattform-Administrator.' },
+              { error: SCHOOL_INACTIVE_API_MESSAGE, code: 'SCHOOL_INACTIVE' },
               { status: 403 }
             )
           }

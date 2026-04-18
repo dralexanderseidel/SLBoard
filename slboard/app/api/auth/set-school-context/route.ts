@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { apiError } from '../../../../lib/apiError';
 import { ACTIVE_SCHOOL_COOKIE, normalizeAuthEmail } from '../../../../lib/schoolSession';
+import { SCHOOL_INACTIVE_API_MESSAGE } from '../../../../lib/schoolInactiveMessages';
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
       return apiError(403, 'FORBIDDEN', 'Kein Benutzerkonto für diese Schulnummer.');
     }
     if (school && school.active === false) {
-      return apiError(403, 'SCHOOL_INACTIVE', 'Diese Schule ist deaktiviert. Bitte wenden Sie sich an den Plattform-Administrator.');
+      return apiError(403, 'SCHOOL_INACTIVE', SCHOOL_INACTIVE_API_MESSAGE);
     }
 
     const prevMeta = (user.user_metadata ?? {}) as Record<string, unknown>;
