@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { SCHOOL_INACTIVE_API_MESSAGE } from './lib/schoolInactiveMessages'
 import { PASSWORD_CHANGE_REQUIRED_API_MESSAGE } from './lib/passwordChangeRequiredMessages'
-import { normalizeAuthEmail } from './lib/schoolSession'
+import { normalizeAuthEmail } from './lib/authEmail'
 
 /** Muss mit ACTIVE_SCHOOL_COOKIE in lib/schoolSession.ts übereinstimmen. */
 const SCHOOL_COOKIE = 'slb_active_school'

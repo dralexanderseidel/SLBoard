@@ -1,5 +1,7 @@
 import { cookies } from 'next/headers';
 
+export { normalizeAuthEmail } from './authEmail';
+
 /** HttpOnly-Cookie: aktive Schulnummer (6 Ziffern) nach Anmeldung */
 export const ACTIVE_SCHOOL_COOKIE = 'slb_active_school';
 
@@ -12,8 +14,4 @@ export async function getActiveSchoolNumberFromCookies(): Promise<string | null>
     /* ignore */
   }
   return null;
-}
-
-export function normalizeAuthEmail(email: string): string {
-  return email.trim().toLowerCase();
 }
