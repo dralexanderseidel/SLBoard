@@ -8,6 +8,7 @@ import { apiError } from '../../../lib/apiError';
 import { getAiSettingsForSchool } from '../../../lib/aiSettings';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../lib/aiQueryDebugLog';
 import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../lib/aiPromptTemplates';
+import { checkAiQuota } from '../../../lib/quotaCheck';
 
 export const runtime = 'nodejs';
 
@@ -33,6 +34,13 @@ export async function POST(req: NextRequest) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
     const access = await resolveUserAccess(user.email, supabase);
+
+    // KI-Quota prüfen
+    const quotaError = await checkAiQuota(supabase, access.schoolNumber);
+    if (quotaError) {
+      return apiError(429, quotaError.code, quotaError.message);
+    }
+
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber ?? null);
     const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
 

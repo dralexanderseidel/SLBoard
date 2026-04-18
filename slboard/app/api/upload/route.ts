@@ -112,6 +112,28 @@ export async function POST(req: NextRequest) {
     const createdById = access.appUserId;
     const schoolNumber = access.schoolNumber ?? '000000';
 
+    // Dokumenten-Quota prüfen (parallel: Quota-Wert + aktuelle Anzahl)
+    const [schoolQuotaRes, docCountRes] = await Promise.all([
+      supabase
+        .from('schools')
+        .select('quota_max_documents')
+        .eq('school_number', schoolNumber)
+        .single(),
+      supabase
+        .from('documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('school_number', schoolNumber),
+    ]);
+    const quotaMaxDocs = (schoolQuotaRes.data as { quota_max_documents?: number | null } | null)?.quota_max_documents ?? null;
+    const currentDocCount = docCountRes.count ?? 0;
+    if (quotaMaxDocs !== null && currentDocCount >= quotaMaxDocs) {
+      return apiError(
+        429,
+        'QUOTA_EXCEEDED',
+        `Dokument-Quota erreicht (${currentDocCount} / ${quotaMaxDocs}). Bitte wenden Sie sich an Ihren Administrator.`
+      );
+    }
+
     // 1) Dokument anlegen
     const { data: docData, error: docError } = await supabase
       .from('documents')

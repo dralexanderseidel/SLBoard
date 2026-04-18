@@ -14,6 +14,7 @@ import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../../lib/aiQueryDebugLog';
 import { apiError } from '../../../../../lib/apiError';
 import { getDraftDocTypeConfig } from '../../../../../lib/draftDocTypes';
+import { checkAiQuota } from '../../../../../lib/quotaCheck';
 
 type Payload = {
   topic?: string;
@@ -58,6 +59,12 @@ export async function POST(req: NextRequest) {
     }
 
     const access = await resolveUserAccess(user.email, supabase);
+
+    // KI-Quota prüfen
+    const quotaError = await checkAiQuota(supabase, access.schoolNumber);
+    if (quotaError) {
+      return apiError(429, quotaError.code, quotaError.message);
+    }
 
     // Hardcoded-Defaults (für bekannte Typen aus draftDocTypes.ts)
     const hardcodedConfig = getDraftDocTypeConfig(typeCode);

@@ -131,6 +131,28 @@ export async function POST(req: NextRequest) {
       return apiError(400, 'VALIDATION_ERROR', 'school_number muss 6-stellig sein.');
     }
 
+    // Nutzer-Quota prüfen (parallel: Quota-Wert + aktuelle Anzahl)
+    const [schoolQuotaRes, userCountRes] = await Promise.all([
+      supabase
+        .from('schools')
+        .select('quota_max_users')
+        .eq('school_number', schoolNumber)
+        .single(),
+      supabase
+        .from('app_users')
+        .select('id', { count: 'exact', head: true })
+        .eq('school_number', schoolNumber),
+    ]);
+    const quotaMaxUsers = (schoolQuotaRes.data as { quota_max_users?: number | null } | null)?.quota_max_users ?? null;
+    const currentUserCount = userCountRes.count ?? 0;
+    if (quotaMaxUsers !== null && currentUserCount >= quotaMaxUsers) {
+      return apiError(
+        429,
+        'QUOTA_EXCEEDED',
+        `Nutzer-Quota erreicht (${currentUserCount} / ${quotaMaxUsers}). Erhöhen Sie die Quota im Super-Admin-Bereich.`
+      );
+    }
+
     const { data: newUser, error } = await supabase
       .from('app_users')
       .insert({ username, full_name: fullName, email, org_unit: orgUnit, school_number: schoolNumber })

@@ -26,6 +26,7 @@ import { getAiSettingsForSchool } from '../../../../lib/aiSettings';
 import { getSchoolProfileText } from '../../../../lib/schoolProfile';
 import { apiError } from '../../../../lib/apiError';
 import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../../lib/aiPromptTemplates';
+import { checkAiQuota } from '../../../../lib/quotaCheck';
 
 export const runtime = 'nodejs';
 
@@ -63,8 +64,16 @@ export async function POST(req: NextRequest) {
     }
 
     const access = await resolveUserAccess(user.email, supabase);
-    const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
-    const schoolProfile = await getSchoolProfileText(access.schoolNumber);
+
+    // KI-Quota prüfen (parallel zu anderen Initialisierungen)
+    const [quotaError, aiSettings, schoolProfile] = await Promise.all([
+      checkAiQuota(supabase, access.schoolNumber),
+      getAiSettingsForSchool(access.schoolNumber),
+      getSchoolProfileText(access.schoolNumber),
+    ]);
+    if (quotaError) {
+      return apiError(429, quotaError.code, quotaError.message);
+    }
     const MAX_TEXT_PER_DOC = aiSettings.max_text_per_doc ?? DEFAULT_MAX_TEXT_PER_DOC;
     const CHUNK_CHARS = aiSettings.chunk_chars ?? DEFAULT_CHUNK_CHARS;
     const CHUNK_OVERLAP_CHARS = aiSettings.chunk_overlap_chars ?? DEFAULT_CHUNK_OVERLAP_CHARS;
