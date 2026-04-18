@@ -1,31 +1,13 @@
 import { createServerClient } from '@supabase/ssr'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 
 /** Muss mit ACTIVE_SCHOOL_COOKIE in lib/schoolSession.ts übereinstimmen. */
 const SCHOOL_COOKIE = 'slb_active_school'
 
-/** Prüft via Supabase REST API (service role), ob die Schule aktiv ist.
- *  Gibt true zurück, wenn aktiv oder Status unbekannt (fail-open). */
-async function isSchoolActive(supabaseUrl: string, serviceKey: string, schoolNumber: string): Promise<boolean> {
-  if (!serviceKey || !schoolNumber) return true
-  try {
-    const res = await fetch(
-      `${supabaseUrl}/rest/v1/schools?school_number=eq.${encodeURIComponent(schoolNumber)}&select=active&limit=1`,
-      {
-        headers: {
-          apikey: serviceKey,
-          Authorization: `Bearer ${serviceKey}`,
-          Accept: 'application/json',
-        },
-      }
-    )
-    if (!res.ok) return true
-    const rows = (await res.json()) as { active?: boolean }[]
-    if (!rows.length) return true
-    return rows[0].active !== false
-  } catch {
-    return true // Im Fehlerfall nicht sperren
-  }
+/** Service-Role-Client für den Schul-Aktiv-Check (umgeht RLS, Edge-kompatibel). */
+function makeAdminClient(url: string, key: string) {
+  return createClient(url, key, { auth: { persistSession: false } })
 }
 
 export async function middleware(request: NextRequest) {
@@ -70,25 +52,34 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(appUrl)
   }
 
-  // Schul-Deaktivierung prüfen – nur wenn Nutzer angemeldet und Schulcookie gesetzt
-  if (user) {
+  // Schul-Deaktivierung prüfen – nur wenn Nutzer angemeldet, Schulcookie gesetzt
+  // und Service-Role-Key vorhanden (umgeht RLS zuverlässig).
+  if (user && serviceKey) {
     const schoolNumber = request.cookies.get(SCHOOL_COOKIE)?.value?.trim() ?? ''
     if (/^\d{6}$/.test(schoolNumber)) {
-      const active = await isSchoolActive(supabaseUrl, serviceKey, schoolNumber)
-      if (!active) {
-        if (isApi) {
-          return NextResponse.json(
-            { error: 'Diese Schule ist deaktiviert. Bitte wenden Sie sich an den Plattform-Administrator.' },
-            { status: 403 }
-          )
+      try {
+        const admin = makeAdminClient(supabaseUrl, serviceKey)
+        const { data: school } = await admin
+          .from('schools')
+          .select('active')
+          .eq('school_number', schoolNumber)
+          .maybeSingle()
+
+        if (school !== null && (school as { active?: boolean }).active === false) {
+          if (isApi) {
+            return NextResponse.json(
+              { error: 'Diese Schule ist deaktiviert. Bitte wenden Sie sich an den Plattform-Administrator.' },
+              { status: 403 }
+            )
+          }
+          const loginUrl = new URL('/login', request.url)
+          loginUrl.searchParams.set('reason', 'school_inactive')
+          const redirect = NextResponse.redirect(loginUrl)
+          redirect.cookies.set(SCHOOL_COOKIE, '', { maxAge: 0, path: '/' })
+          return redirect
         }
-        // Seiten-Requests zur Login-Seite umleiten
-        const loginUrl = new URL('/login', request.url)
-        loginUrl.searchParams.set('reason', 'school_inactive')
-        const redirect = NextResponse.redirect(loginUrl)
-        // Schulcookie entfernen
-        redirect.cookies.set(SCHOOL_COOKIE, '', { maxAge: 0, path: '/' })
-        return redirect
+      } catch {
+        // Schul-Check fehlgeschlagen – fail-open, Zugriff nicht sperren
       }
     }
   }
