@@ -342,16 +342,18 @@ export default function SuperAdminPage() {
           {loading ? (
             <p className="p-4 text-sm text-zinc-500">Lade…</p>
           ) : (
-            <table className="min-w-[960px] w-full border-collapse text-left text-xs">
+            <table className="min-w-[1200px] w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
                   <th className="p-2 font-medium">Nr.</th>
                   <th className="p-2 font-medium">Name</th>
                   <th className="p-2 font-medium">Aktiv</th>
-                  <th className="p-2 font-medium">Nutzer</th>
-                  <th className="p-2 font-medium">Dokumente</th>
-                  <th className="p-2 font-medium">KI gesamt</th>
-                  <th className="p-2 font-medium">KI Monat</th>
+                  <th className="p-2 font-medium" title="Ist-Nutzer / Quota">Nutzer</th>
+                  <th className="p-2 font-medium" title="Ist-Dokumente / Quota">Dokumente</th>
+                  <th className="p-2 font-medium" title="Direkte LLM-Aufrufe (Zusammenfassungen, Entwürfe, Q&A …) gesamt">LLM-Aufrufe ges.</th>
+                  <th className="p-2 font-medium" title="Direkte LLM-Aufrufe im laufenden Monat">LLM-Aufrufe Mo.</th>
+                  <th className="p-2 font-medium" title="Dashboard-KI-Fragen gesamt">KI-Anfragen ges.</th>
+                  <th className="p-2 font-medium" title="Dashboard-KI-Fragen im laufenden Monat">KI-Anfragen Mo.</th>
                   <th className="p-2 font-medium">Quota Nutzer</th>
                   <th className="p-2 font-medium">Quota Dok.</th>
                   <th className="p-2 font-medium">Quota KI/Monat</th>
@@ -393,18 +395,27 @@ export default function SuperAdminPage() {
                           className="rounded"
                         />
                       </td>
-                      <td className="p-2 tabular-nums" title="Ist / max.">
+                      {/* Ist-Werte (mit Quota-Anzeige) */}
+                      <td className="p-2 tabular-nums" title="Ist-Nutzer / Quota">
                         {fmtQuota(s.usage.userCount, qUsers)}
                       </td>
-                      <td className="p-2 tabular-nums">{fmtQuota(s.usage.documentCount, qDocs)}</td>
-                      <td className="p-2 tabular-nums">{(s.usage.llmCallsTotal ?? 0).toLocaleString('de-DE')}</td>
-                      <td className="p-2 tabular-nums">{(s.usage.llmCallsThisMonth ?? 0).toLocaleString('de-DE')}</td>
-                      <td className="p-2 tabular-nums text-zinc-600 dark:text-zinc-400">
-                        {s.usage.aiQueriesTotal.toLocaleString('de-DE')}
+                      <td className="p-2 tabular-nums" title="Ist-Dokumente / Quota">
+                        {fmtQuota(s.usage.documentCount, qDocs)}
                       </td>
-                      <td className="p-2 tabular-nums text-zinc-600 dark:text-zinc-400">
-                        {s.usage.aiQueriesThisMonth.toLocaleString('de-DE')}
+                      {/* Nutzungsstatistik */}
+                      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
+                        {(s.usage.llmCallsTotal ?? 0).toLocaleString('de-DE')}
                       </td>
+                      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
+                        {(s.usage.llmCallsThisMonth ?? 0).toLocaleString('de-DE')}
+                      </td>
+                      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
+                        {(s.usage.aiQueriesTotal ?? 0).toLocaleString('de-DE')}
+                      </td>
+                      <td className="p-2 tabular-nums text-zinc-500 dark:text-zinc-400">
+                        {(s.usage.aiQueriesThisMonth ?? 0).toLocaleString('de-DE')}
+                      </td>
+                      {/* Editierbare Quotas */}
                       <td className="p-2">
                         <input
                           value={d.quota_max_users}
@@ -416,6 +427,7 @@ export default function SuperAdminPage() {
                           }
                           className="w-16 rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
                           inputMode="numeric"
+                          placeholder="∞"
                         />
                       </td>
                       <td className="p-2">
@@ -429,6 +441,7 @@ export default function SuperAdminPage() {
                           }
                           className="w-16 rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
                           inputMode="numeric"
+                          placeholder="∞"
                         />
                       </td>
                       <td className="p-2">
@@ -442,6 +455,7 @@ export default function SuperAdminPage() {
                           }
                           className="w-20 rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
                           inputMode="numeric"
+                          placeholder="∞"
                         />
                       </td>
                       <td className="p-2">
@@ -465,3 +479,4 @@ export default function SuperAdminPage() {
     </main>
   );
 }
+
