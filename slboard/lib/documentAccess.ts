@@ -14,6 +14,8 @@ export type UserAccessContext = {
   isSekretariat: boolean;
   /** Mehrere Schul-Konten unter derselben E-Mail, aber kein Schul-Kontext (Cookie/JWT) gesetzt */
   needsSchoolContext?: boolean;
+  /** Schule wurde vom Super-Admin deaktiviert; hasAppUser ist in diesem Fall false */
+  schoolInactive?: boolean;
 };
 
 const emptyContext = (): UserAccessContext => ({
@@ -72,10 +74,19 @@ export async function getUserAccessContext(
       };
     }
 
-    const { data: rolesRows } = await supabase
-      .from('user_roles')
-      .select('role_code')
-      .eq('user_id', appUser!.id);
+    // Schul-Status und Rollen parallel laden
+    const resolvedSchool = (appUser!.school_number as string | null) ?? schoolTrim;
+    const [{ data: rolesRows }, { data: schoolRow }] = await Promise.all([
+      supabase.from('user_roles').select('role_code').eq('user_id', appUser!.id),
+      resolvedSchool
+        ? supabase.from('schools').select('active').eq('school_number', resolvedSchool).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+    // Wenn Schule explizit deaktiviert ist, Zugriff verweigern
+    if (schoolRow && (schoolRow as { active?: boolean } | null)?.active === false) {
+      return { ...emptyContext(), schoolInactive: true };
+    }
 
     const roles = (rolesRows ?? []).map((r) => r.role_code as string).filter(Boolean);
     const isSchulleitung = roles.includes('SCHULLEITUNG');

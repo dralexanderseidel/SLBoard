@@ -15,6 +15,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const registrationDone = searchParams.get('registered') === '1';
+  const schoolInactive = searchParams.get('reason') === 'school_inactive';
   const schoolFromQuery = searchParams.get('school') ?? '';
 
   useEffect(() => {
@@ -83,6 +84,12 @@ export default function LoginPage() {
             ← Zur Startseite
           </Link>
         </header>
+
+        {schoolInactive && (
+          <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
+            Ihre Schule wurde deaktiviert. Bitte wenden Sie sich an den Plattform-Administrator.
+          </p>
+        )}
 
         <form
           onSubmit={handleLogin}
