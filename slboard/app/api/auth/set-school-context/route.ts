@@ -25,15 +25,26 @@ export async function POST(req: NextRequest) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
 
-    const { data: row } = await supabase
-      .from('app_users')
-      .select('id')
-      .eq('email', normalizeAuthEmail(user.email))
-      .eq('school_number', schoolNumber)
-      .maybeSingle();
+    // Nutzer-Konto und Schul-Status parallel prüfen
+    const [{ data: row }, { data: school }] = await Promise.all([
+      supabase
+        .from('app_users')
+        .select('id')
+        .eq('email', normalizeAuthEmail(user.email))
+        .eq('school_number', schoolNumber)
+        .maybeSingle(),
+      supabase
+        .from('schools')
+        .select('active')
+        .eq('school_number', schoolNumber)
+        .maybeSingle(),
+    ]);
 
     if (!row) {
       return apiError(403, 'FORBIDDEN', 'Kein Benutzerkonto für diese Schulnummer.');
+    }
+    if (school && school.active === false) {
+      return apiError(403, 'SCHOOL_INACTIVE', 'Diese Schule ist deaktiviert. Bitte wenden Sie sich an den Plattform-Administrator.');
     }
 
     const prevMeta = (user.user_metadata ?? {}) as Record<string, unknown>;

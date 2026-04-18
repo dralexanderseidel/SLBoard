@@ -17,6 +17,38 @@ function StatCard({ label, value, note }: { label: string; value: React.ReactNod
   );
 }
 
+function QuotaBar({ label, used, max }: { label: string; used: number; max: number }) {
+  const pct = Math.min(100, Math.round((used / max) * 100));
+  const isWarning = pct >= 80 && pct < 100;
+  const isExceeded = pct >= 100;
+  const barColor = isExceeded
+    ? 'bg-red-500'
+    : isWarning
+    ? 'bg-amber-500'
+    : 'bg-blue-500';
+  const textColor = isExceeded
+    ? 'text-red-700 dark:text-red-400'
+    : isWarning
+    ? 'text-amber-700 dark:text-amber-400'
+    : 'text-zinc-600 dark:text-zinc-400';
+
+  return (
+    <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">{label}</span>
+        <span className={`text-[11px] font-semibold tabular-nums ${textColor}`}>
+          {used.toLocaleString('de-DE')} / {max.toLocaleString('de-DE')}
+          {isExceeded && ' ⚠ Quota erreicht'}
+          {isWarning && ` (${pct} %)`}
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function MiniBarChart({ days, color }: { days: { date: string; count: number }[]; color: string }) {
   const max = Math.max(1, ...days.map((x) => x.count));
   return (
@@ -118,6 +150,24 @@ export function StatsPanel({ open, onToggle }: Props) {
               note="Jede erfolgreiche LLM-Antwort (Frage, Zusammenfassung, Steuerung, …)"
             />
           </div>
+
+          {/* Quota-Übersicht – nur wenn mind. eine Quota gesetzt ist */}
+          {(stats.quotaMaxUsers !== null || stats.quotaMaxDocuments !== null || stats.quotaMaxAiQueriesPerMonth !== null) && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">Quota-Auslastung</p>
+              <div className="grid gap-2 sm:grid-cols-1 md:grid-cols-3">
+                {stats.quotaMaxUsers !== null && (
+                  <QuotaBar label="Nutzer" used={stats.userCount} max={stats.quotaMaxUsers} />
+                )}
+                {stats.quotaMaxDocuments !== null && (
+                  <QuotaBar label="Dokumente" used={stats.documentTotal} max={stats.quotaMaxDocuments} />
+                )}
+                {stats.quotaMaxAiQueriesPerMonth !== null && (
+                  <QuotaBar label="KI-Aufrufe / Monat" used={stats.llmCallsThisMonth} max={stats.quotaMaxAiQueriesPerMonth} />
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">

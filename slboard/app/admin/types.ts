@@ -43,10 +43,14 @@ export type AdminStats = {
   documentPublished: number;
   llmCallsTotal: number;
   llmCallsLast7Days: number;
+  llmCallsThisMonth: number;
   llmCallsByDay: { date: string; count: number }[];
   aiQueriesTotal: number;
   aiQueriesLast7Days: number;
   aiQueriesByDay: { date: string; count: number }[];
+  quotaMaxUsers: number | null;
+  quotaMaxDocuments: number | null;
+  quotaMaxAiQueriesPerMonth: number | null;
 };
 
 export const AVAILABLE_ROLES = [

@@ -19,11 +19,16 @@ export type AdminStatsPayload = {
   /** Physische LLM-Antworten (ai_llm_calls). */
   llmCallsTotal: number;
   llmCallsLast7Days: number;
+  llmCallsThisMonth: number;
   llmCallsByDay: AdminStatsDayPoint[];
   /** Gespeicherte Dashboard-KI-Anfragen (ai_queries). */
   aiQueriesTotal: number;
   aiQueriesLast7Days: number;
   aiQueriesByDay: AdminStatsDayPoint[];
+  /** Quotas (null = unbegrenzt). */
+  quotaMaxUsers: number | null;
+  quotaMaxDocuments: number | null;
+  quotaMaxAiQueriesPerMonth: number | null;
 };
 
 
@@ -79,6 +84,11 @@ export async function GET() {
     since14.setUTCHours(0, 0, 0, 0);
     const since14iso = since14.toISOString();
 
+    const monthStart = new Date();
+    monthStart.setUTCDate(1);
+    monthStart.setUTCHours(0, 0, 0, 0);
+    const monthStartIso = monthStart.toISOString();
+
     const [
       { count: userCount, error: userErr },
       { count: documentTotal, error: docErr },
@@ -89,6 +99,8 @@ export async function GET() {
       { count: aiQueriesTotal, error: aiTotErr },
       { count: llmCallsLast7Days, error: llm7Err },
       { count: aiQueriesLast7Days, error: ai7Err },
+      { count: llmCallsThisMonth, error: llmMonthErr },
+      { data: schoolQuota, error: quotaErr },
     ] = await Promise.all([
       supabase.from('app_users').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool),
       supabase.from('documents').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool),
@@ -99,12 +111,16 @@ export async function GET() {
       supabase.from('ai_queries').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool),
       supabase.from('ai_llm_calls').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool).gte('created_at', since7iso),
       supabase.from('ai_queries').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool).gte('created_at', since7iso),
+      supabase.from('ai_llm_calls').select('*', { count: 'exact', head: true }).eq('school_number', adminSchool).gte('created_at', monthStartIso),
+      supabase.from('schools').select('quota_max_users, quota_max_documents, quota_max_ai_queries_per_month').eq('school_number', adminSchool).maybeSingle(),
     ]);
 
-    const firstErr = userErr ?? docErr ?? docActErr ?? docArchErr ?? docPubErr ?? llmTotErr ?? aiTotErr ?? llm7Err ?? ai7Err;
+    const firstErr = userErr ?? docErr ?? docActErr ?? docArchErr ?? docPubErr ?? llmTotErr ?? aiTotErr ?? llm7Err ?? ai7Err ?? llmMonthErr ?? quotaErr;
     if (firstErr) {
       return apiError(500, 'INTERNAL_ERROR', firstErr.message);
     }
+
+    const quota = schoolQuota as { quota_max_users?: number | null; quota_max_documents?: number | null; quota_max_ai_queries_per_month?: number | null } | null;
 
     // Aggregierte Tageswerte via SQL – gibt nur aktive Tage zurück (max. ~14 Zeilen je Serie)
     const { data: activityRows, error: activityErr } = await supabase.rpc(
@@ -143,10 +159,14 @@ export async function GET() {
       documentPublished: documentPublished ?? 0,
       llmCallsTotal: llmCallsTotal ?? 0,
       llmCallsLast7Days: llmCallsLast7Days ?? 0,
+      llmCallsThisMonth: llmCallsThisMonth ?? 0,
       llmCallsByDay,
       aiQueriesTotal: aiQueriesTotal ?? 0,
       aiQueriesLast7Days: aiQueriesLast7Days ?? 0,
       aiQueriesByDay,
+      quotaMaxUsers: quota?.quota_max_users ?? null,
+      quotaMaxDocuments: quota?.quota_max_documents ?? null,
+      quotaMaxAiQueriesPerMonth: quota?.quota_max_ai_queries_per_month ?? null,
     };
 
     return NextResponse.json(payload);
