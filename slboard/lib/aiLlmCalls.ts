@@ -8,7 +8,8 @@ export type LlmUseCase =
   | 'steering'
   | 'todos'
   | 'parent_letter'
-  | 'prompt_preview';
+  | 'prompt_preview'
+  | 'draft';
 
 export type LogLlmCallParams = {
   schoolNumber: string | null | undefined;

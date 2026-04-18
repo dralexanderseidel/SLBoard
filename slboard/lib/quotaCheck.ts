@@ -10,8 +10,11 @@ type QuotaError = { code: string; message: string };
  *  Zählt ai_llm_calls im laufenden Kalendermonat (UTC). */
 export async function checkAiQuota(
   supabase: SupabaseClient,
-  schoolNumber: string
+  schoolNumber: string | null | undefined
 ): Promise<QuotaError | null> {
+  const sn = (schoolNumber ?? '').trim();
+  if (!/^\d{6}$/.test(sn)) return null;
+
   const monthStart = new Date();
   monthStart.setUTCDate(1);
   monthStart.setUTCHours(0, 0, 0, 0);
@@ -20,12 +23,12 @@ export async function checkAiQuota(
     supabase
       .from('schools')
       .select('quota_max_ai_queries_per_month')
-      .eq('school_number', schoolNumber)
+      .eq('school_number', sn)
       .single(),
     supabase
       .from('ai_llm_calls')
       .select('id', { count: 'exact', head: true })
-      .eq('school_number', schoolNumber)
+      .eq('school_number', sn)
       .gte('created_at', monthStart.toISOString()),
   ]);
 

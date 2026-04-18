@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       getSchoolProfileText(access.schoolNumber),
     ]);
     if (quotaError) {
-      return apiError(429, quotaError.code, quotaError.message);
+      return apiError(429, 'QUOTA_EXCEEDED', quotaError.message);
     }
     const MAX_TEXT_PER_DOC = aiSettings.max_text_per_doc ?? DEFAULT_MAX_TEXT_PER_DOC;
     const CHUNK_CHARS = aiSettings.chunk_chars ?? DEFAULT_CHUNK_CHARS;

@@ -10,7 +10,8 @@ export type ApiErrorCode =
   | 'SERVICE_UNAVAILABLE'
   | 'STORAGE_ERROR'
   | 'INTERNAL_ERROR'
-  | 'SCHOOL_INACTIVE';
+  | 'SCHOOL_INACTIVE'
+  | 'QUOTA_EXCEEDED';
 
 export function apiError(
   status: number,

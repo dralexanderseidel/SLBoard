@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     // KI-Quota prüfen
     const quotaError = await checkAiQuota(supabase, access.schoolNumber);
     if (quotaError) {
-      return apiError(429, quotaError.code, quotaError.message);
+      return apiError(429, 'QUOTA_EXCEEDED', quotaError.message);
     }
 
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber ?? null);
