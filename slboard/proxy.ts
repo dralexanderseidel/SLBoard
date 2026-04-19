@@ -13,7 +13,7 @@ function makeAdminClient(url: string, key: string) {
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request })
 
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim()
