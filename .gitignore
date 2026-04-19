@@ -1,0 +1,2 @@
+# Repo-Wurzel: Dependencies nicht versionieren (slboard hat eigene .gitignore)
+/node_modules/

@@ -1,0 +1,13 @@
+{
+  "name": "slboard-repo",
+  "private": true,
+  "description": "Monorepo-Wurzel: Next.js-App liegt in ./slboard (Vercel Root Directory = slboard oder siehe vercel.json).",
+  "workspaces": [
+    "slboard"
+  ],
+  "scripts": {
+    "build": "npm run build -w slboard",
+    "dev": "npm run dev -w slboard",
+    "lint": "npm run lint -w slboard"
+  }
+}
