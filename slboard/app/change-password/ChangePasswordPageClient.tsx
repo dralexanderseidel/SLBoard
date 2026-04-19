@@ -45,7 +45,7 @@ export function ChangePasswordPageClient() {
         return;
       }
       await supabase.auth.refreshSession();
-      router.push('/');
+      window.location.assign('/');
     } catch {
       setError('Unerwarteter Fehler.');
     } finally {

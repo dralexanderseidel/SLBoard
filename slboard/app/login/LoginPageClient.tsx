@@ -1,13 +1,12 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabaseClient';
 import { SCHOOL_INACTIVE_BODY, SCHOOL_INACTIVE_TITLE } from '../../lib/schoolInactiveMessages';
 
 export function LoginPageClient() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [schoolNumber, setSchoolNumber] = useState('');
   const [email, setEmail] = useState('');
@@ -66,11 +65,12 @@ export function LoginPageClient() {
     setLoading(false);
     if (data.passwordChangeRequired) {
       setMessage('Angemeldet. Bitte legen Sie zuerst Ihr neues Passwort fest.');
-      router.push('/change-password?first=1');
+      window.location.assign('/change-password?first=1');
       return;
     }
     setMessage('Erfolgreich angemeldet.');
-    router.push('/');
+    // Vollladen, damit Proxy/Cookies wie nach F5 konsistent sind (Vercel ≠ lokaler Soft-Nav).
+    window.location.assign('/');
   };
 
   return (

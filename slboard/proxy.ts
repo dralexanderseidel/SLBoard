@@ -13,8 +13,14 @@ function makeAdminClient(url: string, key: string) {
   return createClient(url, key, { auth: { persistSession: false } })
 }
 
+function withAuthAwareHeaders(res: NextResponse) {
+  res.headers.set('Cache-Control', 'private, no-store, must-revalidate')
+  res.headers.set('Vary', 'Cookie')
+  return res
+}
+
 export async function proxy(request: NextRequest) {
-  const response = NextResponse.next({ request })
+  const response = withAuthAwareHeaders(NextResponse.next({ request }))
 
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim()
   const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '').trim()
@@ -51,12 +57,12 @@ export async function proxy(request: NextRequest) {
   // API-Requests und öffentliche Routen nicht umleiten.
   if (!isApi && !isPublicPath && !user) {
     const loginUrl = new URL('/login', request.url)
-    return NextResponse.redirect(loginUrl)
+    return withAuthAwareHeaders(NextResponse.redirect(loginUrl))
   }
 
   if (!isApi && user && (pathname === '/login' || pathname === '/register-school')) {
     const appUrl = new URL('/', request.url)
-    return NextResponse.redirect(appUrl)
+    return withAuthAwareHeaders(NextResponse.redirect(appUrl))
   }
 
   // Schul-Deaktivierung prüfen – nur wenn Nutzer angemeldet und Service-Role-Key vorhanden.
@@ -76,14 +82,16 @@ export async function proxy(request: NextRequest) {
 
         if (school !== null && (school as { active?: boolean }).active === false) {
           if (isApi) {
-            return NextResponse.json(
-              { error: SCHOOL_INACTIVE_API_MESSAGE, code: 'SCHOOL_INACTIVE' },
-              { status: 403 }
+            return withAuthAwareHeaders(
+              NextResponse.json(
+                { error: SCHOOL_INACTIVE_API_MESSAGE, code: 'SCHOOL_INACTIVE' },
+                { status: 403 }
+              )
             )
           }
           const loginUrl = new URL('/login', request.url)
           loginUrl.searchParams.set('reason', 'school_inactive')
-          const redirect = NextResponse.redirect(loginUrl)
+          const redirect = withAuthAwareHeaders(NextResponse.redirect(loginUrl))
           redirect.cookies.set(SCHOOL_COOKIE, '', { maxAge: 0, path: '/' })
           return redirect
         }
@@ -107,12 +115,14 @@ export async function proxy(request: NextRequest) {
             pathname === '/api/auth/set-school-context'
           if (!exempt) {
             if (isApi) {
-              return NextResponse.json(
-                { error: PASSWORD_CHANGE_REQUIRED_API_MESSAGE, code: 'PASSWORD_CHANGE_REQUIRED' },
-                { status: 403 }
+              return withAuthAwareHeaders(
+                NextResponse.json(
+                  { error: PASSWORD_CHANGE_REQUIRED_API_MESSAGE, code: 'PASSWORD_CHANGE_REQUIRED' },
+                  { status: 403 }
+                )
               )
             }
-            return NextResponse.redirect(new URL('/change-password', request.url))
+            return withAuthAwareHeaders(NextResponse.redirect(new URL('/change-password', request.url)))
           }
         }
       } catch {

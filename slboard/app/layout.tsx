@@ -24,6 +24,9 @@ export const metadata: Metadata = {
   description: 'KI-gestützte Dokumentenverwaltung für Schulen',
 };
 
+/** Kein CDN-/RSC-Caching der Shell: Session kommt aus Cookies (Vercel vs. lokal). */
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({
   children,
 }: Readonly<{
