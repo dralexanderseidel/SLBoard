@@ -15,13 +15,13 @@ async function deleteAuthUserByEmail(
   for (let p = 1; p <= 50; p++) {
     const { data, error } = await supabase.auth.admin.listUsers({ page: p, perPage });
     if (error) {
-      console.warn('[admin delete user] auth listUsers:', error.message);
+      console.warn('[admin delete user] auth listUsers failed');
       return;
     }
     const found = data.users.find((u) => (u.email ?? '').toLowerCase() === normalized);
     if (found?.id) {
       const { error: delErr } = await supabase.auth.admin.deleteUser(found.id);
-      if (delErr) console.warn('[admin delete user] auth deleteUser:', delErr.message);
+      if (delErr) console.warn('[admin delete user] auth deleteUser failed');
       return;
     }
     if (data.users.length < perPage) break;

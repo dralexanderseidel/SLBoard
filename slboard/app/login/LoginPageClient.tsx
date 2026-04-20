@@ -168,6 +168,16 @@ export function LoginPageClient() {
             </button>
           </div>
         </form>
+
+        <p className="text-center text-[11px] text-zinc-500 dark:text-zinc-400">
+          <Link href="/datenschutz" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
+            Datenschutz
+          </Link>
+          <span className="mx-2 text-zinc-300 dark:text-zinc-600">·</span>
+          <Link href="/impressum" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
+            Impressum
+          </Link>
+        </p>
       </div>
     </main>
   );

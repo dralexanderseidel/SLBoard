@@ -34,6 +34,8 @@ export type ProvisionSchoolParams = {
   adminEmail: string;
   adminPassword: string;
   quotas?: SchoolQuotasInput | null;
+  /** ISO-Zeitstempel, wenn bei Selbstregistrierung Datenschutz bestätigt wurde. */
+  privacyPolicyAcceptedAt?: string | null;
 };
 
 function usernameFromEmail(email: string): string {
@@ -65,6 +67,7 @@ export async function provisionSchoolAndAdmin(
   const quota_max_users = qIn ? normalizeQuota(qIn.quota_max_users) : undefined;
   const quota_max_documents = qIn ? normalizeQuota(qIn.quota_max_documents) : undefined;
   const quota_max_ai_queries_per_month = qIn ? normalizeQuota(qIn.quota_max_ai_queries_per_month) : undefined;
+  const privacyAt = params.privacyPolicyAcceptedAt?.trim();
 
   const { data: createdAuth, error: authError } = await supabase.auth.admin.createUser({
     email: adminEmail,
@@ -88,6 +91,9 @@ export async function provisionSchoolAndAdmin(
     if (quota_max_documents !== undefined) schoolInsert.quota_max_documents = quota_max_documents;
     if (quota_max_ai_queries_per_month !== undefined) {
       schoolInsert.quota_max_ai_queries_per_month = quota_max_ai_queries_per_month;
+    }
+    if (privacyAt) {
+      schoolInsert.privacy_policy_accepted_at = privacyAt;
     }
 
     const { error: schoolError } = await supabase.from('schools').insert(schoolInsert);

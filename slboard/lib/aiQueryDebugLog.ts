@@ -1,11 +1,17 @@
 /**
  * Debug-Logging für KI-Dashboard-Anfragen (Chunks + Prompts).
- * Aktivieren: AI_DEBUG_LOG=1 in .env.local
- * Logdatei: logs/ai-query-debug.log (wird nicht committet)
- * Später: diese Datei und Aufrufe in app/api/ai/query/route.ts entfernen.
+ * Datei-Logging: Logdatei logs/ai-query-debug.log (nicht committet).
+ *
+ * - Entwicklung: AI_DEBUG_LOG=1 **oder** Schul-Checkbox „Debug-Logging“ in den KI-Einstellungen.
+ * - Produktion: nur wenn **beides** gesetzt ist (AI_DEBUG_LOG + Schul-Checkbox), damit keine
+ *   Prompts/Dokumentauszüge versehentlich auf dem Server landen.
  */
 import { appendFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
+
+function isNodeProduction(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
 
 export function isAiQueryDebugEnabled(): boolean {
   const v = process.env.AI_DEBUG_LOG?.trim().toLowerCase();
@@ -13,7 +19,12 @@ export function isAiQueryDebugEnabled(): boolean {
 }
 
 export function isAiQueryDebugEnabledEffective(perSchoolEnabled: boolean | null | undefined): boolean {
-  return isAiQueryDebugEnabled() || Boolean(perSchoolEnabled);
+  const envOn = isAiQueryDebugEnabled();
+  const perSchool = Boolean(perSchoolEnabled);
+  if (isNodeProduction()) {
+    return envOn && perSchool;
+  }
+  return envOn || perSchool;
 }
 
 export type AiQueryDebugDocEntry = {

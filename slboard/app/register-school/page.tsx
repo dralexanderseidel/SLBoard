@@ -11,6 +11,7 @@ export default function RegisterSchoolPage() {
   const [adminFullName, setAdminFullName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -20,6 +21,10 @@ export default function RegisterSchoolPage() {
     setError(null);
     setMessage(null);
     setLoading(true);
+    if (!privacyAccepted) {
+      setError('Bitte bestätigen Sie die Kenntnisnahme der Datenschutzhinweise.');
+      return;
+    }
     try {
       const res = await fetch('/api/onboarding/register-school', {
         method: 'POST',
@@ -30,6 +35,7 @@ export default function RegisterSchoolPage() {
           adminFullName: adminFullName.trim(),
           adminEmail: adminEmail.trim(),
           adminPassword,
+          privacyAccepted: true,
         }),
       });
       const data = (await res.json()) as { error?: string; message?: string };
@@ -130,6 +136,22 @@ export default function RegisterSchoolPage() {
               className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
             />
           </div>
+
+          <label className="flex items-start gap-2 text-xs text-zinc-700 dark:text-zinc-200">
+            <input
+              type="checkbox"
+              checked={privacyAccepted}
+              onChange={(e) => setPrivacyAccepted(e.target.checked)}
+              className="mt-0.5 rounded"
+            />
+            <span>
+              Ich habe die{' '}
+              <Link href="/datenschutz" className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
+                Datenschutzhinweise
+              </Link>{' '}
+              zur Kenntnis genommen.
+            </span>
+          </label>
 
           {error && <p className="text-xs text-red-600">{error}</p>}
           {message && <p className="text-xs text-green-600">{message}</p>}

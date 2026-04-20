@@ -89,6 +89,20 @@ export default function RootLayout({
           </header>
 
           <main>{children}</main>
+
+          <footer className="border-t border-zinc-200 bg-zinc-50/80 py-4 text-center text-[11px] text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+            <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+              <AppNavLink href="/datenschutz" className="hover:underline">
+                Datenschutz
+              </AppNavLink>
+              <span aria-hidden className="text-zinc-300 dark:text-zinc-600">
+                ·
+              </span>
+              <AppNavLink href="/impressum" className="hover:underline">
+                Impressum
+              </AppNavLink>
+            </nav>
+          </footer>
         </div>
         <ScrollToTop />
       </body>

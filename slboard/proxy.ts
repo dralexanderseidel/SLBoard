@@ -51,6 +51,8 @@ export async function proxy(request: NextRequest) {
   const isPublicPath =
     pathname === '/login' ||
     pathname === '/register-school' ||
+    pathname === '/datenschutz' ||
+    pathname === '/impressum' ||
     pathname === '/hilfe' ||
     pathname.startsWith('/hilfe/')
 

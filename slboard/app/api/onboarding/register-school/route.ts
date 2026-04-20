@@ -9,6 +9,7 @@ type RegisterSchoolPayload = {
   adminFullName?: string;
   adminEmail?: string;
   adminPassword?: string;
+  privacyAccepted?: boolean;
 };
 
 export async function POST(req: NextRequest) {
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
         adminFullName,
         adminEmail,
         adminPassword,
+        privacyPolicyAcceptedAt: new Date().toISOString(),
       });
     } catch (e) {
       return apiError(500, 'INTERNAL_ERROR', e instanceof Error ? e.message : 'Schule konnte nicht registriert werden.');

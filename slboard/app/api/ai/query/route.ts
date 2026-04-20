@@ -228,6 +228,7 @@ export async function POST(req: NextRequest) {
       snippet: s.evidenceSnippet,
     }));
 
+    // Aufbewahrung: Einträge in ai_queries dienen dem Verlauf; Löschung bei Dokument-Endlöschung siehe RPC delete_ai_queries_referencing_document.
     await supabase.from('ai_queries').insert({
       user_id: access.appUserId,
       school_number: access.schoolNumber ?? null,

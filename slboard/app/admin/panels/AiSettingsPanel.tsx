@@ -145,6 +145,15 @@ export function AiSettingsPanel({ open, onToggle }: Props) {
         />
         Debug-Logging aktivieren (Chunks + Prompts)
       </label>
+      {form.debug_log_enabled && (
+        <p className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+          Achtung: In die Logdatei können personenbezogene Inhalte aus Fragen, Prompts und Dokumentauszügen
+          geschrieben werden. In der{' '}
+          <strong className="font-semibold">Produktion</strong> ist zusätzlich{' '}
+          <code className="rounded bg-amber-100/80 px-1 dark:bg-amber-900/80">AI_DEBUG_LOG=1</code> in der
+          Server-Umgebung erforderlich; sonst wird nichts protokolliert.
+        </p>
+      )}
 
       <button
         type="button"

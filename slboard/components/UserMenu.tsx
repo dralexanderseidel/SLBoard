@@ -33,6 +33,7 @@ export function UserMenu() {
   const { userEmail, sessionLoading, access, accessLoading } = useHeaderAccess();
   const [menuOpen, setMenuOpen] = useState(false);
   const [pwdOpen, setPwdOpen] = useState(false);
+  const [dataActionLoading, setDataActionLoading] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   const user: SessionUser | null = userEmail ? { email: userEmail } : null;
@@ -64,6 +65,55 @@ export function UserMenu() {
     }
     await supabase.auth.signOut();
     window.location.assign('/login');
+  };
+
+  const handleExportData = async () => {
+    setDataActionLoading(true);
+    try {
+      const res = await fetch('/api/me/export', { credentials: 'include' });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: string };
+        window.alert(j.error ?? 'Export fehlgeschlagen.');
+        return;
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get('Content-Disposition');
+      const m = cd?.match(/filename="([^"]+)"/);
+      const name = m?.[1] ?? 'slboard-datenexport.json';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.alert('Export fehlgeschlagen.');
+    } finally {
+      setDataActionLoading(false);
+      setMenuOpen(false);
+    }
+  };
+
+  const handleDeleteRequest = async () => {
+    const ok = window.confirm(
+      'Hiermit stellen Sie eine Löschanfrage. Ihr Konto wird nicht automatisch gelöscht; ein Administrator bearbeitet die Anfrage. Fortfahren?'
+    );
+    if (!ok) return;
+    setDataActionLoading(true);
+    try {
+      const res = await fetch('/api/me/delete-request', { method: 'POST', credentials: 'include' });
+      const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        window.alert(j.error ?? 'Anfrage konnte nicht gesendet werden.');
+        return;
+      }
+      window.alert(j.message ?? 'Löschanfrage wurde gespeichert.');
+    } catch {
+      window.alert('Anfrage konnte nicht gesendet werden.');
+    } finally {
+      setDataActionLoading(false);
+      setMenuOpen(false);
+    }
   };
 
   if (sessionLoading) {
@@ -136,6 +186,24 @@ export function UserMenu() {
                   {formatRolesForMenu(accessLoading ? null : access?.roles ?? [])}
                 </p>
               </div>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={dataActionLoading || accessLoading || !access?.schoolNumber}
+                className="w-full px-3 py-2 text-left text-xs text-zinc-800 hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                onClick={() => void handleExportData()}
+              >
+                Daten exportieren (JSON)
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={dataActionLoading || accessLoading || !access?.schoolNumber}
+                className="w-full px-3 py-2 text-left text-xs text-zinc-800 hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                onClick={() => void handleDeleteRequest()}
+              >
+                Löschanfrage stellen
+              </button>
               <button
                 type="button"
                 role="menuitem"

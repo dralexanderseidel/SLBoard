@@ -1,0 +1,25 @@
+import type { Metadata } from 'next';
+import Link from 'next/link';
+
+export const metadata: Metadata = {
+  title: 'Impressum | NOMOS Edu Governance Pro',
+  description: 'Impressum und Anbieterkennzeichnung',
+};
+
+export default function ImpressumPage() {
+  return (
+    <main className="mx-auto max-w-2xl px-4 py-10 text-sm leading-relaxed text-zinc-800 dark:text-zinc-100">
+      <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Impressum</h1>
+      <p className="mt-4 text-zinc-600 dark:text-zinc-400">
+        Platzhalter: Angaben gemäß § 5 TMG bzw. § 55 RStV (Anbieter, Anschrift, Kontakt, ggf. Register und
+        Umsatzsteuer-ID) und Hinweise auf außergerichtliche Streitbeilegung / EU-Streitschlichtung, soweit
+        zutreffend.
+      </p>
+      <p className="mt-6">
+        <Link href="/login" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
+          Zur Anmeldung
+        </Link>
+      </p>
+    </main>
+  );
+}
