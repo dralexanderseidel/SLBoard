@@ -5,6 +5,8 @@ import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
 import { DRAFT_DOC_TYPE_CODES } from '../../../../lib/draftDocTypes';
 
+export const maxDuration = 60;
+
 /**
  * Entwurf als echtes Dokument übernehmen: Dokument anlegen + Entwurfstext als erste Version (.txt).
  */

@@ -16,6 +16,9 @@ import { apiError } from '../../../../../lib/apiError';
 import { getDraftDocTypeConfig } from '../../../../../lib/draftDocTypes';
 import { checkAiQuota } from '../../../../../lib/quotaCheck';
 
+/** Vercel: KI + Dokumenttext können die Standard-Timeout-Grenze überschreiten. */
+export const maxDuration = 60;
+
 type Payload = {
   topic?: string;
   targetAudience?: string;

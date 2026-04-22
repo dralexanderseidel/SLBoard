@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
     // Erzwingt das Projekt-Root auf den Ordner "slboard"
     root: configDir,
   },
+  // PDF/Word-Parsing: native/Worker-Pfade — auf Vercel nicht mit Turbopack/Webpack bündeln,
+  // sonst schlägt der Modul-Load fehl und die API liefert HTML statt JSON.
+  serverExternalPackages: ['pdf-parse', 'pdfjs-dist', 'mammoth'],
 };
 
 export default nextConfig;

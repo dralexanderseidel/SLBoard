@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { PARTICIPATION_GROUP_OPTIONS } from '@/lib/documentMeta';
+import { readApiJson } from '@/lib/readApiJson';
 
 type Status = 'ENTWURF' | 'FREIGEGEBEN' | 'BESCHLUSS' | 'VEROEFFENTLICHT';
 type ReachScope = 'intern' | 'extern';
@@ -118,8 +119,13 @@ export default function UploadPage() {
           formData.set('responsibleUnit', responsibleUnit);
           formData.set('participationGroups', JSON.stringify(participationGroups));
 
-          const res = await fetch('/api/upload', { method: 'POST', body: formData, signal: controller.signal });
-          const data = (await res.json()) as { success?: boolean; error?: string; message?: string };
+          const res = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+            signal: controller.signal,
+          });
+          const data = await readApiJson<{ success?: boolean; error?: string; message?: string }>(res);
           return { ok: res.ok, error: data.error, message: data.message, id: it.id, title: it.title };
         })
       );

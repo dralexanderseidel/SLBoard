@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
-import { extractTextFromBuffer } from '../../../lib/documentText';
 import { buildSearchIndex } from '../../../lib/indexing';
 import { resolveUserAccess } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
@@ -9,6 +8,9 @@ import { WORKFLOW_STATUS_ORDER } from '../../../lib/documentWorkflow';
 import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
 import { getAiSettingsForSchool } from '../../../lib/aiSettings';
 import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../lib/aiPromptTemplates';
+
+/** Vercel: Hintergrund-Indexierung/KI nach dem Upload kann länger laufen als das Standard-Limit. */
+export const maxDuration = 60;
 
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const ALLOWED_MIME_TYPES = [
@@ -217,6 +219,7 @@ export async function POST(req: NextRequest) {
     const indexBuffer = Buffer.from(buffer);
     void (async () => {
       try {
+        const { extractTextFromBuffer } = await import('../../../lib/documentText');
         const extracted = await extractTextFromBuffer(indexBuffer, mimeType);
         const { keywords, searchText } = buildSearchIndex({
           title,

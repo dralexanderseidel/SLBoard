@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { getDraftDocTypeConfig } from '@/lib/draftDocTypes';
 import { METADATA_BROADCAST_CHANNEL } from '@/lib/metadataBroadcast';
+import { readApiJson } from '@/lib/readApiJson';
 
 type DbDocType = {
   code: string;
@@ -66,7 +67,7 @@ export function DraftAssistantContent() {
     try {
       const res = await fetch('/api/metadata/options', { credentials: 'include', cache: 'no-store' });
       if (!res.ok) return;
-      const data = (await res.json()) as { documentTypes?: DbDocType[] };
+      const data = await readApiJson<{ documentTypes?: DbDocType[] }>(res);
       if (Array.isArray(data.documentTypes) && data.documentTypes.length > 0) {
         setDbDocTypes(data.documentTypes);
         metadataFetchedAtRef.current = Date.now();
@@ -158,14 +159,14 @@ export function DraftAssistantContent() {
           setSources([]);
           return;
         }
-        const data = (await res.json()) as {
+        const data = await readApiJson<{
           suggestedDocuments?: Array<{
             id: string;
             title: string;
             document_type_code?: string;
             created_at?: string;
           }>;
-        };
+        }>(res);
         const list = data.suggestedDocuments ?? [];
         setSources(
           list.map((d) => ({
@@ -237,6 +238,7 @@ export function DraftAssistantContent() {
       const res = await fetch('/api/drafts/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           subject: subject.trim(),
           audience: audience.trim() || typeConfig.defaultAudience,
@@ -245,7 +247,7 @@ export function DraftAssistantContent() {
           documentType: docType,
         }),
       });
-      const data = (await res.json()) as { documentId?: string; message?: string; error?: string };
+      const data = await readApiJson<{ documentId?: string; message?: string; error?: string }>(res);
 
       if (!res.ok) {
         throw new Error(data.error ?? 'Fehler beim Speichern.');
@@ -285,6 +287,7 @@ export function DraftAssistantContent() {
       const res = await fetch('/api/ai/drafts/document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           topic: subject,
           targetAudience: audience,
@@ -294,7 +297,12 @@ export function DraftAssistantContent() {
         }),
         signal: controller.signal,
       });
-      const data = await res.json();
+      const data = await readApiJson<{
+        error?: string;
+        body?: string;
+        suggestedTitle?: string;
+        sources?: UsedSource[];
+      }>(res);
       if (!res.ok) throw new Error(data.error ?? 'KI-Vorschlag fehlgeschlagen.');
       const nextBody = typeof data.body === 'string' ? data.body : '';
       if (!nextBody.trim()) {

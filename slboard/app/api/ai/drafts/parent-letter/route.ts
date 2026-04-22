@@ -14,6 +14,8 @@ import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../../lib/aiQueryDebugLog';
 import { apiError } from '../../../../../lib/apiError';
 
+export const maxDuration = 60;
+
 type Payload = {
   topic?: string;
   targetAudience?: string;
