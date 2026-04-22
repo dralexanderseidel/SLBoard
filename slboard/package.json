@@ -13,6 +13,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.1",
+    "@thednp/dommatrix": "^3.0.4",
     "mammoth": "^1.12.0",
     "next": "16.1.6",
     "pdf-parse": "^2.4.5",

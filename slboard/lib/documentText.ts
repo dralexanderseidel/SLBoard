@@ -1,6 +1,7 @@
 /**
  * Text aus Dokumenten extrahieren (PDF, Word, Metadaten).
  */
+import './pdfNodePolyfill';
 import mammoth from 'mammoth';
 import { supabaseServer } from './supabaseServer';
 import { PDFParse } from 'pdf-parse';
