@@ -27,6 +27,44 @@ function mimeFromFileUri(fileUri: string): string | null {
 }
 
 let pdfWorkerConfigured = false;
+let pdfMainThreadWorkerSeeded = false;
+
+type PdfJsWorkerModule = { WorkerMessageHandler?: unknown };
+
+function resolvePdfWorkerPath(): string | null {
+  const candidates = [
+    path.resolve(process.cwd(), 'node_modules/pdf-parse/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'),
+    path.resolve(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'),
+  ];
+  return candidates.find((p) => existsSync(p)) ?? null;
+}
+
+/**
+ * pdfjs in Node nutzt immer den „Fake Worker“, der sonst `import("./pdf.worker.mjs")` relativ zu `pdf.mjs`
+ * ausführt — auf Vercel bricht das oft. Wenn wir `WorkerMessageHandler` vorab per absolutem file-URL-Import
+ * unter `globalThis.pdfjsWorker` registrieren, überspringt pdfjs den fehlschlagenden Import.
+ */
+async function ensurePdfMainThreadWorkerSeeded(): Promise<void> {
+  if (pdfMainThreadWorkerSeeded) return;
+  const g = globalThis as typeof globalThis & { pdfjsWorker?: PdfJsWorkerModule };
+  if (g.pdfjsWorker?.WorkerMessageHandler) {
+    pdfMainThreadWorkerSeeded = true;
+    return;
+  }
+  const workerPath = resolvePdfWorkerPath();
+  if (!workerPath) return;
+  try {
+    const href = pathToFileURL(workerPath).href;
+    const mod = (await import(/* webpackIgnore: true */ href)) as PdfJsWorkerModule;
+    const handler = mod?.WorkerMessageHandler;
+    if (handler) {
+      g.pdfjsWorker = { WorkerMessageHandler: handler };
+      pdfMainThreadWorkerSeeded = true;
+    }
+  } catch {
+    // Ohne Handler versucht pdfjs den eingebauten Import (kann auf Serverless fehlschlagen).
+  }
+}
 
 /**
  * Standard-Schriften für pdfjs (sonst oft leere Textextraktion auf Serverless, obwohl lokal Text kommt).
@@ -60,14 +98,8 @@ function basePdfLoadOptions(buffer: Buffer) {
 }
 
 function ensurePdfWorkerConfigured(): void {
-  // Vercel: file://-Worker aus dem Deployment-Pfad sind fehleranfällig; pdfjs läuft mit disableWorker + Standardfonts stabil.
-  if (process.env.VERCEL === '1') return;
   if (pdfWorkerConfigured) return;
-  const candidates = [
-    path.resolve(process.cwd(), 'node_modules/pdf-parse/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'),
-    path.resolve(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'),
-  ];
-  const workerPath = candidates.find((p) => existsSync(p));
+  const workerPath = resolvePdfWorkerPath();
   if (workerPath) {
     const workerSrc = pathToFileURL(workerPath).toString();
     PDFParse.setWorker(workerSrc);
@@ -130,6 +162,7 @@ export async function extractTextFromBuffer(
   pdfJsError?: string | null;
 }> {
   if (mimeType === 'application/pdf') {
+    await ensurePdfMainThreadWorkerSeeded();
     ensurePdfWorkerConfigured();
     const parser = new PDFParse(basePdfLoadOptions(buffer));
     let textResult: { text?: string; pages?: Array<{ text?: string }> } | null = null;
