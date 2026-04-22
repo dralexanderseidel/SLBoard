@@ -51,18 +51,30 @@ async function ensurePdfMainThreadWorkerSeeded(): Promise<void> {
     pdfMainThreadWorkerSeeded = true;
     return;
   }
+  const register = (mod: PdfJsWorkerModule): boolean => {
+    const handler = mod?.WorkerMessageHandler;
+    if (!handler) return false;
+    g.pdfjsWorker = { WorkerMessageHandler: handler };
+    pdfMainThreadWorkerSeeded = true;
+    return true;
+  };
+  // Zuerst Paket-Specifier (gleiche Auflösung wie pdf-parse); hilft dem NFT-Trace und Vercel.
+  try {
+    const mod = (await import(
+      "pdfjs-dist/legacy/build/pdf.worker.mjs"
+    )) as PdfJsWorkerModule;
+    if (register(mod)) return;
+  } catch {
+    // z. B. Trace ohne Worker-Datei — file-URL-Fallback
+  }
   const workerPath = resolvePdfWorkerPath();
   if (!workerPath) return;
   try {
     const href = pathToFileURL(workerPath).href;
     const mod = (await import(/* webpackIgnore: true */ href)) as PdfJsWorkerModule;
-    const handler = mod?.WorkerMessageHandler;
-    if (handler) {
-      g.pdfjsWorker = { WorkerMessageHandler: handler };
-      pdfMainThreadWorkerSeeded = true;
-    }
+    register(mod);
   } catch {
-    // Ohne Handler versucht pdfjs den eingebauten Import (kann auf Serverless fehlschlagen).
+    // Ohne Handler versucht pdfjs den eingebauten relativen Import (bricht auf Serverless oft ab).
   }
 }
 
@@ -111,22 +123,16 @@ type PdfJsResult = { text: string | null; error: string | null };
 
 async function extractPdfTextWithPdfJs(buffer: Buffer): Promise<PdfJsResult> {
   try {
+    await ensurePdfMainThreadWorkerSeeded();
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const candidates = [
-      path.resolve(process.cwd(), 'node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'),
-      path.resolve(process.cwd(), 'node_modules/pdf-parse/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'),
-    ];
-    const workerPath = candidates.find((p) => existsSync(p));
+    const workerPath = resolvePdfWorkerPath();
     if (workerPath && (pdfjs as { GlobalWorkerOptions?: { workerSrc?: string } }).GlobalWorkerOptions) {
       (pdfjs as { GlobalWorkerOptions: { workerSrc?: string } }).GlobalWorkerOptions.workerSrc =
         pathToFileURL(workerPath).toString();
     }
     const loadingTask = pdfjs.getDocument({
+      ...basePdfLoadOptions(buffer),
       data: new Uint8Array(buffer),
-      useSystemFonts: true,
-      disableFontFace: true,
-      // pdfjs wird serverseitig ohne Worker betrieben; einige Typdefinitionen enthalten das Flag nicht (runtime ok).
-      disableWorker: true,
     } as unknown as Parameters<typeof pdfjs.getDocument>[0]);
     const pdf = await loadingTask.promise;
     const pages: string[] = [];
