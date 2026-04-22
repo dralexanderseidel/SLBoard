@@ -4,7 +4,7 @@
 import './pdfNodePolyfill';
 import mammoth from 'mammoth';
 import { supabaseServer } from './supabaseServer';
-import { PDFParse } from 'pdf-parse';
+import { PDFParse, VerbosityLevel } from 'pdf-parse';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -28,7 +28,40 @@ function mimeFromFileUri(fileUri: string): string | null {
 
 let pdfWorkerConfigured = false;
 
+/**
+ * Standard-Schriften für pdfjs (sonst oft leere Textextraktion auf Serverless, obwohl lokal Text kommt).
+ */
+function resolveStandardFontDataUrl(): string | undefined {
+  const dirs = [
+    path.join(process.cwd(), 'node_modules', 'pdfjs-dist', 'standard_fonts'),
+    path.join(process.cwd(), '..', 'node_modules', 'pdfjs-dist', 'standard_fonts'),
+  ];
+  for (const dir of dirs) {
+    if (existsSync(path.join(dir, 'FoxitSerif.pfb'))) {
+      const dirUrl = dir.endsWith(path.sep) ? dir : `${dir}${path.sep}`;
+      return pathToFileURL(dirUrl).href;
+    }
+  }
+  return undefined;
+}
+
+function basePdfLoadOptions(buffer: Buffer) {
+  const standardFontDataUrl = resolveStandardFontDataUrl();
+  return {
+    data: buffer,
+    verbosity: VerbosityLevel.ERRORS,
+    useSystemFonts: true,
+    disableFontFace: true,
+    isEvalSupported: false,
+    disableRange: true,
+    disableStream: true,
+    ...(standardFontDataUrl ? { standardFontDataUrl } : {}),
+  };
+}
+
 function ensurePdfWorkerConfigured(): void {
+  // Vercel: file://-Worker aus dem Deployment-Pfad sind fehleranfällig; pdfjs läuft mit disableWorker + Standardfonts stabil.
+  if (process.env.VERCEL === '1') return;
   if (pdfWorkerConfigured) return;
   const candidates = [
     path.resolve(process.cwd(), 'node_modules/pdf-parse/node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs'),
@@ -98,7 +131,7 @@ export async function extractTextFromBuffer(
 }> {
   if (mimeType === 'application/pdf') {
     ensurePdfWorkerConfigured();
-    const parser = new PDFParse({ data: buffer });
+    const parser = new PDFParse(basePdfLoadOptions(buffer));
     let textResult: { text?: string; pages?: Array<{ text?: string }> } | null = null;
     let pdfParseError: string | null = null;
     try {
