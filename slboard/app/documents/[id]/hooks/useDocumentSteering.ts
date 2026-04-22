@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { readApiJson } from '@/lib/readApiJson';
 import type { DocumentDetail, SteeringAnalysis, SteeringTodosResult } from '../types';
 
 type UseDocumentSteeringResult = {
@@ -52,13 +53,14 @@ export function useDocumentSteering(
       const res = await fetch(`/api/documents/${id}/steering-analysis`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ force }),
       });
-      const data = (await res.json()) as {
+      const data = await readApiJson<{
         analysis?: SteeringAnalysis;
         error?: string;
         updatedAt?: string | null;
-      };
+      }>(res);
       if (!res.ok || !data.analysis) {
         throw new Error(data.error ?? 'Analyse konnte nicht erstellt werden.');
       }
@@ -83,13 +85,14 @@ export function useDocumentSteering(
       const res = await fetch(`/api/documents/${id}/steering-todos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ force }),
       });
-      const data = (await res.json()) as {
+      const data = await readApiJson<{
         todos?: SteeringTodosResult;
         error?: string;
         updatedAt?: string | null;
-      };
+      }>(res);
       if (!res.ok || !data.todos) {
         throw new Error(data.error ?? 'Aufgaben konnten nicht extrahiert werden.');
       }

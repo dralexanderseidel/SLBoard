@@ -1,5 +1,16 @@
 import { useEffect, useState } from 'react';
+import { readApiJson } from '@/lib/readApiJson';
 import type { DocumentDetail } from '../types';
+
+type SummarizeErrorDetails = {
+  error?: { code?: number; metadata?: { raw?: string } };
+};
+
+type SummarizeApiBody = {
+  summary?: string;
+  error?: string;
+  details?: string | SummarizeErrorDetails | Record<string, unknown>;
+};
 
 type UseDocumentSummaryResult = {
   summary: string | null;
@@ -64,16 +75,22 @@ export function useDocumentSummary(
         const res = await fetch('/api/summarize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify(payload),
         });
-        const data = await res.json();
+        const data = await readApiJson<SummarizeApiBody>(res);
 
         if (!res.ok) {
+          const d = data.details;
+          const llmErr =
+            d && typeof d === 'object' && d !== null && 'error' in d
+              ? (d as SummarizeErrorDetails).error
+              : undefined;
           const isRateLimited =
             res.status === 429 ||
-            (typeof data?.details?.error?.code === 'number' && data.details.error.code === 429) ||
-            (typeof data?.details?.error?.metadata?.raw === 'string' &&
-              data.details.error.metadata.raw.toLowerCase().includes('rate-limited'));
+            (typeof llmErr?.code === 'number' && llmErr.code === 429) ||
+            (typeof llmErr?.metadata?.raw === 'string' &&
+              llmErr.metadata.raw.toLowerCase().includes('rate-limited'));
 
           if (isRateLimited && attempt === 1) {
             setSummaryError(
@@ -89,7 +106,7 @@ export function useDocumentSummary(
             typeof data.details === 'string' ? data.details : data.details ? JSON.stringify(data.details) : '';
           setSummaryError(detailsText ? `${msgBase}: ${detailsText}` : msgBase);
         } else {
-          setSummary(data.summary);
+          setSummary(data.summary ?? null);
           setSummaryError(null);
           setSummaryUpdatedAt(new Date().toISOString());
         }

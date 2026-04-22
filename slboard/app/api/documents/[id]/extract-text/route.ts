@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../../lib/documentAccess';
-import { getDocumentTextDiagnostics } from '../../../../../lib/documentText';
 import { apiError } from '../../../../../lib/apiError';
 
 export const runtime = 'nodejs';
+
+export const maxDuration = 60;
 
 /**
  * Diagnostics: Liefert nur Länge/Existenz von extrahierbarem Dokumenttext.
@@ -69,6 +70,7 @@ export async function GET(
       );
     }
 
+    const { getDocumentTextDiagnostics } = await import('../../../../../lib/documentText');
     const diag = await getDocumentTextDiagnostics(documentId);
     const debugBase = {
       currentVersionId: diag.currentVersionId,

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { readApiJson } from '@/lib/readApiJson';
 import type { WorkflowStatus } from '@/lib/documentWorkflow';
 import type { DocumentListItem } from '../types';
 
@@ -403,9 +404,10 @@ export function useBulkActions({
       const res = await fetch('/api/summarize-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ documentIds: ids }),
       });
-      const data = (await res.json()) as { okCount?: number; failCount?: number; error?: string };
+      const data = await readApiJson<{ okCount?: number; failCount?: number; error?: string }>(res);
       if (!res.ok) throw new Error(data.error ?? 'Fehler beim Erzeugen der Zusammenfassungen.');
       const okCount = data.okCount ?? 0;
       const failCount = data.failCount ?? (ids.length - okCount);
@@ -441,9 +443,10 @@ export function useBulkActions({
           const res = await fetch(`/api/documents/${id}/steering-analysis`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ force: true }),
           });
-          const data = (await res.json()) as { error?: string };
+          const data = await readApiJson<{ error?: string }>(res);
           if (!res.ok) throw new Error(data.error ?? 'Fehler bei der Steuerungsanalyse.');
         }),
       );

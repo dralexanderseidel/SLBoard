@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDocumentText } from '../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
@@ -11,6 +10,9 @@ import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../lib/aiPr
 import { checkAiQuota } from '../../../lib/quotaCheck';
 
 export const runtime = 'nodejs';
+
+/** Vercel: Textextraktion + LLM überschreiten oft das 10s-Default-Limit. */
+export const maxDuration = 60;
 
 type SummarizePayload = {
   title?: string;
@@ -49,6 +51,7 @@ export async function POST(req: NextRequest) {
 
     // Bei Dokument mit Datei: zuerst Text aus PDF/Word extrahieren, Metadaten nur als Fallback
     if (documentId) {
+      const { getDocumentText } = await import('../../../lib/documentText');
       const extractedText = await getDocumentText(documentId);
       if (extractedText && extractedText.length > 50) {
         basisText = extractedText;

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDocumentText } from '../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
@@ -10,6 +9,9 @@ import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../lib
 import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../lib/aiPromptTemplates';
 
 export const runtime = 'nodejs';
+
+/** Vercel: mehrere Dokumente × (Extraktion + LLM). */
+export const maxDuration = 120;
 
 type SummarizeBatchPayload = {
   documentIds: string[];
@@ -48,6 +50,8 @@ export async function POST(req: NextRequest) {
     const uniqueIds = Array.from(new Set(documentIds.filter((id) => typeof id === 'string' && id.trim().length > 0)));
 
     const MAX_SUMMARY_CHARS = 12000;
+
+    const { getDocumentText } = await import('../../../lib/documentText');
 
     const results: Array<{ documentId: string; ok: boolean; error?: string }> = [];
     let okCount = 0;

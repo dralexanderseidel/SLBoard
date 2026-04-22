@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../../lib/documentAccess';
-import { getDocumentText } from '../../../../../lib/documentText';
 import { callLlm, isLlmConfigured } from '../../../../../lib/llmClient';
 import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
 import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
@@ -143,6 +142,7 @@ export async function POST(
       });
     }
 
+    const { getDocumentText } = await import('../../../../../lib/documentText');
     const extracted = await getDocumentText(documentId);
     const legalRef = (doc.legal_reference as string | null)?.trim() ?? '';
     let basisText = (extracted ?? '').trim();
