@@ -9,7 +9,7 @@ import {
   type UserAccessContext,
 } from './documentAccess';
 
-export const MAX_DOCS = 8;
+export const MAX_DOCS = 10;
 
 /** Größerer Pool vor Leserechte-Filter, damit genug Treffer übrig bleiben. */
 const SEARCH_POOL_BEFORE_FILTER = 100;
@@ -18,7 +18,7 @@ const FALLBACK_POOL_BEFORE_FILTER = 48;
 const MAX_RESULTS_CAP = 50;
 
 export type SuggestedDocumentsOptions = {
-  /** Standard: MAX_DOCS (8), z. B. Entwurfsassistent: 20 */
+  /** Standard: MAX_DOCS (10), z. B. Entwurfsassistent: 20 */
   maxResults?: number;
   /** Wenn gesetzt: nur dieser document_type_code */
   documentTypeCode?: string | null;
