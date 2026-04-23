@@ -136,9 +136,10 @@ export default function HilfePage() {
             </li>
           </ol>
           <p>
-            Die Antwort kann <strong>Textbelege</strong> mit Verweisen auf verwendete Dokumente enthalten. Öffnen Sie
-            diese Verweise, um die Fundstellen im Kontext zu prüfen. Gespeicherte Anfragen erscheinen im Bereich
-            „Aktuelle Anfragen“, soweit Ihre Schule diese Funktion nutzt.
+            Unter der Antwort listet die Oberfläche die <strong>verwendeten Dokumente</strong> mit Link und – falls
+            vorhanden – einen kurzen Zusammenfassungsauszug; die KI soll diese Liste nicht noch einmal in den
+            Antworttext schreiben. Gespeicherte Anfragen erscheinen im Bereich „Aktuelle Anfragen“, soweit Ihre Schule
+            diese Funktion nutzt.
           </p>
           <p>
             Weitere Kacheln oder Hinweise auf dem Dashboard informieren z.&nbsp;B. über kürzlich veröffentlichte

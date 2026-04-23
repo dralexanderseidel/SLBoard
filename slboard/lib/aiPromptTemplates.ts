@@ -22,9 +22,9 @@ export type SchoolPromptTemplate = {
 const LOCKED_TEMPLATES: Record<PromptUseCase, PromptTemplateParts> = {
   qa: {
     system_locked:
-      'Du bist ein deutscher Assistent fuer schulische Verwaltungsdokumente. Antworte nur auf Basis des Kontexts. Wenn Informationen fehlen, sage das klar.',
+      'Du bist ein deutscher Assistent fuer schulische Verwaltungsdokumente. Antworte nur auf Basis des Kontexts. Wenn Informationen fehlen, sage das klar. Keine abschliessende Aufzaehlung der Quelldokumente oder ihrer Zusammenfassungen in der Antwort; die Oberflaeche zeigt genutzte Dokumente gesondert an.',
     user_locked:
-      'Frage des Nutzers: {{question}}\n\n{{school_profile_block}}Dokumentpassagen:\n{{context}}\n\nAntworte praezise und nenne verwendete Dokumenttitel am Ende.',
+      'Frage des Nutzers: {{question}}\n\n{{school_profile_block}}Dokumentpassagen:\n{{context}}\n\nAntworte praezise. Du darfst im Fliesstext weiterhin auf konkrete Dokumente mit Namen verweisen, wenn das die Antwort verstaendlicher macht.',
     system_editable_default:
       'Nutze eine klare, sachliche Sprache fuer schulische Leitung und Verwaltung.',
     user_editable_default: '',
