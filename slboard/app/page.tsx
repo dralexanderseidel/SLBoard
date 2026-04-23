@@ -397,24 +397,21 @@ export default function Home() {
               {querySources.length > 0 && (
                 <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-700">
                   <h4 className="mb-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
-                    Textbelege aus verwendeten Dokumenten
+                    Verwendete Dokumente
                   </h4>
                   <ul className="space-y-2">
                     {querySources.map((s) => (
-                      <li
-                        key={s.documentId}
-                        className="rounded border border-zinc-200 bg-white/70 px-2 py-1 dark:border-zinc-800 dark:bg-zinc-900/40"
-                      >
+                      <li key={s.documentId} className="flex flex-col">
                         <Link
                           href={`/documents/${s.documentId}`}
-                          className="text-xs text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                          className="text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
                         >
                           {s.title}
                         </Link>
-                        {s.snippet && (
-                          <p className="mt-1 rounded border border-zinc-200 bg-zinc-50 px-2 py-1 text-[11px] italic text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                            "{s.snippet}"
-                          </p>
+                        {s.snippet && s.snippet !== '—' && (
+                          <span className="mt-0.5 text-[11px] text-zinc-500 line-clamp-2 dark:text-zinc-400">
+                            {s.snippet}
+                          </span>
                         )}
                       </li>
                     ))}

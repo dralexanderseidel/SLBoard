@@ -4,6 +4,7 @@ import { supabaseServer } from '../../../../lib/supabaseServer';
 import { isAdmin } from '../../../../lib/adminAuth';
 import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
+import { ensureGlobalDocumentTypeRows } from '../../../../lib/ensureGlobalDocumentTypes';
 
 export const runtime = 'nodejs';
 
@@ -92,6 +93,14 @@ export async function PUT(req: NextRequest) {
         draft_format_hint: typeof t.draft_format_hint === 'string' ? t.draft_format_hint.trim() || null : t.draft_format_hint ?? null,
         updated_at: new Date().toISOString(),
       })).filter((r) => r.code && r.label);
+
+      const ensureErr = (
+        await ensureGlobalDocumentTypeRows(
+          supabase,
+          rows.map((r) => ({ code: r.code, label: r.label })),
+        )
+      ).error;
+      if (ensureErr) return apiError(500, 'INTERNAL_ERROR', ensureErr);
 
       const { error } = await supabase
         .from('school_document_type_options')

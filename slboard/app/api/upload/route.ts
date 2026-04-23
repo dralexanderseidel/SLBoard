@@ -8,6 +8,7 @@ import { WORKFLOW_STATUS_ORDER } from '../../../lib/documentWorkflow';
 import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
 import { getAiSettingsForSchool } from '../../../lib/aiSettings';
 import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../lib/aiPromptTemplates';
+import { ensureGlobalDocumentTypeRows } from '../../../lib/ensureGlobalDocumentTypes';
 
 /** Vercel: Hintergrund-Indexierung/KI nach dem Upload kann länger laufen als das Standard-Limit. */
 export const maxDuration = 60;
@@ -134,6 +135,18 @@ export async function POST(req: NextRequest) {
         'QUOTA_EXCEEDED',
         `Dokument-Quota erreicht (${currentDocCount} / ${quotaMaxDocs}). Bitte wenden Sie sich an Ihren Administrator.`
       );
+    }
+
+    const { data: typeOpt } = await supabase
+      .from('school_document_type_options')
+      .select('label')
+      .eq('school_number', schoolNumber)
+      .eq('code', type)
+      .maybeSingle();
+    const typeLabel = ((typeOpt as { label?: string } | null)?.label ?? '').trim() || type;
+    const ensureTypes = await ensureGlobalDocumentTypeRows(supabase, [{ code: type, label: typeLabel }]);
+    if (ensureTypes.error) {
+      return apiError(500, 'INTERNAL_ERROR', ensureTypes.error);
     }
 
     // 1) Dokument anlegen

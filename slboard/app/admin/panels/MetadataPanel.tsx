@@ -100,7 +100,7 @@ export function MetadataPanel({ open, onToggle }: Props) {
   return (
     <CollapsibleSection
       title="Metadaten pflegen"
-      description="Schulspezifische Listen für Dokumenttypen und verantwortliche Einheiten."
+      description="Dokumenttypen, verantwortliche Einheiten; pro Typ KI-Vorgaben für den Entwurfsassistenten (Seite Entwürfe)."
       open={open}
       onToggle={onToggle}
     >
@@ -119,6 +119,11 @@ export function MetadataPanel({ open, onToggle }: Props) {
         {/* Dokumenttypen */}
         <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">
           <p className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">Dokumenttypen</p>
+          <p className="mb-2 text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
+            Über die Schaltfläche „KI“ legen Sie Vorgaben für den typbezogenen Dokumenten-Entwurf fest (Seite
+            Entwürfe). Die schulweiten KI-Prompts unter „KI-Prompts“ steuern Q&amp;A, Zusammenfassung,
+            Steuerungsanalyse und ToDos und gelten dort nicht.
+          </p>
           <div className="space-y-1">
             {docTypeOptions.map((t, idx) => (
               <div key={t.code}>
@@ -141,7 +146,7 @@ export function MetadataPanel({ open, onToggle }: Props) {
                   />
                   <button
                     type="button"
-                    title="KI-Entwurfs-Einstellungen"
+                    title="KI-Vorgaben für den Entwurfsassistenten (dieser Dokumenttyp)"
                     onClick={() => setExpandedDraftIdx(expandedDraftIdx === idx ? null : idx)}
                     className={`shrink-0 rounded border px-2 py-1 text-[11px] transition ${
                       expandedDraftIdx === idx
@@ -170,6 +175,10 @@ export function MetadataPanel({ open, onToggle }: Props) {
                   <div className="ml-[118px] mt-1.5 rounded border border-blue-100 bg-blue-50/50 p-2.5 dark:border-blue-900/30 dark:bg-blue-950/20">
                     <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">
                       KI-Entwurfs-Einstellungen
+                    </p>
+                    <p className="mb-2 text-[10px] leading-snug text-blue-900/85 dark:text-blue-200/90">
+                      Diese Felder werden beim Erzeugen eines KI-Entwurfs für diesen Dokumenttyp in die Anfrage
+                      eingebaut (Standard-Zielgruppe, Ton, Format-Hinweis).
                     </p>
                     <div className="space-y-2">
                       <div>

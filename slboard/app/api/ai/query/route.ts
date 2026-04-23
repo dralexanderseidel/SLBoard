@@ -12,11 +12,7 @@ import {
   type DocRow,
 } from '../../../../lib/aiSearch';
 import { resolveUserAccess } from '../../../../lib/documentAccess';
-import {
-  buildPromptSnippetFromChunks,
-  pickBestEvidenceChunkForQuestion,
-  pickTopChunksForQuestion,
-} from '../../../../lib/chunkingOnTheFly';
+import { buildPromptSnippetFromChunks, pickTopChunksForQuestion } from '../../../../lib/chunkingOnTheFly';
 import {
   appendAiQueryDebugLog,
   isAiQueryDebugEnabledEffective,
@@ -35,6 +31,15 @@ const DEFAULT_MAX_TEXT_PER_DOC = 4500;
 const DEFAULT_CHUNK_CHARS = 2500;
 const DEFAULT_CHUNK_OVERLAP_CHARS = 300;
 const DEFAULT_MAX_CHUNKS_PER_DOC = 3;
+
+/** Kurzer Auszug aus der gespeicherten Dokument-Zusammenfassung für die Quellenliste (kein Chunk-Text). */
+const SOURCE_SUMMARY_MAX_CHARS = 220;
+
+function formatSourceSummaryExcerpt(summary: string | null | undefined): string {
+  const t = (summary ?? '').trim().replace(/\s+/g, ' ');
+  if (t.length <= 30) return '';
+  return t.length > SOURCE_SUMMARY_MAX_CHARS ? `${t.slice(0, SOURCE_SUMMARY_MAX_CHARS)}…` : t;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -92,7 +97,8 @@ export async function POST(req: NextRequest) {
       title: string;
       metadataBlock: string;
       promptSnippet: string;
-      evidenceSnippet: string;
+      /** Nur Dokument-Zusammenfassung (UI), kein Keyword-Chunk. */
+      sourceSummaryExcerpt: string;
     }[] = [];
     const keywords = extractKeywords(trimmed);
     const debugDocEntries: AiQueryDebugDocEntry[] = [];
@@ -128,7 +134,6 @@ export async function POST(req: NextRequest) {
       }
 
       let promptSnippet = '';
-      let evidenceSnippet = '';
       let selectedChunksForDebug: string[] = [];
       let builtSnippetLengthDebug = 0;
 
@@ -137,11 +142,6 @@ export async function POST(req: NextRequest) {
         const built = buildPromptSnippetFromChunks(selectedChunks, MAX_TEXT_PER_DOC);
         if (built.length > 30) {
           promptSnippet = built;
-          // Textbeleg: Chunk mit höchstem Keyword-Score (nicht nur erster Chunk in Lesereihenfolge).
-          const bestForEvidence =
-            pickBestEvidenceChunkForQuestion(text, keywords, chunkParams) ?? selectedChunks[0] ?? '';
-          const compact = bestForEvidence.replace(/\s+/g, ' ').trim();
-          evidenceSnippet = compact.length > 360 ? `${compact.slice(0, 360)}…` : compact;
           selectedChunksForDebug = selectedChunks;
           builtSnippetLengthDebug = built.length;
         }
@@ -152,11 +152,9 @@ export async function POST(req: NextRequest) {
           summaryText.length > 30 ? summaryText : legalText.length > 0 ? legalText : '';
         if (fallback.length > 20) {
           promptSnippet = fallback.slice(0, MAX_TEXT_PER_DOC);
-          evidenceSnippet = fallback.length > 360 ? `${fallback.slice(0, 360)}…` : fallback;
         } else {
           promptSnippet =
             '(Kein längerer Dokumententext extrahiert. Beantworte die Frage soweit möglich mit den Metadaten oben und allgemeinem Wissen.)';
-          evidenceSnippet = '—';
         }
       }
 
@@ -165,7 +163,7 @@ export async function POST(req: NextRequest) {
         title: doc.title,
         metadataBlock,
         promptSnippet,
-        evidenceSnippet,
+        sourceSummaryExcerpt: formatSourceSummaryExcerpt(doc.summary),
       });
       if (debugEnabled && selectedChunksForDebug.length > 0) {
         debugDocEntries.push({
@@ -225,7 +223,7 @@ export async function POST(req: NextRequest) {
     const sourcesPayload = sourceTexts.map((s) => ({
       documentId: s.id,
       title: s.title,
-      snippet: s.evidenceSnippet,
+      snippet: s.sourceSummaryExcerpt,
     }));
 
     // Aufbewahrung: Einträge in ai_queries dienen dem Verlauf; Löschung bei Dokument-Endlöschung siehe RPC delete_ai_queries_referencing_document.

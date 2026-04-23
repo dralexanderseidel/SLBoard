@@ -163,13 +163,17 @@ export function PromptPanel({ open, onToggle }: Props) {
   return (
     <CollapsibleSection
       title="KI-Prompts"
-      description="Schulspezifische Prompt-Bausteine mit gesperrtem Antwortformat."
+      description="Bausteine für Q&A, Zusammenfassung, Steuerungsanalyse und ToDos — nicht für den typbezogenen Dokumenten-Entwurf."
       open={open}
       onToggle={onToggle}
     >
       <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
         Bearbeitbar sind nur die Zusatzbausteine. Das Antwortformat (z. B. JSON fuer Steuerungsanalyse)
         bleibt im gesperrten Block unveraendert.
+      </p>
+      <p className="mt-2 text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
+        Den Entwurfsassistenten pro Dokumenttyp (Zielgruppe, Ton, Format) pflegen Sie unter „Metadaten pflegen“
+        beim jeweiligen Typ über die Schaltfläche „KI“.
       </p>
 
       {error && (
