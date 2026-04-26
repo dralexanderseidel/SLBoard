@@ -63,11 +63,40 @@ export async function GET() {
       usageBySchool.set(String(row.school_number ?? '').trim(), row);
     }
 
+    const adminIds = [
+      ...new Set(
+        (schools ?? [])
+          .map((s) => (s as { initial_admin_app_user_id?: string | null }).initial_admin_app_user_id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+
+    const adminById = new Map<string, { email: string; full_name: string | null }>();
+    if (adminIds.length > 0) {
+      const { data: admins, error: admErr } = await supabase
+        .from('app_users')
+        .select('id, email, full_name')
+        .in('id', adminIds);
+      if (admErr) {
+        return apiError(500, 'INTERNAL_ERROR', admErr.message);
+      }
+      for (const a of admins ?? []) {
+        adminById.set(a.id as string, {
+          email: String((a as { email?: string }).email ?? '').trim().toLowerCase(),
+          full_name: ((a as { full_name?: string | null }).full_name ?? null) as string | null,
+        });
+      }
+    }
+
     const schoolsWithUsage = (schools ?? []).map((s) => {
       const sn = String(s.school_number ?? '').trim();
       const u = usageBySchool.get(sn);
+      const initId = (s as { initial_admin_app_user_id?: string | null }).initial_admin_app_user_id ?? null;
+      const adm = initId ? adminById.get(initId) : undefined;
       return {
         ...s,
+        initial_admin_email: adm?.email ?? null,
+        initial_admin_full_name: adm?.full_name ?? null,
         usage: {
           userCount: Number(u?.user_count ?? 0),
           documentCount: Number(u?.document_count ?? 0),

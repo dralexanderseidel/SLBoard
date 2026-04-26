@@ -71,9 +71,12 @@ export default function HilfePage() {
           </p>
           <p>
             Die Oberfläche ist in der Regel über die Kopfzeile erreichbar:{' '}
-            <strong>Dashboard</strong>, <strong>Dokumente</strong>, <strong>Entwurfsassistent</strong> und bei
-            entsprechender Rolle <strong>Admin</strong>. Über das Menü rechts oben können Sie sich abmelden oder die
-            Schulnummer wechseln, falls Ihr Konto mehreren Schulen zugeordnet ist.
+            <strong>Dashboard</strong>, <strong>Dokumente</strong>, <strong>Entwurfsassistent</strong>,{' '}
+            <strong>Hilfe</strong> (diese Seite) und bei entsprechender Rolle <strong>Admin</strong>. Über das
+            Profilmenü rechts oben melden Sie sich ab, wechseln bei Bedarf die <strong>Schulnummer</strong> (wenn Ihre
+            E-Mail mehreren Schulen zugeordnet ist), ändern das Passwort, laden einen{' '}
+            <strong>Datenexport</strong> herunter oder stellen eine <strong>Löschanfrage</strong> (siehe unten unter
+            Anmeldung und FAQ).
           </p>
         </section>
 
@@ -105,11 +108,35 @@ export default function HilfePage() {
             Nutzen Sie im Menü oben rechts die Abmeldung, wenn Sie die Anwendung verlassen, insbesondere an gemeinsam
             genutzten Rechnern. So kann niemand Unbefugtes unter Ihrer Sitzung weiterarbeiten.
           </p>
+          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Mehrere Schulen unter einer E-Mail</h3>
+          <p>
+            Ist dieselbe E-Mail-Adresse für <strong>mehrere Schulnummern</strong> registriert, müssen Sie bei der
+            Anmeldung (oder danach) die passende Schule wählen. Die Anwendung merkt sich die Schulzuordnung für die
+            Sitzung. Wechseln Sie die Schule über das Profilmenü, wenn Sie eine andere Einrichtung bearbeiten möchten.
+          </p>
+          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Datenexport und Löschanfrage</h3>
+          <p>
+            Im Profilmenü steht ein <strong>Export Ihrer personenbezogenen Daten</strong> als JSON-Datei zur
+            Verfügung (sofern Sie einen gültigen Schul-Kontext haben). Über{' '}
+            <strong>Löschanfrage stellen</strong> können Sie beantragen, dass Ihr Zugang für diese Schule datenschutzmäßig
+            abgewickelt wird: Es wird ein <strong>Protokolleintrag für die Schul-Administration</strong> angelegt; es
+            erfolgt <strong>kein automatisches Löschen</strong>. Eine bereits offene Löschanfrage kann nicht doppelt
+            gestellt werden. Details zur Bearbeitung siehe Abschnitt <a href="#admin" className={helpClassName}>Admin</a>{' '}
+            und <a href="#faq" className={helpClassName}>FAQ</a>.
+          </p>
           <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Schule inaktiv</h3>
           <p>
             Ist für Ihre Schule der Zugang vorübergehend deaktiviert, erhalten Sie einen Hinweis auf der Anmeldeseite
             und können sich nicht anmelden. In diesem Fall wenden Sie sich an die für Ihre Organisation
             zuständige Stelle – die Freischaltung erfolgt nicht über diese Hilfeseite.
+          </p>
+          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Konto deaktiviert (nur diese Schule)</h3>
+          <p>
+            Ein Schul-Administrator kann Ihr Benutzerkonto für <strong>eine Schulnummer vorübergehend deaktivieren</strong>.
+            Sie sind dann für diese Schule <strong>nicht mehr in der Lage</strong>, Dokumente oder KI-Funktionen zu nutzen;
+            in der Kopfzeile erscheint ein Hinweis. Die Anmeldung bei Supabase kann weiterhin bestehen – für die
+            Freischaltung oder Klärung wenden Sie sich an Ihre Schule. Diese Sperre ist unabhängig von der
+            plattformweiten Deaktivierung einer ganzen Schule (siehe „Schule inaktiv“).
           </p>
         </section>
 
@@ -181,7 +208,9 @@ export default function HilfePage() {
           <p>
             In der Tabellenansicht können Sie mehrere Dokumente markieren und <strong>gemeinsame Aktionen</strong>{' '}
             ausführen (z.&nbsp;B. Status setzen, Archivierung, KI-Stapel für Zusammenfassungen oder Analysen), sofern
-            Ihre Rolle das erlaubt. Ungeeignete Dokumente werden dabei übersprungen oder ausgewiesen.
+            Ihre Rolle das erlaubt. Ungeeignete Dokumente werden dabei übersprungen oder ausgewiesen. Nach größeren
+            Stapel-Aktionen fasst die Oberfläche das Ergebnis oft in einer <strong>Zusammenfassung</strong> (erfolgreich,
+            übersprungen, fehlgeschlagen) zusammen, damit Sie den Überblick behalten.
           </p>
         </section>
 
@@ -338,13 +367,50 @@ export default function HilfePage() {
             <a href="/admin" className={helpClassName}>
               Admin
             </a>{' '}
-            Verwaltungsfunktionen – typischerweise:
+            Verwaltungsfunktionen. Sinnvolle Reihenfolge: zuerst <strong>Nutzer &amp; Rollen</strong>, dann{' '}
+            <strong>Metadaten</strong> (Dokumenttypen, Verantwortlich), anschließend <strong>KI-Einstellungen</strong> und{' '}
+            <strong>Prompt-Vorlagen</strong>, wenn die KI genutzt werden soll; <strong>Statistik</strong> liefert Kennzahlen.
           </p>
+          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Nutzer &amp; Rollen</h3>
           <ul className="list-disc space-y-1 pl-5">
-            <li>Benutzerkonten anlegen und verwalten (inkl. vorläufiger Passwörter)</li>
-            <li>Rollen zuweisen</li>
-            <li>schulspezifische Einstellungen, etwa zu Metadaten oder KI-Promptbausteinen</li>
-            <li>Statistiken einsehen, soweit freigeschaltet</li>
+            <li>Konten anlegen (inkl. optionalem vorläufigem Passwort), Stammdaten und Organisationseinheit bearbeiten</li>
+            <li>
+              <strong>Rollen</strong> per Kontrollkästchen pflegen (z.&nbsp;B. Schulleitung, Sekretariat, Lehrkraft)
+            </li>
+            <li>
+              Spalte <strong>Aktiv</strong>: Ein Konto kann für diese Schule <strong>deaktiviert</strong> werden – dann
+              besteht kein Schulzugriff mehr, bis es wieder aktiviert wird. Der bei der{' '}
+              <strong>Schul-Selbstregistrierung</strong> angelegte erste Admin sowie Ihr <strong>eigenes</strong> Konto
+              können Sie so nicht sperren (technische Absicherung).
+            </li>
+            <li>Nutzer löschen, sofern vorgesehen (nicht der Registrierungs-Admin)</li>
+          </ul>
+          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Löschanfragen</h3>
+          <p>
+            Wenn Endnutzerinnen oder Endnutzer im Profilmenü eine <strong>Löschanfrage</strong> stellen, erscheint diese
+            im Admin-Bereich unter <strong>Löschanfragen</strong>. Offene Anfragen werden oben auf der Admin-Seite
+            hervorgehoben. Administratoren setzen einen <strong>Status</strong> (z.&nbsp;B. offen, zur Kenntnis genommen,
+            erledigt, abgelehnt), optional eine <strong>interne Notiz</strong> und dokumentieren damit den Bearbeitungsstand.
+            Die Anwendung <strong>löscht keine Daten automatisch</strong>; die weitere Abwicklung (z.&nbsp;B. Löschen in
+            Auth und Datenbank) erfolgt nach Ihren organisatorischen und rechtlichen Vorgaben außerhalb dieser Maske oder
+            durch Ihre IT.
+          </p>
+          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Metadaten, KI, Statistik, Reindizierung</h3>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              <strong>Metadaten:</strong> Dokumenttypen-Liste und Verantwortlich-Gruppen pro Schule – sie speisen u.&nbsp;a.
+              Auswahllisten beim Hochladen
+            </li>
+            <li>
+              <strong>KI-Einstellungen</strong> und <strong>Prompt-Bausteine</strong> für die konfigurierten KI-Nutzungen
+            </li>
+            <li>
+              <strong>Statistik</strong> zu Nutzern, Dokumenten und KI-Aufrufen (Schulbezug)
+            </li>
+            <li>
+              <strong>Dokumente reindizieren</strong> (Schaltfläche im Kopf der Admin-Seite): erzeugt Suchtext und
+              Stichworte für bereits vorhandene Dokumente neu – nur nach größeren Konfigurationsänderungen nötig
+            </li>
           </ul>
           <p>
             Eine globale Verwaltung mehrerer Schulen (Super-Admin) ist nur für ausgewiesene Plattform-Administratorinnen
@@ -417,6 +483,20 @@ export default function HilfePage() {
                 Strukturelle Bewertung des Dokuments aus Organisationssicht (nicht: pädagogische Qualität des Inhalts).
               </dd>
             </div>
+            <div>
+              <dt className="font-medium text-zinc-900 dark:text-zinc-100">Löschanfrage</dt>
+              <dd className="mt-0.5 text-zinc-700 dark:text-zinc-300">
+                Vom Nutzer ausgelöster Wunsch nach Konten- bzw. Datenlöschung für eine Schulzuordnung; wird protokolliert
+                und von Schul-Admins bearbeitet, ohne automatisches Löschen durch die App.
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium text-zinc-900 dark:text-zinc-100">Konto aktiv / deaktiviert</dt>
+              <dd className="mt-0.5 text-zinc-700 dark:text-zinc-300">
+                Steuerung durch Schul-Admins: ein deaktiviertes Konto hat keinen Zugriff mehr auf Schul-Daten dieser
+                Schulnummer, bis es wieder aktiviert wird (unabhängig von „Schule inaktiv“ auf Plattformebene).
+              </dd>
+            </div>
           </dl>
         </section>
 
@@ -462,12 +542,44 @@ export default function HilfePage() {
               Plattformverwaltung. Diese Hilfeseite ersetzt keinen individuellen Support.
             </p>
           </div>
+
+          <div className="space-y-1">
+            <p className="font-medium text-zinc-900 dark:text-zinc-100">Wie stelle ich eine Löschanfrage?</p>
+            <p className="text-zinc-700 dark:text-zinc-300">
+              Öffnen Sie das Profilmenü oben rechts und wählen Sie <strong>Löschanfrage stellen</strong>. Bestätigen Sie
+              den Hinweis. Es wird ein Eintrag für Ihre Schul-Administration erzeugt; Ihr Konto wird dadurch{' '}
+              <strong>nicht automatisch gelöscht</strong>. Liegt bereits eine offene Anfrage vor, ist eine zweite nicht
+              möglich – warten Sie auf die Bearbeitung oder sprechen Sie die Administration an.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <p className="font-medium text-zinc-900 dark:text-zinc-100">
+              Warum steht da „Konto deaktiviert“, obwohl ich mich anmelden konnte?
+            </p>
+            <p className="text-zinc-700 dark:text-zinc-300">
+              Ihre Anmeldung kann technisch bestehen, aber die Schul-Administration hat Ihren Zugang für{' '}
+              <strong>diese Schulnummer</strong> gesperrt. Wenden Sie sich an die Schule, wenn die Sperre aufgehoben
+              werden soll oder es sich um ein Missverständnis handelt.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <p className="font-medium text-zinc-900 dark:text-zinc-100">Wer bearbeitet meine Löschanfrage?</p>
+            <p className="text-zinc-700 dark:text-zinc-300">
+              Nutzerinnen und Nutzer mit Admin-Rechten für Ihre Schule sehen die Anfragen im Bereich{' '}
+              <strong>Admin → Löschanfragen</strong> und pflegen Status sowie Notizen. Die eigentliche Löschung oder
+              Anonymisierung personenbezogener Daten kann zusätzliche Schritte außerhalb der Oberfläche erfordern – das
+              regelt Ihre Organisation.
+            </p>
+          </div>
         </section>
 
         <footer className="border-t border-zinc-200 pt-8 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
           <p>
-            Stand der Dokumentation: allgemeine Beschreibung der Anwendung. Einzelne Funktionen können je nach Schule
-            oder Version abweichen.
+            Stand der Dokumentation: Anpassung u.&nbsp;a. an Löschanfragen, Konten-Deaktivierung durch Schul-Admins,
+            Profilmenü (Export) und erweiterte Admin-Bereiche. Einzelne Funktionen können je nach Schule oder Version
+            abweichen.
           </p>
           <p className="mt-2">
             <a href="/" className={helpClassName}>

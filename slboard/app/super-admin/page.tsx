@@ -2,6 +2,7 @@
 
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { MIN_APP_PASSWORD_LENGTH } from '@/lib/authPasswordConstants';
 
 type SchoolUsage = {
   userCount: number;
@@ -18,6 +19,9 @@ type SchoolRow = {
   active: boolean;
   created_at: string;
   initial_admin_app_user_id: string | null;
+  /** Aus app_users, für Super-Admin-Passwort-Reset */
+  initial_admin_email: string | null;
+  initial_admin_full_name: string | null;
   quota_max_users: number | null;
   quota_max_documents: number | null;
   quota_max_ai_queries_per_month: number | null;
@@ -88,6 +92,7 @@ type SchoolRowProps = {
   updateDraft: (schoolNumber: string, patch: Partial<Draft>) => void;
   onSave: (schoolNumber: string) => void;
   onDelete: (schoolNumber: string, displayName: string) => void;
+  onOpenPasswordReset: (school: SchoolRow) => void;
 };
 
 const SuperAdminSchoolRow = memo(function SuperAdminSchoolRow({
@@ -100,9 +105,11 @@ const SuperAdminSchoolRow = memo(function SuperAdminSchoolRow({
   updateDraft,
   onSave,
   onDelete,
+  onOpenPasswordReset,
 }: SchoolRowProps) {
   const qUsers = school.quota_max_users;
   const qDocs = school.quota_max_documents;
+  const hasInitialAdmin = Boolean(school.initial_admin_app_user_id);
 
   return (
     <tr className="border-b border-zinc-100 dark:border-zinc-800">
@@ -180,6 +187,19 @@ const SuperAdminSchoolRow = memo(function SuperAdminSchoolRow({
           <button
             type="button"
             title={
+              hasInitialAdmin
+                ? 'Neues temporäres Passwort für den Schul-Erstadmin (Login + Pflichtwechsel)'
+                : 'Kein Erst-Admin hinterlegt'
+            }
+            onClick={() => onOpenPasswordReset(school)}
+            disabled={!hasInitialAdmin || saving || deleting}
+            className="whitespace-nowrap rounded border border-amber-300 px-2 py-1 text-[11px] text-amber-950 hover:bg-amber-50 disabled:opacity-40 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-950/40"
+          >
+            Admin-PW
+          </button>
+          <button
+            type="button"
+            title={
               canDelete
                 ? 'Schule und Schuladmin endgültig löschen'
                 : 'Nur möglich ohne Dokumente und mit genau einem Nutzer (Erst-Admin). Pilotschule 000000 nie.'
@@ -220,6 +240,66 @@ export default function SuperAdminPage() {
   const [createLoading, setCreateLoading] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+
+  const [pwResetSchool, setPwResetSchool] = useState<SchoolRow | null>(null);
+  const [pwResetTemp, setPwResetTemp] = useState('');
+  const [pwResetTemp2, setPwResetTemp2] = useState('');
+  const [pwResetLoading, setPwResetLoading] = useState(false);
+  const [pwResetError, setPwResetError] = useState<string | null>(null);
+  const [pwResetMessage, setPwResetMessage] = useState<string | null>(null);
+
+  const openPasswordReset = useCallback((school: SchoolRow) => {
+    setPwResetSchool(school);
+    setPwResetTemp('');
+    setPwResetTemp2('');
+    setPwResetError(null);
+    setPwResetMessage(null);
+  }, []);
+
+  const closePasswordReset = useCallback(() => {
+    setPwResetSchool(null);
+    setPwResetTemp('');
+    setPwResetTemp2('');
+    setPwResetError(null);
+    setPwResetMessage(null);
+  }, []);
+
+  const submitPasswordReset = useCallback(async () => {
+    if (!pwResetSchool) return;
+    const a = pwResetTemp.trim();
+    const b = pwResetTemp2.trim();
+    if (a.length < MIN_APP_PASSWORD_LENGTH) {
+      setPwResetError(`Passwort: mindestens ${MIN_APP_PASSWORD_LENGTH} Zeichen.`);
+      return;
+    }
+    if (a !== b) {
+      setPwResetError('Die beiden Passwörter stimmen nicht überein.');
+      return;
+    }
+    setPwResetLoading(true);
+    setPwResetError(null);
+    setPwResetMessage(null);
+    try {
+      const res = await fetch(
+        `/api/super-admin/schools/${encodeURIComponent(pwResetSchool.school_number)}/reset-initial-admin-password`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ temporaryPassword: a }),
+        }
+      );
+      const data = (await res.json()) as { error?: string; message?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Zurücksetzen fehlgeschlagen.');
+      setPwResetMessage(data.message ?? 'Passwort wurde gesetzt.');
+      setPwResetTemp('');
+      setPwResetTemp2('');
+    } catch (e) {
+      setPwResetError(e instanceof Error ? e.message : 'Zurücksetzen fehlgeschlagen.');
+    } finally {
+      setPwResetLoading(false);
+    }
+  }, [pwResetSchool, pwResetTemp, pwResetTemp2]);
 
   const updateDraft = useCallback((schoolNumber: string, patch: Partial<Draft>) => {
     setDrafts((prev) => ({
@@ -606,7 +686,7 @@ export default function SuperAdminPage() {
                   <th className="p-2 font-medium">Quota KI/Monat</th>
                   <th
                     className="p-2 font-medium"
-                    title="Speichern · Löschen (nur ohne Dokumente, ein Nutzer = Erst-Admin)"
+                    title="Speichern · Admin-PW (Erst-Admin) · Löschen (nur ohne Dokumente, ein Nutzer = Erst-Admin)"
                   >
                     Aktionen
                   </th>
@@ -628,6 +708,7 @@ export default function SuperAdminPage() {
                       updateDraft={updateDraft}
                       onSave={saveSchool}
                       onDelete={deleteSchool}
+                      onOpenPasswordReset={openPasswordReset}
                     />
                   );
                 })}
@@ -636,6 +717,95 @@ export default function SuperAdminPage() {
           )}
         </div>
       </section>
+
+      {pwResetSchool && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pw-reset-title"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) closePasswordReset();
+          }}
+        >
+          <div className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-4 shadow-xl dark:border-zinc-700 dark:bg-zinc-900">
+            <h2 id="pw-reset-title" className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              Schuladmin-Passwort zurücksetzen
+            </h2>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+              Schule{' '}
+              <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">
+                {pwResetSchool.school_number}
+              </span>{' '}
+              ({pwResetSchool.name}). Es wird das Login des{' '}
+              <strong className="font-medium text-zinc-800 dark:text-zinc-200">Erst-Admins</strong> gesetzt (wie bei
+              der Schul-Anlage hinterlegt).
+            </p>
+            {(pwResetSchool.initial_admin_full_name || pwResetSchool.initial_admin_email) && (
+              <p className="mt-2 rounded border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-xs text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-100">
+                {pwResetSchool.initial_admin_full_name ? (
+                  <span className="font-medium">{pwResetSchool.initial_admin_full_name}</span>
+                ) : null}
+                {pwResetSchool.initial_admin_full_name && pwResetSchool.initial_admin_email ? ' · ' : null}
+                {pwResetSchool.initial_admin_email ? (
+                  <span className="break-all">{pwResetSchool.initial_admin_email}</span>
+                ) : null}
+              </p>
+            )}
+            <div className="mt-3 space-y-2">
+              <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Neues temporäres Passwort (min. {MIN_APP_PASSWORD_LENGTH} Zeichen)
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={pwResetTemp}
+                  onChange={(e) => setPwResetTemp(e.target.value)}
+                  className="mt-0.5 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950"
+                />
+              </label>
+              <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Passwort wiederholen
+                <input
+                  type="password"
+                  autoComplete="new-password"
+                  value={pwResetTemp2}
+                  onChange={(e) => setPwResetTemp2(e.target.value)}
+                  className="mt-0.5 w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950"
+                />
+              </label>
+            </div>
+            {pwResetError && (
+              <p className="mt-2 text-xs text-red-600 dark:text-red-400">{pwResetError}</p>
+            )}
+            {pwResetMessage && (
+              <p className="mt-2 text-xs text-green-700 dark:text-green-400">{pwResetMessage}</p>
+            )}
+            <p className="mt-2 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">
+              Teilen Sie das Passwort dem Schuladmin nur über einen sicheren Kanal mit. Nach der Anmeldung muss ein
+              neues Passwort gewählt werden.
+            </p>
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={closePasswordReset}
+                className="rounded border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              >
+                {pwResetMessage ? 'Schließen' : 'Abbrechen'}
+              </button>
+              {!pwResetMessage && (
+                <button
+                  type="button"
+                  disabled={pwResetLoading}
+                  onClick={() => void submitPasswordReset()}
+                  className="rounded bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-60"
+                >
+                  {pwResetLoading ? 'Wird gesetzt…' : 'Passwort setzen'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
