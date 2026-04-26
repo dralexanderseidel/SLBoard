@@ -93,6 +93,30 @@ export async function DELETE(
     }
 
     const targetEmail = (target as { email: string }).email;
+
+    // Referenzen lösen, falls FK noch ohne ON DELETE SET NULL (Migration 20260424).
+    const { error: clearCreatedErr } = await supabase
+      .from('documents')
+      .update({ created_by_id: null })
+      .eq('created_by_id', id);
+    if (clearCreatedErr) {
+      return apiError(500, 'INTERNAL_ERROR', clearCreatedErr.message);
+    }
+    const { error: clearRespErr } = await supabase
+      .from('documents')
+      .update({ responsible_person_id: null })
+      .eq('responsible_person_id', id);
+    if (clearRespErr) {
+      return apiError(500, 'INTERNAL_ERROR', clearRespErr.message);
+    }
+    const { error: clearVerErr } = await supabase
+      .from('document_versions')
+      .update({ created_by_id: null })
+      .eq('created_by_id', id);
+    if (clearVerErr) {
+      return apiError(500, 'INTERNAL_ERROR', clearVerErr.message);
+    }
+
     const { error: delErr } = await supabase.from('app_users').delete().eq('id', id);
     if (delErr) {
       return apiError(500, 'INTERNAL_ERROR', delErr.message);
