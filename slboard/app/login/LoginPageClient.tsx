@@ -7,6 +7,7 @@ import { ContextHelpLink } from '../../components/ContextHelpLink';
 import { CONTEXT_HELP } from '../../lib/contextHelpUrls';
 import { supabase } from '../../lib/supabaseClient';
 import { SCHOOL_INACTIVE_BODY, SCHOOL_INACTIVE_TITLE } from '../../lib/schoolInactiveMessages';
+import { ACCOUNT_INACTIVE_BODY, ACCOUNT_INACTIVE_TITLE } from '../../lib/accountInactiveMessages';
 
 export function LoginPageClient() {
   const searchParams = useSearchParams();
@@ -25,6 +26,12 @@ export function LoginPageClient() {
       setSchoolNumber(schoolFromQuery.padStart(6, '0').slice(0, 6));
     }
   }, [schoolFromQuery]);
+
+  /** Session beenden, wenn Proxy/Login wegen gesperrter Schule oder inaktivem Konto hierher umleiten (sonst Schleife Login ↔ Startseite). */
+  useEffect(() => {
+    if (!schoolInactive && !accountInactive) return;
+    void supabase.auth.signOut();
+  }, [schoolInactive, accountInactive]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,11 +61,21 @@ export function LoginPageClient() {
       credentials: 'include',
       body: JSON.stringify({ schoolNumber: sn }),
     });
-    const data = (await res.json().catch(() => ({}))) as { error?: string; passwordChangeRequired?: boolean };
+    const data = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      code?: string;
+      passwordChangeRequired?: boolean;
+    };
 
     if (!res.ok) {
       await supabase.auth.signOut();
       setLoading(false);
+      if (res.status === 403 && data.code === 'ACCOUNT_INACTIVE') {
+        window.location.assign(
+          `/login?reason=account_inactive&school=${encodeURIComponent(sn)}`
+        );
+        return;
+      }
       setError(data.error ?? 'Kein Benutzerkonto für diese Schulnummer.');
       return;
     }
@@ -104,6 +121,18 @@ export function LoginPageClient() {
             <p className="font-semibold text-amber-950 dark:text-amber-100">{SCHOOL_INACTIVE_TITLE}</p>
             <p className="mt-2 text-xs leading-relaxed text-amber-900/95 dark:text-amber-200/95">
               {SCHOOL_INACTIVE_BODY}
+            </p>
+          </div>
+        )}
+
+        {accountInactive && (
+          <div
+            role="alert"
+            className="rounded border border-amber-300 bg-amber-50 px-3 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200"
+          >
+            <p className="font-semibold text-amber-950 dark:text-amber-100">{ACCOUNT_INACTIVE_TITLE}</p>
+            <p className="mt-2 text-xs leading-relaxed text-amber-900/95 dark:text-amber-200/95">
+              {ACCOUNT_INACTIVE_BODY}
             </p>
           </div>
         )}

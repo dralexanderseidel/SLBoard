@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     const [{ data: row }, { data: school }] = await Promise.all([
       supabase
         .from('app_users')
-        .select('id, password_change_required')
+        .select('id, password_change_required, active')
         .eq('email', normalizeAuthEmail(user.email))
         .eq('school_number', schoolNumber)
         .maybeSingle(),

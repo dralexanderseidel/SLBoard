@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
 import { SCHOOL_INACTIVE_API_MESSAGE } from './lib/schoolInactiveMessages'
+import { ACCOUNT_INACTIVE_API_MESSAGE } from './lib/accountInactiveMessages'
 import { PASSWORD_CHANGE_REQUIRED_API_MESSAGE } from './lib/passwordChangeRequiredMessages'
 import { normalizeAuthEmail } from './lib/authEmail'
 
@@ -62,7 +63,12 @@ export async function proxy(request: NextRequest) {
     return withAuthAwareHeaders(NextResponse.redirect(loginUrl))
   }
 
-  if (!isApi && user && (pathname === '/login' || pathname === '/register-school')) {
+  const loginStayReason = request.nextUrl.searchParams.get('reason')
+  const stayOnLoginForBlockedSession =
+    pathname === '/login' &&
+    (loginStayReason === 'school_inactive' || loginStayReason === 'account_inactive')
+
+  if (!isApi && user && (pathname === '/login' || pathname === '/register-school') && !stayOnLoginForBlockedSession) {
     const appUrl = new URL('/', request.url)
     return withAuthAwareHeaders(NextResponse.redirect(appUrl))
   }
@@ -100,10 +106,27 @@ export async function proxy(request: NextRequest) {
 
         const { data: appRow } = await admin
           .from('app_users')
-          .select('password_change_required')
+          .select('password_change_required, active')
           .eq('email', normalizeAuthEmail(user.email!))
           .eq('school_number', schoolNumber)
           .maybeSingle()
+
+        if (appRow && (appRow as { active?: boolean }).active === false) {
+          if (isApi) {
+            return withAuthAwareHeaders(
+              NextResponse.json(
+                { error: ACCOUNT_INACTIVE_API_MESSAGE, code: 'ACCOUNT_INACTIVE' },
+                { status: 403 }
+              )
+            )
+          }
+          const loginUrl = new URL('/login', request.url)
+          loginUrl.searchParams.set('reason', 'account_inactive')
+          loginUrl.searchParams.set('school', schoolNumber)
+          const redirect = withAuthAwareHeaders(NextResponse.redirect(loginUrl))
+          redirect.cookies.set(SCHOOL_COOKIE, '', { maxAge: 0, path: '/' })
+          return redirect
+        }
 
         if (
           appRow &&
