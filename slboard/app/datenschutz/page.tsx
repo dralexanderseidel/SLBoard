@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
+import { createServerSupabaseClient } from '../../lib/supabaseServerClient';
 
 export const metadata: Metadata = {
   title: 'Datenschutz | NOMOS Edu Governance Pro',
@@ -16,7 +17,10 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
-export default function DatenschutzPage() {
+export default async function DatenschutzPage() {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
+
   return (
     <article className="mx-auto max-w-3xl px-4 py-10 text-sm leading-relaxed text-zinc-800 dark:text-zinc-100">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
@@ -272,8 +276,11 @@ export default function DatenschutzPage() {
       </Section>
 
       <p className="mt-12 text-center text-xs text-zinc-500 dark:text-zinc-400">
-        <Link href="/login" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
-          Zur Anmeldung
+        <Link
+          href={user ? '/' : '/login'}
+          className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+        >
+          {user ? 'Zur Startseite' : 'Zur Anmeldung'}
         </Link>
         <span className="mx-2 text-zinc-300 dark:text-zinc-600">·</span>
         <Link href="/impressum" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">

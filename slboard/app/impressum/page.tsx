@@ -1,12 +1,16 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { createServerSupabaseClient } from '../../lib/supabaseServerClient';
 
 export const metadata: Metadata = {
   title: 'Impressum | NOMOS Edu Governance Pro',
   description: 'Impressum und Anbieterkennzeichnung',
 };
 
-export default function ImpressumPage() {
+export default async function ImpressumPage() {
+  const supabase = await createServerSupabaseClient();
+  const { data: { user } } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
+
   return (
     <main className="mx-auto max-w-2xl px-4 py-10 text-sm leading-relaxed text-zinc-800 dark:text-zinc-100">
       <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Impressum</h1>
@@ -16,8 +20,11 @@ export default function ImpressumPage() {
         zutreffend.
       </p>
       <p className="mt-6">
-        <Link href="/login" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
-          Zur Anmeldung
+        <Link
+          href={user ? '/' : '/login'}
+          className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+        >
+          {user ? 'Zur Startseite' : 'Zur Anmeldung'}
         </Link>
       </p>
     </main>

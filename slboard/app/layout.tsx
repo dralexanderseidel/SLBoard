@@ -45,17 +45,19 @@ export default function RootLayout({
         <HeaderAccessProvider>
           <div className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
             <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90">
-              <div className="mx-auto flex w-full max-w-7xl items-center gap-2 sm:gap-3 lg:gap-4 px-4 sm:px-6 py-3">
-                <AppNavLink href="/" className="flex shrink-0 items-center self-center">
-                  <NomosLogo />
-                </AppNavLink>
-
-                <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3 lg:gap-4">
+              <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-3 sm:px-6 md:flex-row md:items-center md:gap-3 lg:gap-4">
+                <div className="flex min-w-0 w-full flex-1 items-center gap-2 sm:gap-3 md:gap-3 lg:gap-4">
+                  <AppNavLink href="/" className="flex shrink-0 items-center self-center">
+                    <NomosLogo />
+                  </AppNavLink>
                   <HeaderNav />
+                </div>
 
-                  <GlobalSearch />
-
-                  <div className="flex shrink-0 items-center border-l border-zinc-200 pl-4 sm:pl-6 dark:border-zinc-700">
+                <div className="flex w-full min-w-0 items-center justify-end gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800 md:w-auto md:shrink-0 md:border-0 md:pt-0">
+                  <div className="min-w-0 flex-1 md:flex-none">
+                    <GlobalSearch />
+                  </div>
+                  <div className="flex shrink-0 items-center border-l border-zinc-200 pl-3 sm:pl-4 dark:border-zinc-700 md:pl-6">
                     <UserMenu />
                   </div>
                 </div>

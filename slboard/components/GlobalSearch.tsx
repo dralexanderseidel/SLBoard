@@ -52,9 +52,9 @@ export function GlobalSearch() {
       onSubmit={handleSubmit}
       role="search"
       aria-label="Dokumente suchen"
-      className="flex shrink-0 items-center"
+      className="flex w-full min-w-0 items-center md:w-auto md:shrink-0"
     >
-      <div className="relative flex items-center">
+      <div className="relative flex w-full min-w-0 items-center md:w-auto">
         <svg
           className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-zinc-400"
           xmlns="http://www.w3.org/2000/svg"
@@ -75,7 +75,7 @@ export function GlobalSearch() {
           onChange={(e) => setValue(e.target.value)}
           placeholder="Suchen …"
           aria-label="Dokumente suchen"
-          className="w-28 rounded-full border border-zinc-200 bg-zinc-50 py-1 pl-7 pr-2 text-xs text-zinc-800 placeholder-zinc-400 transition focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 sm:w-40 md:w-52 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500 dark:focus:border-zinc-600"
+          className="min-w-0 w-full rounded-full border border-zinc-200 bg-zinc-50 py-1 pl-7 pr-2 text-xs text-zinc-800 placeholder-zinc-400 transition focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 md:w-52 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500 dark:focus:border-zinc-600"
         />
       </div>
     </form>
