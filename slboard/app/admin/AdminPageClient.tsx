@@ -4,11 +4,13 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { UsersPanel } from './panels/UsersPanel';
+import { DeleteRequestsPanel } from './panels/DeleteRequestsPanel';
 import { AiSettingsPanel } from './panels/AiSettingsPanel';
 import { PromptPanel } from './panels/PromptPanel';
 import { MetadataPanel } from './panels/MetadataPanel';
 import { StatsPanel } from './panels/StatsPanel';
 import { useReindex } from './hooks/useReindex';
+import { CONTEXT_HELP } from '@/lib/contextHelpUrls';
 
 export function AdminPageClient() {
   const router = useRouter();
@@ -21,6 +23,8 @@ export function AdminPageClient() {
   const [promptPanelOpen, setPromptPanelOpen] = useState(true);
   const [metadataPanelOpen, setMetadataPanelOpen] = useState(true);
   const [statsPanelOpen, setStatsPanelOpen] = useState(true);
+  const [deleteRequestsPanelOpen, setDeleteRequestsPanelOpen] = useState(true);
+  const [pendingDeleteRequests, setPendingDeleteRequests] = useState(0);
 
   const { loading: reindexLoading, progress: reindexProgress, error: reindexError, message: reindexMessage, handleReindex } = useReindex();
 
@@ -35,15 +39,26 @@ export function AdminPageClient() {
     read('promptPanel', setPromptPanelOpen);
     read('metaPanel', setMetadataPanelOpen);
     read('statsPanel', setStatsPanelOpen);
+    read('deleteRequestsPanel', setDeleteRequestsPanelOpen);
   }, [searchParams]);
 
-  const setPanelQuery = (next: { users?: boolean; ai?: boolean; prompt?: boolean; meta?: boolean; stats?: boolean }) => {
+  const setPanelQuery = (next: {
+    users?: boolean;
+    ai?: boolean;
+    prompt?: boolean;
+    meta?: boolean;
+    stats?: boolean;
+    deleteRequests?: boolean;
+  }) => {
     const p = new URLSearchParams(searchParams.toString());
     if (typeof next.users === 'boolean') p.set('usersPanel', next.users ? '1' : '0');
     if (typeof next.ai === 'boolean') p.set('aiPanel', next.ai ? '1' : '0');
     if (typeof next.prompt === 'boolean') p.set('promptPanel', next.prompt ? '1' : '0');
     if (typeof next.meta === 'boolean') p.set('metaPanel', next.meta ? '1' : '0');
     if (typeof next.stats === 'boolean') p.set('statsPanel', next.stats ? '1' : '0');
+    if (typeof next.deleteRequests === 'boolean') {
+      p.set('deleteRequestsPanel', next.deleteRequests ? '1' : '0');
+    }
     const q = p.toString();
     router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
   };
@@ -109,6 +124,43 @@ export function AdminPageClient() {
           </p>
         )}
 
+        <section
+          aria-labelledby="admin-first-steps-heading"
+          className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        >
+          <h2 id="admin-first-steps-heading" className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            Erste Schritte
+          </h2>
+          <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+            Sinnvolle Reihenfolge auf dieser Seite: Zuerst <strong className="font-medium text-zinc-800 dark:text-zinc-200">
+              Nutzer
+            </strong>{' '}
+            (Zugänge, Rollen, Organisationseinheiten). Danach <strong className="font-medium text-zinc-800 dark:text-zinc-200">
+              Metadaten
+            </strong>{' '}
+            (Dokumenttypen, Verantwortlich) — sie speisen Auswahllisten beim Upload und sollten zu den Org.-Einheiten der
+            Nutzer passen. Anschließend <strong className="font-medium text-zinc-800 dark:text-zinc-200">
+              KI-Einstellungen
+            </strong>{' '}
+            und <strong className="font-medium text-zinc-800 dark:text-zinc-200">Prompt-Vorlagen</strong>, wenn die
+            KI-Nutzung starten soll. <strong className="font-medium text-zinc-800 dark:text-zinc-200">Statistik</strong>{' '}
+            bietet Kennzahlen; <strong className="font-medium text-zinc-800 dark:text-zinc-200">
+              Dokumente reindizieren
+            </strong>{' '}
+            nur nach größeren Konfigurationsänderungen.
+          </p>
+          <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
+            Ausführliche Erläuterungen und Hinweise:{' '}
+            <Link
+              href={CONTEXT_HELP.admin}
+              className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+            >
+              Hilfe → Bereich Admin
+            </Link>
+            .
+          </p>
+        </section>
+
         <UsersPanel
           open={usersPanelOpen}
           onToggle={(v) => { setUsersPanelOpen(v); setPanelQuery({ users: v }); }}
@@ -117,6 +169,18 @@ export function AdminPageClient() {
 
         {adminAllowed === true && (
           <>
+            <DeleteRequestsPanel
+              open={deleteRequestsPanelOpen}
+              onToggle={(v) => {
+                setDeleteRequestsPanelOpen(v);
+                setPanelQuery({ deleteRequests: v });
+              }}
+              onPendingCount={setPendingDeleteRequests}
+            />
+            <MetadataPanel
+              open={metadataPanelOpen}
+              onToggle={(v) => { setMetadataPanelOpen(v); setPanelQuery({ meta: v }); }}
+            />
             <AiSettingsPanel
               open={aiPanelOpen}
               onToggle={(v) => { setAiPanelOpen(v); setPanelQuery({ ai: v }); }}
@@ -124,10 +188,6 @@ export function AdminPageClient() {
             <PromptPanel
               open={promptPanelOpen}
               onToggle={(v) => { setPromptPanelOpen(v); setPanelQuery({ prompt: v }); }}
-            />
-            <MetadataPanel
-              open={metadataPanelOpen}
-              onToggle={(v) => { setMetadataPanelOpen(v); setPanelQuery({ meta: v }); }}
             />
             <StatsPanel
               open={statsPanelOpen}

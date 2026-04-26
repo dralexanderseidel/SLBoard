@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { getDraftDocTypeConfig } from '@/lib/draftDocTypes';
 import { METADATA_BROADCAST_CHANNEL } from '@/lib/metadataBroadcast';
 import { readApiJson } from '@/lib/readApiJson';
+import { LONG_RUNNING_EXPECTATION_HINT } from '@/lib/longRunningExpectationHint';
 
 type DbDocType = {
   code: string;
@@ -484,9 +485,14 @@ export function DraftAssistantContent() {
                 />
                 {draftLoading && (
                   <div className="pointer-events-none absolute inset-0 rounded border border-blue-200 bg-white/70 p-3 text-[11px] text-zinc-600 backdrop-blur-sm dark:border-blue-900/40 dark:bg-zinc-950/60 dark:text-zinc-300">
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-zinc-300 border-t-blue-600 dark:border-zinc-700 dark:border-t-blue-300" />
-                      <span>KI erstellt einen Vorschlag…</span>
+                    <div className="mb-2 flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-zinc-300 border-t-blue-600 dark:border-zinc-700 dark:border-t-blue-300" />
+                        <span>KI erstellt einen Vorschlag…</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {LONG_RUNNING_EXPECTATION_HINT}
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <div className="h-2 w-11/12 rounded bg-zinc-200 dark:bg-zinc-800" />
@@ -638,6 +644,9 @@ export function DraftAssistantContent() {
                   <div key={i} className="h-8 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
                 ))}
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400">Suche läuft…</p>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
+                  {LONG_RUNNING_EXPECTATION_HINT}
+                </p>
               </div>
             ) : sources.length === 0 ? (
               <div className="space-y-2">

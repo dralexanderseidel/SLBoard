@@ -2,9 +2,12 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { CONTEXT_HELP } from '../lib/contextHelpUrls';
 import { supabase } from '../lib/supabaseClient';
 import { ChangePasswordDialog } from './ChangePasswordDialog';
 import { useHeaderAccess } from './HeaderAccessContext';
+import { toast } from 'sonner';
+import { ACCOUNT_INACTIVE_BODY, ACCOUNT_INACTIVE_TITLE } from '../lib/accountInactiveMessages';
 
 type SessionUser = {
   email: string | null;
@@ -73,7 +76,7 @@ export function UserMenu() {
       const res = await fetch('/api/me/export', { credentials: 'include' });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: string };
-        window.alert(j.error ?? 'Export fehlgeschlagen.');
+        toast.error(j.error ?? 'Export fehlgeschlagen.');
         return;
       }
       const blob = await res.blob();
@@ -86,8 +89,9 @@ export function UserMenu() {
       a.download = name;
       a.click();
       URL.revokeObjectURL(url);
+      toast.success('Export wurde heruntergeladen.');
     } catch {
-      window.alert('Export fehlgeschlagen.');
+      toast.error('Export fehlgeschlagen.');
     } finally {
       setDataActionLoading(false);
       setMenuOpen(false);
@@ -104,12 +108,12 @@ export function UserMenu() {
       const res = await fetch('/api/me/delete-request', { method: 'POST', credentials: 'include' });
       const j = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
       if (!res.ok) {
-        window.alert(j.error ?? 'Anfrage konnte nicht gesendet werden.');
+        toast.error(j.error ?? 'Anfrage konnte nicht gesendet werden.');
         return;
       }
-      window.alert(j.message ?? 'Löschanfrage wurde gespeichert.');
+      toast.success(j.message ?? 'Löschanfrage wurde gespeichert.');
     } catch {
-      window.alert('Anfrage konnte nicht gesendet werden.');
+      toast.error('Anfrage konnte nicht gesendet werden.');
     } finally {
       setDataActionLoading(false);
       setMenuOpen(false);
@@ -186,10 +190,20 @@ export function UserMenu() {
                   {formatRolesForMenu(accessLoading ? null : access?.roles ?? [])}
                 </p>
               </div>
+              <Link
+                href={CONTEXT_HELP.anmeldung}
+                role="menuitem"
+                className="block px-3 py-2 text-xs text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                onClick={() => setMenuOpen(false)}
+              >
+                Hilfe: Konto &amp; Anmeldung
+              </Link>
               <button
                 type="button"
                 role="menuitem"
-                disabled={dataActionLoading || accessLoading || !access?.schoolNumber}
+                disabled={
+                  dataActionLoading || accessLoading || !access?.schoolNumber || access?.accountInactive
+                }
                 className="w-full px-3 py-2 text-left text-xs text-zinc-800 hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-100 dark:hover:bg-zinc-800"
                 onClick={() => void handleExportData()}
               >
@@ -198,7 +212,9 @@ export function UserMenu() {
               <button
                 type="button"
                 role="menuitem"
-                disabled={dataActionLoading || accessLoading || !access?.schoolNumber}
+                disabled={
+                  dataActionLoading || accessLoading || !access?.schoolNumber || access?.accountInactive
+                }
                 className="w-full px-3 py-2 text-left text-xs text-zinc-800 hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-100 dark:hover:bg-zinc-800"
                 onClick={() => void handleDeleteRequest()}
               >

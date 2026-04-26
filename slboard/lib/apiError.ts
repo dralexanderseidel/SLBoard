@@ -11,6 +11,8 @@ export type ApiErrorCode =
   | 'STORAGE_ERROR'
   | 'INTERNAL_ERROR'
   | 'SCHOOL_INACTIVE'
+  | 'ACCOUNT_INACTIVE'
+  | 'DELETE_REQUEST_OPEN'
   | 'QUOTA_EXCEEDED';
 
 export function apiError(

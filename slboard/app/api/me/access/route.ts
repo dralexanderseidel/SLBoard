@@ -37,6 +37,7 @@ export async function GET() {
       orgUnit: access.orgUnit,
       roles: access.roles,
       superAdmin,
+      accountInactive: access.accountInactive === true,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';

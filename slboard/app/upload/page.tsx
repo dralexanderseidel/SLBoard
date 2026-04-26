@@ -1,9 +1,12 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { PARTICIPATION_GROUP_OPTIONS } from '@/lib/documentMeta';
+import { DEFAULT_ORG_UNIT_NAMES, PARTICIPATION_GROUP_OPTIONS } from '@/lib/documentMeta';
 import { readApiJson } from '@/lib/readApiJson';
+import { LONG_RUNNING_EXPECTATION_HINT } from '@/lib/longRunningExpectationHint';
+import { CONTEXT_HELP } from '@/lib/contextHelpUrls';
+import { ContextHelpLink } from '@/components/ContextHelpLink';
 
 type Status = 'ENTWURF' | 'FREIGEGEBEN' | 'BESCHLUSS' | 'VEROEFFENTLICHT';
 type ReachScope = 'intern' | 'extern';
@@ -41,6 +44,7 @@ export default function UploadPage() {
   const [gremium, setGremium] = useState('');
   const [responsibleUnit, setResponsibleUnit] = useState('Schulleitung');
   const [responsibleUnitOptions, setResponsibleUnitOptions] = useState<string[]>([]);
+  const [responsibleCustom, setResponsibleCustom] = useState(false);
   const [participationGroups, setParticipationGroups] = useState<string[]>([]);
   const [participationInput, setParticipationInput] = useState('');
   const [items, setItems] = useState<UploadItem[]>([]);
@@ -73,6 +77,7 @@ export default function UploadPage() {
           setResponsibleUnitOptions(data.responsibleUnits);
           if (!data.responsibleUnits.includes(responsibleUnit)) {
             setResponsibleUnit(data.responsibleUnits[0]!);
+            setResponsibleCustom(false);
           }
         }
       } catch {
@@ -82,6 +87,11 @@ export default function UploadPage() {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const effectiveResponsibleUnits = useMemo(
+    () => (responsibleUnitOptions.length > 0 ? responsibleUnitOptions : DEFAULT_ORG_UNIT_NAMES),
+    [responsibleUnitOptions],
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,6 +105,11 @@ export default function UploadPage() {
 
     if (!date) {
       setError('Bitte geben Sie ein Datum an.');
+      return;
+    }
+
+    if (!responsibleUnit.trim()) {
+      setError('Bitte wählen oder geben Sie „Verantwortlich“ an.');
       return;
     }
 
@@ -148,6 +163,10 @@ export default function UploadPage() {
         setDate('');
         setGremium('');
         setReachScope('intern');
+        setResponsibleCustom(false);
+        setResponsibleUnit(
+          responsibleUnitOptions[0] ?? DEFAULT_ORG_UNIT_NAMES[0] ?? 'Schulleitung',
+        );
         setParticipationGroups([]);
         setParticipationInput('');
         setItems([]);
@@ -173,12 +192,15 @@ export default function UploadPage() {
               Neues Dokument mit Metadaten anlegen und in der Dokumentenbasis ablegen.
             </p>
           </div>
-          <Link
-            href="/"
-            className="text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
-          >
-            ← Zur Startseite
-          </Link>
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <ContextHelpLink href={CONTEXT_HELP.hochladen}>Hilfe zum Hochladen</ContextHelpLink>
+            <Link
+              href="/"
+              className="text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+            >
+              ← Zur Startseite
+            </Link>
+          </div>
         </header>
 
         <form onSubmit={handleSubmit} className="space-y-4 rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -291,22 +313,62 @@ export default function UploadPage() {
             <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
               Verantwortlich *
             </label>
-            <input
-              type="text"
-              value={responsibleUnit}
-              onChange={(e) => setResponsibleUnit(e.target.value)}
-              required
-              list="responsible-unit-options"
-              className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
-            />
-            <datalist id="responsible-unit-options">
-              {(responsibleUnitOptions.length > 0
-                ? responsibleUnitOptions
-                : ['Schulleitung', 'Sekretariat', 'Fachschaft Deutsch', 'Fachschaft Mathematik', 'Fachschaft Englisch', 'Steuergruppe', 'Lehrkräfte']
-              ).map((u) => (
-                <option key={u} value={u} />
-              ))}
-            </datalist>
+            {!responsibleCustom ? (
+              <select
+                value={responsibleUnit}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (v === '__custom__') {
+                    setResponsibleCustom(true);
+                    return;
+                  }
+                  setResponsibleUnit(v);
+                }}
+                required
+                className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              >
+                {effectiveResponsibleUnits.map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+                <option value="__custom__">Andere… (Freitext)</option>
+              </select>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={responsibleUnit}
+                  onChange={(e) => setResponsibleUnit(e.target.value)}
+                  required
+                  placeholder="z. B. Fachschaft Musik"
+                  className="h-8 min-w-0 flex-1 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cur = responsibleUnit.trim();
+                    setResponsibleCustom(false);
+                    if (!cur || !effectiveResponsibleUnits.includes(cur)) {
+                      setResponsibleUnit(effectiveResponsibleUnits[0] ?? 'Schulleitung');
+                    }
+                  }}
+                  className="h-8 shrink-0 rounded border border-zinc-300 bg-white px-2 text-[11px] font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  Liste
+                </button>
+              </div>
+            )}
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+              Auswahlliste unter{' '}
+              <Link
+                href="/admin"
+                className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+              >
+                Admin → Metadaten
+              </Link>
+              . „Andere…“ nur bei Bedarf.
+            </p>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -387,6 +449,11 @@ export default function UploadPage() {
             >
               {submitting ? 'Wird hochgeladen…' : `Dokumente hochladen${items.length ? ` (${items.length})` : ''}`}
             </button>
+            {submitting && (
+              <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
+                {LONG_RUNNING_EXPECTATION_HINT}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-1">

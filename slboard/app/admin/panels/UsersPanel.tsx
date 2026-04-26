@@ -101,7 +101,13 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
   const handleEdit = (u: AppUser) => {
     setEditingId(u.id);
     setEditTempPassword('');
-    setEditForm({ username: u.username, full_name: u.full_name, email: u.email, org_unit: u.org_unit });
+    setEditForm({
+      username: u.username,
+      full_name: u.full_name,
+      email: u.email,
+      org_unit: u.org_unit,
+      active: u.active !== false,
+    });
   };
 
   const handleSaveEdit = async () => {
@@ -117,6 +123,9 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
     try {
       const payload: Record<string, unknown> = { ...editForm };
       if (tp) payload.temporary_password = tp;
+      if (typeof editForm.active === 'boolean') {
+        payload.active = editForm.active;
+      }
       const res = await fetch(`/api/admin/users/${editingId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -334,6 +343,10 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
                     <option key={ou} value={ou}>{ou}</option>
                   ))}
                 </select>
+                <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+                  Dieselbe Liste wie unter Metadaten → Verantwortlich. Abweichende Einträge eines Nutzers
+                  erscheinen zusätzlich in der Auswahl.
+                </p>
               </div>
               <div className="sm:col-span-2">
                 <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
@@ -368,19 +381,24 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
           </div>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <table className="w-full min-w-[58rem] table-fixed text-left text-sm">
-              <colgroup>
-                <col className="w-[20%]" /><col className="w-[22%]" /><col className="w-[10%]" />
-                <col className="w-[15%]" /><col className="w-[21%]" /><col className="w-[12%]" />
-              </colgroup>
+            <table className="w-full min-w-[70rem] table-auto text-left text-sm">
               <thead>
                 <tr className="border-b border-zinc-200 dark:border-zinc-700">
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Benutzer</th>
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">E-Mail</th>
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Schulnummer</th>
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Org.-Einheit</th>
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Rollen</th>
-                  <th className="p-3 font-semibold text-zinc-800 dark:text-zinc-100">Aktionen</th>
+                  <th className="min-w-[9rem] p-3 font-semibold text-zinc-800 dark:text-zinc-100">Benutzer</th>
+                  <th className="min-w-[13rem] max-w-[18rem] p-3 font-semibold text-zinc-800 dark:text-zinc-100">
+                    E-Mail
+                  </th>
+                  <th className="w-24 min-w-[6.5rem] p-3 font-semibold text-zinc-800 dark:text-zinc-100">
+                    Schulnr.
+                  </th>
+                  <th className="min-w-[6.5rem] w-[6.5rem] p-3 font-semibold text-zinc-800 dark:text-zinc-100">
+                    Aktiv
+                  </th>
+                  <th className="min-w-[8rem] p-3 font-semibold text-zinc-800 dark:text-zinc-100">Org.-Einheit</th>
+                  <th className="min-w-[12rem] p-3 font-semibold text-zinc-800 dark:text-zinc-100">Rollen</th>
+                  <th className="min-w-[8rem] w-[8rem] p-3 font-semibold text-zinc-800 dark:text-zinc-100">
+                    Aktionen
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -406,6 +424,19 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
                               className="w-full min-w-0 rounded border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-950"
                               placeholder={`min. ${MIN_APP_PASSWORD_LENGTH} Zeichen`} />
                           </div>
+                          <label className="flex cursor-pointer items-center gap-2 text-[11px] text-zinc-700 dark:text-zinc-300">
+                            <input
+                              type="checkbox"
+                              checked={editForm.active !== false}
+                              disabled={u.deletable === false}
+                              onChange={(e) => setEditForm((f) => ({ ...f, active: e.target.checked }))}
+                              className="rounded"
+                            />
+                            Konto aktiv (Schulzugriff)
+                            {u.deletable === false && (
+                              <span className="text-[10px] text-zinc-500">Registrierungs-Admin</span>
+                            )}
+                          </label>
                         </div>
                       ) : (
                         <div className="min-w-0">
@@ -414,14 +445,17 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
                         </div>
                       )}
                     </td>
-                    <td className="p-3">
+                    <td className="max-w-[18rem] min-w-0 p-3 align-top">
                       {editingId === u.id ? (
-                        <input type="email" value={editForm.email ?? ''}
+                        <input
+                          type="email"
+                          value={editForm.email ?? ''}
                           onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
-                          className="w-full rounded border px-2 py-1 text-xs" />
+                          className="w-full min-w-0 rounded border px-2 py-1 text-xs"
+                        />
                       ) : (
-                        <div>
-                          <span className="text-zinc-700 dark:text-zinc-300">{u.email}</span>
+                        <div className="min-w-0">
+                          <span className="break-all text-zinc-700 dark:text-zinc-300">{u.email}</span>
                           {u.password_change_required && (
                             <p className="mt-0.5 text-[10px] text-amber-700 dark:text-amber-300">
                               Muss initiales Passwort bei der Anmeldung wechseln
@@ -430,10 +464,21 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
                         </div>
                       )}
                     </td>
-                    <td className="p-3">
-                      <span className="text-zinc-700 dark:text-zinc-300">{u.school_number ?? '—'}</span>
+                    <td className="whitespace-nowrap p-3 align-top font-mono text-xs text-zinc-700 dark:text-zinc-300">
+                      {u.school_number ?? '—'}
                     </td>
-                    <td className="p-3">
+                    <td className="p-3 align-top text-sm text-zinc-700 dark:text-zinc-300">
+                      {editingId === u.id ? (
+                        <span className="text-zinc-500 dark:text-zinc-400">siehe links</span>
+                      ) : u.active === false ? (
+                        <span className="inline-block rounded bg-zinc-200 px-2 py-1 text-sm font-medium text-zinc-900 dark:bg-zinc-700 dark:text-zinc-50">
+                          Inaktiv
+                        </span>
+                      ) : (
+                        <span className="text-zinc-600 dark:text-zinc-400">Ja</span>
+                      )}
+                    </td>
+                    <td className="align-top p-3">
                       {editingId === u.id ? (
                         <select value={editForm.org_unit ?? ''}
                           onChange={(e) => setEditForm((f) => ({ ...f, org_unit: e.target.value }))}
@@ -443,10 +488,10 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
                           ))}
                         </select>
                       ) : (
-                        <span>{u.org_unit}</span>
+                        <span className="inline-block leading-snug">{u.org_unit}</span>
                       )}
                     </td>
-                    <td className="p-3">
+                    <td className="align-top p-3">
                       <div className="flex flex-wrap gap-2">
                         {AVAILABLE_ROLES.map((role) => {
                           const checked = u.roles.includes(role);
@@ -472,25 +517,42 @@ export function UsersPanel({ open, onToggle, onAdminStatusChange }: Props) {
                     </td>
                     <td className="align-top p-3">
                       {editingId === u.id ? (
-                        <div className="flex flex-col gap-1.5">
-                          <button type="button" onClick={() => void handleSaveEdit()} disabled={saving}
-                            className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60">
+                        <div className="flex min-w-[7.25rem] flex-col gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => void handleSaveEdit()}
+                            disabled={saving}
+                            className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                          >
                             {saving ? '…' : 'Speichern'}
                           </button>
-                          <button type="button" onClick={() => { setEditingId(null); setEditTempPassword(''); }}
-                            className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(null);
+                              setEditTempPassword('');
+                            }}
+                            className="rounded border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          >
                             Abbrechen
                           </button>
                         </div>
                       ) : (
-                        <div className="flex flex-col gap-1.5">
-                          <button type="button" onClick={() => handleEdit(u)}
-                            className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800">
+                        <div className="flex min-w-[7.25rem] flex-col gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(u)}
+                            className="rounded border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                          >
                             Bearbeiten
                           </button>
                           {u.deletable !== false && (
-                            <button type="button" onClick={() => void handleDeleteUser(u)} disabled={saving}
-                              className="rounded border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30">
+                            <button
+                              type="button"
+                              onClick={() => void handleDeleteUser(u)}
+                              disabled={saving}
+                              className="rounded border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-60 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950/30"
+                            >
                               Löschen
                             </button>
                           )}

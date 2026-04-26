@@ -2,6 +2,11 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { ApiErrorCallout } from '../components/ApiErrorCallout';
+import type { SerializedApiError } from '../lib/apiUserError';
+import { serializeApiError } from '../lib/apiUserError';
+import { readApiJsonOk } from '../lib/readApiJson';
+import { LONG_RUNNING_EXPECTATION_HINT } from '../lib/longRunningExpectationHint';
 import { supabase } from '../lib/supabaseClient';
 
 type RecentQuery = {
@@ -65,9 +70,11 @@ export default function Home() {
   const [publishedLoadError, setPublishedLoadError] = useState<string | null>(null);
   const [reviewOverdueLoadError, setReviewOverdueLoadError] = useState<string | null>(null);
   const [queryLoading, setQueryLoading] = useState(false);
+  /** Nach Klick unter „Aktuelle Anfragen“: bis `answer_text` nachgeladen ist. */
+  const [historyAnswerLoading, setHistoryAnswerLoading] = useState(false);
   const [queryAnswer, setQueryAnswer] = useState<string | null>(null);
   const [querySources, setQuerySources] = useState<QuerySource[]>([]);
-  const [queryError, setQueryError] = useState<string | null>(null);
+  const [queryError, setQueryError] = useState<SerializedApiError | null>(null);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [suggestedDocuments, setSuggestedDocuments] = useState<SuggestedDoc[]>([]);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
@@ -91,6 +98,7 @@ export default function Home() {
       setQuerySources([]);
       setQueryError(null);
       setQueryLoading(false);
+      setHistoryAnswerLoading(false);
       setSuggestLoading(false);
       setSuggestedDocuments([]);
       setSelectedDocumentIds([]);
@@ -168,15 +176,17 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: trimmed }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Suche fehlgeschlagen.');
+      const data = await readApiJsonOk<{
+        suggestedDocuments?: SuggestedDoc[];
+        error?: string;
+      }>(res, 'Suche fehlgeschlagen.');
       if (requestGen !== dashboardAiGenRef.current) return;
       const list = data.suggestedDocuments ?? [];
       setSuggestedDocuments(list);
       setSelectedDocumentIds(list.map((d: SuggestedDoc) => d.id));
     } catch (err: unknown) {
       if (requestGen !== dashboardAiGenRef.current) return;
-      setQueryError(err instanceof Error ? err.message : 'Suche fehlgeschlagen.');
+      setQueryError(serializeApiError(err, 'Suche fehlgeschlagen.'));
     } finally {
       if (requestGen === dashboardAiGenRef.current) {
         setSuggestLoading(false);
@@ -206,6 +216,7 @@ export default function Home() {
     const trimmed = question.trim();
     if (!trimmed) return;
     const requestGen = ++dashboardAiGenRef.current;
+    setHistoryAnswerLoading(false);
     setQueryError(null);
     setQueryAnswer(null);
     setQuerySources([]);
@@ -219,20 +230,43 @@ export default function Home() {
           documentIds: selectedDocumentIds.length > 0 ? selectedDocumentIds : undefined,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'KI-Anfrage fehlgeschlagen.');
+      const data = await readApiJsonOk<{
+        answer?: string;
+        sources?: unknown;
+        error?: string;
+      }>(res, 'KI-Anfrage fehlgeschlagen.');
       if (requestGen !== dashboardAiGenRef.current) return;
-      setQueryAnswer(data.answer);
-      setQuerySources(data.sources ?? []);
+      setQueryAnswer(data.answer ?? null);
+      setQuerySources(normalizeQuerySources(data.sources));
       await refreshRecentQueries();
     } catch (err: unknown) {
       if (requestGen !== dashboardAiGenRef.current) return;
-      setQueryError(err instanceof Error ? err.message : 'Fehler bei der KI-Anfrage.');
+      setQueryError(serializeApiError(err, 'Fehler bei der KI-Anfrage.'));
     } finally {
       if (requestGen === dashboardAiGenRef.current) {
         setQueryLoading(false);
       }
     }
+  };
+
+  /** Enter: Schritt 1 oder – wenn Liste schon da – Antwort. Umschalt/Strg/Cmd+Enter: immer direkt antworten. */
+  const handleQuestionKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    if (!question.trim()) return;
+    if (suggestLoading || queryLoading) {
+      e.preventDefault();
+      return;
+    }
+    e.preventDefault();
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
+      void handleAskWithSelected();
+      return;
+    }
+    if (suggestedDocuments.length === 0) {
+      void handleSuggestDocuments();
+      return;
+    }
+    void handleAskWithSelected();
   };
 
   return (
@@ -264,7 +298,7 @@ export default function Home() {
             <span className="text-zinc-400">→</span>
             <span
               className={`inline-flex items-center rounded-full border px-2 py-0.5 ${
-                queryLoading || queryAnswer
+                queryLoading || queryAnswer || historyAnswerLoading
                   ? 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-200'
                   : 'border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
               }`}
@@ -272,44 +306,68 @@ export default function Home() {
               2) Antwort erzeugen
             </span>
           </div>
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <div className="flex flex-1 items-center gap-2 rounded border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
-              <input
-                type="text"
-                value={question}
-                onChange={(e) => {
-                  setQuestion(e.target.value);
-                  if (suggestedDocuments.length > 0) setSuggestedDocuments([]);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    void handleSuggestDocuments();
-                  }
-                }}
-                placeholder="z. B. Handynutzung in Pausen, Medienwoche, Leistungsbewertung Oberstufe…"
-                className="w-full bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-50 dark:placeholder:text-zinc-500"
-              />
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-3">
+              <div className="flex min-h-10 flex-1 items-center gap-2 rounded border border-zinc-300 bg-white px-3 py-2 text-sm shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
+                <input
+                  id="dashboard-ai-question"
+                  type="text"
+                  value={question}
+                  onChange={(e) => {
+                    setQuestion(e.target.value);
+                    if (suggestedDocuments.length > 0) setSuggestedDocuments([]);
+                  }}
+                  onKeyDown={handleQuestionKeyDown}
+                  placeholder="z. B. Handynutzung in Pausen, Medienwoche, Leistungsbewertung Oberstufe…"
+                  aria-describedby="dashboard-ai-kbd-hint"
+                  className="w-full min-w-0 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+                />
+              </div>
+              <div className="flex flex-col gap-2 sm:w-auto sm:shrink-0 sm:flex-row sm:items-stretch sm:gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleSuggestDocuments()}
+                  className="h-10 rounded-md bg-zinc-200 px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-300 disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-600"
+                  disabled={!question.trim() || suggestLoading}
+                >
+                  {suggestLoading ? 'Suche…' : 'Relevante Dokumente finden'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleAskWithSelected()}
+                  disabled={!question.trim() || queryLoading || suggestLoading}
+                  title="Ohne Schritt „Dokumente finden“: die KI wählt den Kontext automatisch (entspricht leerer Dokumentenauswahl)."
+                  className="h-10 rounded-md border-2 border-blue-400/80 bg-blue-50 px-4 text-sm font-semibold text-blue-950 shadow-sm transition hover:bg-blue-100 disabled:opacity-60 dark:border-blue-500/60 dark:bg-blue-950/50 dark:text-blue-50 dark:hover:bg-blue-950/80"
+                >
+                  Direkt antworten
+                </button>
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={handleSuggestDocuments}
-              className="h-10 rounded bg-zinc-200 px-4 text-sm font-medium text-zinc-800 shadow-sm transition hover:bg-zinc-300 disabled:opacity-60 dark:bg-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-600"
-              disabled={!question.trim() || suggestLoading}
-            >
-              {suggestLoading ? 'Suche…' : 'Relevante Dokumente finden'}
-            </button>
+            <p id="dashboard-ai-kbd-hint" className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+              <span className="font-medium text-zinc-600 dark:text-zinc-300">Tastatur:</span>{' '}
+              <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1 py-px font-mono text-[10px] text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
+                Enter
+              </kbd>{' '}
+              startet die Dokumentensuche – oder die Antwort, sobald die Trefferliste geladen ist.{' '}
+              <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1 py-px font-mono text-[10px] text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
+                Umschalt+Enter
+              </kbd>
+              ,{' '}
+              <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1 py-px font-mono text-[10px] text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
+                Strg+Enter
+              </kbd>{' '}
+              oder{' '}
+              <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1 py-px font-mono text-[10px] text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
+                Cmd+Enter
+              </kbd>{' '}
+              (macOS) überspringen die Suche und beantworten sofort (wie „Direkt antworten“).
+            </p>
+            {(suggestLoading || queryLoading || historyAnswerLoading) && (
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
+                {LONG_RUNNING_EXPECTATION_HINT}
+              </p>
+            )}
           </div>
-          <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-            <button
-              type="button"
-              onClick={handleAskWithSelected}
-              disabled={!question.trim() || queryLoading}
-              className="underline-offset-2 hover:underline"
-            >
-              Ohne Auswahl direkt beantworten
-            </button>
-          </p>
 
           {suggestedDocuments.length > 0 && (
             <div className="mt-4 rounded border border-zinc-200 bg-zinc-50 p-4 text-sm dark:border-zinc-700 dark:bg-zinc-950">
@@ -317,8 +375,11 @@ export default function Home() {
                 Relevante Dokumente auswählen
               </h3>
               <p className="mb-3 text-[11px] text-zinc-600 dark:text-zinc-400">
-                Wählen Sie die Dokumente, auf deren Basis die KI antworten soll. Dann auf
-                „Frage beantworten“ klicken.
+                Wählen Sie die Dokumente, auf deren Basis die KI antworten soll. Anschließend{' '}
+                <kbd className="rounded border border-zinc-300 bg-white px-1 py-px font-mono text-[10px] dark:border-zinc-600 dark:bg-zinc-900">
+                  Enter
+                </kbd>{' '}
+                in der Fragezeile oder die Schaltfläche unten nutzen.
               </p>
               <ul className="space-y-2">
                 {suggestedDocuments.map((d) => (
@@ -384,16 +445,35 @@ export default function Home() {
           )}
 
           {queryError && (
-            <p className="mt-3 text-sm text-red-600 dark:text-red-400">{queryError}</p>
+            <div className="mt-3">
+              <ApiErrorCallout error={queryError} title="KI-Assistent" className="text-sm dark:border-red-900/50" />
+            </div>
           )}
-          {queryAnswer && (
-            <div className="mt-4 rounded border border-zinc-200 bg-zinc-50 p-4 text-sm dark:border-zinc-700 dark:bg-zinc-950">
+          {(queryAnswer || historyAnswerLoading) && (
+            <div
+              className="mt-4 rounded border border-zinc-200 bg-zinc-50 p-4 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              aria-busy={historyAnswerLoading}
+            >
               <h3 className="mb-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
                 Antwort
               </h3>
-              <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">
-                {queryAnswer}
-              </p>
+              {historyAnswerLoading && (
+                <p
+                  className={`flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400 ${queryAnswer ? 'mb-2' : 'mb-0'}`}
+                  aria-live="polite"
+                >
+                  <span
+                    className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-zinc-600 dark:border-t-zinc-300"
+                    aria-hidden
+                  />
+                  {queryAnswer
+                    ? 'Vollständige Antwort wird geladen…'
+                    : 'Antwort wird geladen…'}
+                </p>
+              )}
+              {queryAnswer ? (
+                <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">{queryAnswer}</p>
+              ) : null}
               {querySources.length > 0 && (
                 <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-700">
                   <h4 className="mb-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
@@ -723,6 +803,7 @@ export default function Home() {
                         setSelectedDocumentIds([]);
                         setQuerySources(normalizeQuerySources(q.sources));
                         const excerpt = (q.answer_excerpt ?? '').trim();
+                        setHistoryAnswerLoading(true);
                         setQueryAnswer(excerpt.length > 0 ? excerpt : null);
                         void (async () => {
                           try {
@@ -738,6 +819,10 @@ export default function Home() {
                             }
                           } catch {
                             /* Antwort bleibt ggf. bei Kurzauszug */
+                          } finally {
+                            if (gen === dashboardAiGenRef.current) {
+                              setHistoryAnswerLoading(false);
+                            }
                           }
                         })();
                       }}

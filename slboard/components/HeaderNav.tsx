@@ -1,0 +1,179 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { AppNavLink } from './AppNavLink';
+import { SuperAdminNavLink } from './SuperAdminNavLink';
+import { useHeaderAccess } from './HeaderAccessContext';
+import { CONTEXT_HELP } from '../lib/contextHelpUrls';
+
+const pill =
+  'rounded-full px-3 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800';
+
+const pillCompact =
+  'shrink-0 rounded-full px-2.5 py-1 text-[11px] hover:bg-zinc-100 dark:hover:bg-zinc-800';
+
+const pillSuperCompact =
+  'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-950/60';
+
+const pillAdmin =
+  'rounded-full px-3 py-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200';
+
+const moreMenuItem =
+  'block w-full rounded-md px-3 py-2.5 text-left text-xs font-medium text-zinc-800 no-underline hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800';
+
+const moreMenuItemAdmin =
+  'block w-full rounded-md px-3 py-2.5 text-left text-xs font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200';
+
+const moreMenuSuperAdmin =
+  'block w-full rounded-md px-3 py-2.5 text-left text-xs font-medium text-amber-900 hover:bg-amber-50 dark:text-amber-200 dark:hover:bg-amber-950/50';
+
+function MoreChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg
+      className={`size-3.5 shrink-0 text-zinc-600 transition-transform duration-200 dark:text-zinc-300 ${open ? 'rotate-180' : ''}`}
+      viewBox="0 0 24 24"
+      width={14}
+      height={14}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+export function HeaderNav() {
+  const { access, accessLoading } = useHeaderAccess();
+  const showSuperOnMobile = !accessLoading && !!access?.superAdmin;
+
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreWrapRef = useRef<HTMLDivElement>(null);
+  const moreBtnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+
+    const focusFirstItem = () => {
+      requestAnimationFrame(() => {
+        const first = menuRef.current?.querySelector<HTMLElement>('a[href]');
+        first?.focus();
+      });
+    };
+    focusFirstItem();
+
+    const onDocMouseDown = (e: MouseEvent) => {
+      if (moreWrapRef.current && !moreWrapRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMoreOpen(false);
+        queueMicrotask(() => moreBtnRef.current?.focus());
+      }
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [moreOpen]);
+
+  const closeMore = () => setMoreOpen(false);
+
+  return (
+    <>
+      <nav
+        className="hidden min-h-[2.5rem] min-w-0 flex-1 flex-nowrap items-center justify-start gap-x-2.5 overflow-x-auto pl-1 text-xs font-medium text-zinc-700 [scrollbar-width:thin] sm:gap-x-3 md:flex md:gap-x-4 dark:text-zinc-200 [&>*]:shrink-0"
+        aria-label="Hauptnavigation"
+      >
+        <AppNavLink href="/" className={pill}>
+          Dashboard
+        </AppNavLink>
+        <AppNavLink href="/documents" className={pill}>
+          Dokumente
+        </AppNavLink>
+        <AppNavLink href="/drafts" className={pill}>
+          Entwurfsassistent
+        </AppNavLink>
+        <AppNavLink href={CONTEXT_HELP.einleitung} className={pill}>
+          Hilfe
+        </AppNavLink>
+        <AppNavLink href="/admin" className={pillAdmin}>
+          Admin
+        </AppNavLink>
+        <SuperAdminNavLink />
+      </nav>
+
+      <div className="relative flex min-h-[2.5rem] min-w-0 flex-1 items-center gap-1.5 pl-0.5 md:hidden">
+        <AppNavLink href="/" onClick={closeMore} className={`${pillCompact} text-zinc-700 dark:text-zinc-200`}>
+          Dashboard
+        </AppNavLink>
+        <AppNavLink
+          href="/documents"
+          onClick={closeMore}
+          className={`${pillCompact} text-zinc-700 dark:text-zinc-200`}
+        >
+          Dokumente
+        </AppNavLink>
+        {showSuperOnMobile ? (
+          <SuperAdminNavLink onClick={closeMore} className={pillSuperCompact} />
+        ) : null}
+        <div className="relative shrink-0" ref={moreWrapRef}>
+          <button
+            ref={moreBtnRef}
+            type="button"
+            id="header-nav-more-button"
+            aria-expanded={moreOpen}
+            aria-haspopup="menu"
+            aria-controls="header-nav-more-menu"
+            title={moreOpen ? 'Menü schließen' : 'Weitere Seiten: Entwurfsassistent, Hilfe, Admin …'}
+            onClick={() => setMoreOpen((o) => !o)}
+            className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-800 shadow-sm outline-none transition hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          >
+            <span>Mehr</span>
+            <MoreChevronIcon open={moreOpen} />
+          </button>
+          {moreOpen ? (
+            <div
+              ref={menuRef}
+              id="header-nav-more-menu"
+              role="menu"
+              aria-labelledby="header-nav-more-button"
+              className="absolute right-0 top-full z-50 mt-1 min-w-[13.5rem] max-w-[min(100vw-2rem,20rem)] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              <AppNavLink
+                href="/drafts"
+                role="menuitem"
+                onClick={closeMore}
+                className={moreMenuItem}
+              >
+                Entwurfsassistent
+              </AppNavLink>
+              <AppNavLink href={CONTEXT_HELP.einleitung} role="menuitem" onClick={closeMore} className={moreMenuItem}>
+                Hilfe
+              </AppNavLink>
+              <AppNavLink href="/admin" role="menuitem" onClick={closeMore} className={moreMenuItemAdmin}>
+                Admin
+              </AppNavLink>
+              {!showSuperOnMobile ? (
+                <SuperAdminNavLink
+                  role="menuitem"
+                  onClick={closeMore}
+                  className={moreMenuSuperAdmin}
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </>
+  );
+}

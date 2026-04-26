@@ -4,6 +4,7 @@ import { supabaseServer } from '../../../../lib/supabaseServer';
 import { apiError } from '../../../../lib/apiError';
 import { ACTIVE_SCHOOL_COOKIE, normalizeAuthEmail } from '../../../../lib/schoolSession';
 import { SCHOOL_INACTIVE_API_MESSAGE } from '../../../../lib/schoolInactiveMessages';
+import { ACCOUNT_INACTIVE_API_MESSAGE } from '../../../../lib/accountInactiveMessages';
 
 export async function POST(req: NextRequest) {
   try {
@@ -43,6 +44,9 @@ export async function POST(req: NextRequest) {
 
     if (!row) {
       return apiError(403, 'FORBIDDEN', 'Kein Benutzerkonto für diese Schulnummer.');
+    }
+    if ((row as { active?: boolean }).active === false) {
+      return apiError(403, 'ACCOUNT_INACTIVE', ACCOUNT_INACTIVE_API_MESSAGE);
     }
     if (school && school.active === false) {
       return apiError(403, 'SCHOOL_INACTIVE', SCHOOL_INACTIVE_API_MESSAGE);

@@ -140,8 +140,10 @@ export async function PATCH(
     if (typeof body.org_unit === 'string' && body.org_unit.trim()) updates.org_unit = body.org_unit.trim();
 
     const tempPwd = (body.temporary_password as string | undefined)?.trim() ?? '';
+    const activePatch =
+      typeof body.active === 'boolean' ? { active: body.active as boolean } : null;
 
-    if (Object.keys(updates).length === 0 && !tempPwd) {
+    if (Object.keys(updates).length === 0 && !tempPwd && !activePatch) {
       return apiError(400, 'VALIDATION_ERROR', 'Keine Felder zum Aktualisieren.');
     }
 
@@ -203,7 +205,7 @@ export async function PATCH(
 
     const { data: refreshed } = await supabase
       .from('app_users')
-      .select('id, username, full_name, email, org_unit, school_number, created_at')
+      .select('id, username, full_name, email, org_unit, school_number, created_at, active')
       .eq('id', id)
       .single();
 

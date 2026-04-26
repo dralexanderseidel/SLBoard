@@ -16,6 +16,8 @@ export type UserAccessContext = {
   needsSchoolContext?: boolean;
   /** Schule wurde vom Super-Admin deaktiviert; hasAppUser ist in diesem Fall false */
   schoolInactive?: boolean;
+  /** Schul-Admin hat dieses Konto deaktiviert; Zugriff wie ohne app_users-Zeile */
+  accountInactive?: boolean;
 };
 
 const emptyContext = (): UserAccessContext => ({
@@ -49,7 +51,7 @@ export async function getUserAccessContext(
 
     const { data: rows, error } = await supabase
       .from('app_users')
-      .select('id, org_unit, school_number')
+      .select('id, org_unit, school_number, active')
       .eq('email', emailNorm);
 
     if (error || !rows?.length) {
@@ -86,6 +88,13 @@ export async function getUserAccessContext(
     // Wenn Schule explizit deaktiviert ist, Zugriff verweigern
     if (schoolRow && (schoolRow as { active?: boolean } | null)?.active === false) {
       return { ...emptyContext(), schoolInactive: true };
+    }
+
+    if ((appUser as { active?: boolean }).active === false) {
+      return {
+        ...emptyContext(),
+        accountInactive: true,
+      };
     }
 
     const roles = (rolesRows ?? []).map((r) => r.role_code as string).filter(Boolean);

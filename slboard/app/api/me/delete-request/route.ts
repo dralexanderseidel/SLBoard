@@ -28,6 +28,20 @@ export async function POST() {
       return apiError(403, 'FORBIDDEN', 'Kein Schul-Konto für diese Anfrage.');
     }
 
+    const { data: openRow } = await supabase
+      .from('account_delete_requests')
+      .select('id')
+      .eq('app_user_id', access.appUserId)
+      .eq('status', 'pending')
+      .maybeSingle();
+    if (openRow) {
+      return apiError(
+        409,
+        'DELETE_REQUEST_OPEN',
+        'Es liegt bereits eine offene Löschanfrage vor. Ein Administrator wird diese bearbeiten.'
+      );
+    }
+
     const email = user.email.trim().toLowerCase();
     const { error } = await supabase.from('account_delete_requests').insert({
       school_number: access.schoolNumber,

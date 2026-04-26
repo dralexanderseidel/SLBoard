@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
+import { ApiUserError, type SerializedApiError } from '@/lib/apiUserError';
 import type { AuditEntry, DocumentDetail, VersionInfo, VersionRow } from '../types';
 
 type UseDocumentDetailResult = {
   doc: DocumentDetail | null;
   setDoc: React.Dispatch<React.SetStateAction<DocumentDetail | null>>;
   loading: boolean;
-  error: string | null;
+  error: SerializedApiError | null;
   /** Aktuell geladene Hauptversion (aus API-Antwort) – Startpunkt für useDocumentPreview */
   initialVersion: VersionInfo | null;
   allVersions: VersionRow[];
@@ -19,7 +20,7 @@ type UseDocumentDetailResult = {
 export function useDocumentDetail(id: string | undefined): UseDocumentDetailResult {
   const [doc, setDoc] = useState<DocumentDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SerializedApiError | null>(null);
   const [initialVersion, setInitialVersion] = useState<VersionInfo | null>(null);
   const [allVersions, setAllVersions] = useState<VersionRow[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
@@ -35,48 +36,56 @@ export function useDocumentDetail(id: string | undefined): UseDocumentDetailResu
       setLoading(true);
       setError(null);
 
-      const res = await fetch(`/api/documents/${id}/detail`, {
-        credentials: 'include',
-        cache: 'no-store',
-      });
+      try {
+        const res = await fetch(`/api/documents/${id}/detail`, {
+          credentials: 'include',
+          cache: 'no-store',
+        });
 
-      if (!res.ok) {
-        let msg = 'Fehler beim Laden.';
-        try {
-          const j = (await res.json()) as { error?: string };
-          if (res.status === 403) {
-            msg = 'Keine Berechtigung, dieses Dokument einzusehen.';
-          } else if (res.status === 404) {
-            msg = 'Dieses Dokument ist nicht mehr verfügbar (gelöscht oder nicht gefunden).';
-          } else if (j.error) {
-            msg = j.error;
-          }
-        } catch {
-          // ignore
-        }
-        setError(msg);
-        setDoc(null);
-      } else {
-        const json = (await res.json()) as {
-          document?: DocumentDetail;
-          currentVersion?: VersionInfo | null;
-          versions?: VersionRow[];
-          auditLog?: AuditEntry[];
-        };
-        const typed = json.document;
-        if (!typed) {
-          setError('Ungültige Antwort vom Server.');
+        const text = await res.text();
+        if (!res.ok) {
+          setError(
+            ApiUserError.fromFailedResponse(res.status, text, 'Fehler beim Laden des Dokuments.').toJSON(),
+          );
           setDoc(null);
         } else {
-          setDoc(typed);
-          setInitialVersion(json.currentVersion ?? null);
-          setSelectedVersionId(typed.current_version_id ?? null);
-          setAllVersions(json.versions ?? []);
-          setAuditLog(json.auditLog ?? []);
+          let json: {
+            document?: DocumentDetail;
+            currentVersion?: VersionInfo | null;
+            versions?: VersionRow[];
+            auditLog?: AuditEntry[];
+          };
+          try {
+            json = JSON.parse(text) as typeof json;
+          } catch {
+            setError({
+              userMessage: 'Ungültige Antwort vom Server.',
+              detail: text.slice(0, 2000) + (text.length > 2000 ? '…' : ''),
+            });
+            setDoc(null);
+            return;
+          }
+          const typed = json.document;
+          if (!typed) {
+            setError({
+              userMessage: 'Ungültige Antwort vom Server (kein Dokument in der Antwort).',
+              detail: text.slice(0, 2000) + (text.length > 2000 ? '…' : ''),
+            });
+            setDoc(null);
+          } else {
+            setDoc(typed);
+            setInitialVersion(json.currentVersion ?? null);
+            setSelectedVersionId(typed.current_version_id ?? null);
+            setAllVersions(json.versions ?? []);
+            setAuditLog(json.auditLog ?? []);
+          }
         }
+      } catch {
+        setError({ userMessage: 'Netzwerkfehler beim Laden des Dokuments.', detail: null });
+        setDoc(null);
+      } finally {
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     void load();

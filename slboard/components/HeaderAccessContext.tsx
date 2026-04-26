@@ -16,6 +16,7 @@ export type HeaderMeAccess = {
   orgUnit: string | null;
   roles: string[];
   superAdmin: boolean;
+  accountInactive: boolean;
 };
 
 type HeaderAccessValue = {
@@ -52,6 +53,7 @@ export function HeaderAccessProvider({ children }: { children: React.ReactNode }
         orgUnit?: string | null;
         roles?: string[];
         superAdmin?: boolean;
+        accountInactive?: boolean;
       };
       setAccess({
         schoolNumber: data.schoolNumber ?? null,
@@ -59,6 +61,7 @@ export function HeaderAccessProvider({ children }: { children: React.ReactNode }
         orgUnit: data.orgUnit ?? null,
         roles: Array.isArray(data.roles) ? data.roles : [],
         superAdmin: !!data.superAdmin,
+        accountInactive: !!data.accountInactive,
       });
     } catch {
       setAccess(null);

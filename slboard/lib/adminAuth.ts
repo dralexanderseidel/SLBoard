@@ -19,7 +19,7 @@ export async function isAdmin(
   }
   try {
     const emailNorm = normalizeAuthEmail(authEmail);
-    let q = supabaseAdmin.from('app_users').select('id').eq('email', emailNorm);
+    let q = supabaseAdmin.from('app_users').select('id, active').eq('email', emailNorm);
     if (school && /^\d{6}$/.test(school)) {
       q = q.eq('school_number', school);
     }
@@ -27,7 +27,8 @@ export async function isAdmin(
     if (error || !rows?.length) return false;
     if (rows.length > 1) return false;
 
-    const appUser = rows[0] as { id: string };
+    const appUser = rows[0] as { id: string; active?: boolean };
+    if (appUser.active === false) return false;
     const { data: roles } = await supabaseAdmin
       .from('user_roles')
       .select('role_code')

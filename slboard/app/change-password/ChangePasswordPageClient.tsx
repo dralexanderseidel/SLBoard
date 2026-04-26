@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { ContextHelpLink } from '../../components/ContextHelpLink';
+import { CONTEXT_HELP } from '../../lib/contextHelpUrls';
 import { supabase } from '../../lib/supabaseClient';
 import { MIN_APP_PASSWORD_LENGTH } from '../../lib/authPasswordConstants';
 
@@ -61,7 +63,7 @@ export function ChangePasswordPageClient() {
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
       <div className="mx-auto flex max-w-md flex-col gap-6 px-6 py-12">
-        <header className="flex items-center justify-between gap-4 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+        <header className="flex flex-col gap-2 border-b border-zinc-200 pb-3 sm:flex-row sm:items-start sm:justify-between dark:border-zinc-800">
           <div>
             <h1 className="text-xl font-semibold">Passwort ändern</h1>
             <p className="text-xs text-zinc-600 dark:text-zinc-400">
@@ -70,12 +72,15 @@ export function ChangePasswordPageClient() {
                 : 'Neues Passwort setzen. Nutzen Sie ein starkes, persönliches Passwort.'}
             </p>
           </div>
-          <Link
-            href="/"
-            className="text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
-          >
-            ← Start
-          </Link>
+          <div className="flex shrink-0 flex-col items-start gap-1.5 sm:items-end">
+            <ContextHelpLink href={CONTEXT_HELP.anmeldung}>Hilfe (Konto &amp; erster Login)</ContextHelpLink>
+            <Link
+              href="/"
+              className="text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+            >
+              ← Start
+            </Link>
+          </div>
         </header>
 
         {isFirst && (

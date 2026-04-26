@@ -1,7 +1,108 @@
 import { useState } from 'react';
-import { readApiJson } from '@/lib/readApiJson';
+import { isApiUserError, serializeApiError } from '@/lib/apiUserError';
+import { readApiJsonOk } from '@/lib/readApiJson';
+import { toastApiError } from '@/lib/toastApiError';
 import type { WorkflowStatus } from '@/lib/documentWorkflow';
 import type { DocumentListItem } from '../types';
+
+export type BulkResultDocRef = { id: string; title: string };
+export type BulkResultFailedDoc = BulkResultDocRef & { message?: string };
+
+export type BulkActionResultSummary = {
+  headline: string;
+  okDocs: BulkResultDocRef[];
+  failedDocs: BulkResultFailedDoc[];
+  skippedDocs: BulkResultDocRef[];
+  /** Nach Löschung keine `/documents/…`-Links für erfolgreiche Treffer. */
+  suppressOkLinks?: boolean;
+};
+
+function docTitle(docs: DocumentListItem[], id: string): string {
+  return docs.find((d) => d.id === id)?.title ?? id;
+}
+
+function skippedRefs(
+  selectedIds: string[],
+  effectiveIds: string[],
+  docs: DocumentListItem[],
+): BulkResultDocRef[] {
+  return selectedIds
+    .filter((id) => !effectiveIds.includes(id))
+    .map((id) => ({ id, title: docTitle(docs, id) }));
+}
+
+function buildBulkSummary(
+  results: PromiseSettledResult<unknown>[],
+  effectiveIds: string[],
+  selectedIds: string[],
+  docs: DocumentListItem[],
+  actionPast: string,
+): BulkActionResultSummary {
+  const okDocs: BulkResultDocRef[] = [];
+  const failedDocs: BulkResultFailedDoc[] = [];
+  effectiveIds.forEach((id, i) => {
+    const title = docTitle(docs, id);
+    const r = results[i];
+    if (r?.status === 'fulfilled') {
+      okDocs.push({ id, title });
+    } else {
+      const reason = r?.status === 'rejected' ? r.reason : null;
+      const message = isApiUserError(reason)
+        ? reason.userMessage
+        : reason instanceof Error
+          ? reason.message
+          : typeof reason === 'string'
+            ? reason
+            : 'Unbekannter Fehler';
+      failedDocs.push({ id, title, message });
+    }
+  });
+  const skippedDocs = skippedRefs(selectedIds, effectiveIds, docs);
+  const okCount = okDocs.length;
+  const failCount = failedDocs.length;
+  const skipCount = skippedDocs.length;
+  const n = effectiveIds.length;
+  let headline =
+    failCount === 0
+      ? `${okCount}/${n} Dokument(e) ${actionPast}${skipCount > 0 ? ` · ${skipCount} übersprungen` : ''}.`
+      : `${okCount}/${n} ${actionPast} · ${failCount} fehlgeschlagen${skipCount > 0 ? ` · ${skipCount} übersprungen` : ''}.`;
+  if (failCount > 0 && failedDocs[0]?.message) {
+    headline += ` Erster Fehler: ${failedDocs[0].message}`;
+  }
+  const suppressOkLinks = actionPast === 'gelöscht';
+  return { headline, okDocs, failedDocs, skippedDocs, suppressOkLinks };
+}
+
+function buildSummarizeBatchSummary(
+  ids: string[],
+  selectedIds: string[],
+  docs: DocumentListItem[],
+  rows: Array<{ documentId: string; ok: boolean; error?: string }> | undefined,
+): BulkActionResultSummary {
+  const skippedDocs = skippedRefs(selectedIds, ids, docs);
+  const okDocs: BulkResultDocRef[] = [];
+  const failedDocs: BulkResultFailedDoc[] = [];
+  if (rows && rows.length > 0) {
+    for (const row of rows) {
+      const id = row.documentId;
+      const title = docTitle(docs, id);
+      if (row.ok) okDocs.push({ id, title });
+      else failedDocs.push({ id, title, message: row.error ?? 'Fehler' });
+    }
+  }
+  const okCount = okDocs.length;
+  const failCount = failedDocs.length;
+  const skipCount = skippedDocs.length;
+  const headline =
+    failCount === 0
+      ? `${okCount}/${ids.length} Dokument(e) mit Zusammenfassung aktualisiert${skipCount > 0 ? ` · ${skipCount} übersprungen` : ''}.`
+      : `${okCount}/${ids.length} mit Zusammenfassung aktualisiert · ${failCount} fehlgeschlagen${skipCount > 0 ? ` · ${skipCount} übersprungen` : ''}.`;
+  return { headline, okDocs, failedDocs, skippedDocs, suppressOkLinks: false };
+}
+
+function errorSummary(message: string): BulkActionResultSummary {
+  return { headline: message, okDocs: [], failedDocs: [], skippedDocs: [], suppressOkLinks: false };
+}
 
 type BulkActionDeps = {
   docs: DocumentListItem[];
@@ -23,10 +124,10 @@ export type BulkActionsResult = {
   bulkSteeringArmed: boolean;
   setBulkSummariesArmed: (v: boolean) => void;
   setBulkSteeringArmed: (v: boolean) => void;
-  bulkDeleteResult: string | null;
-  bulkUpdateResult: string | null;
-  bulkSummarizeResult: string | null;
-  bulkSteeringResult: string | null;
+  bulkDeleteResult: BulkActionResultSummary | null;
+  bulkUpdateResult: BulkActionResultSummary | null;
+  bulkSummarizeResult: BulkActionResultSummary | null;
+  bulkSteeringResult: BulkActionResultSummary | null;
   clearAllResults: () => void;
   rowActionLoadingId: string | null;
   /** Combined busy flag for row-level UI disabling */
@@ -45,27 +146,6 @@ export type BulkActionsResult = {
   handleRowRestore: (documentId: string) => Promise<void>;
 };
 
-function buildBulkResult(
-  results: PromiseSettledResult<unknown>[],
-  totalSelected: number,
-  editableCount: number,
-  actionLabel: string,
-): string {
-  const okCount = results.filter((r) => r.status === 'fulfilled').length;
-  const failCount = results.length - okCount;
-  const skippedCount = totalSelected - editableCount;
-  const firstFail = results.find((r) => r.status === 'rejected');
-  const failText =
-    firstFail && firstFail.status === 'rejected'
-      ? firstFail.reason instanceof Error
-        ? firstFail.reason.message
-        : String(firstFail.reason)
-      : null;
-  return failCount === 0
-    ? `${okCount}/${results.length} Dokument(e) ${actionLabel}${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.`
-    : `${okCount}/${results.length} ${actionLabel}, ${failCount} fehlgeschlagen${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.${failText ? ` Grund: ${failText}` : ''}`;
-}
-
 export function useBulkActions({
   docs,
   selectedIds,
@@ -82,10 +162,10 @@ export function useBulkActions({
   const [bulkSteeringAnalyzing, setBulkSteeringAnalyzing] = useState(false);
   const [bulkSummariesArmed, setBulkSummariesArmed] = useState(false);
   const [bulkSteeringArmed, setBulkSteeringArmed] = useState(false);
-  const [bulkDeleteResult, setBulkDeleteResult] = useState<string | null>(null);
-  const [bulkUpdateResult, setBulkUpdateResult] = useState<string | null>(null);
-  const [bulkSummarizeResult, setBulkSummarizeResult] = useState<string | null>(null);
-  const [bulkSteeringResult, setBulkSteeringResult] = useState<string | null>(null);
+  const [bulkDeleteResult, setBulkDeleteResult] = useState<BulkActionResultSummary | null>(null);
+  const [bulkUpdateResult, setBulkUpdateResult] = useState<BulkActionResultSummary | null>(null);
+  const [bulkSummarizeResult, setBulkSummarizeResult] = useState<BulkActionResultSummary | null>(null);
+  const [bulkSteeringResult, setBulkSteeringResult] = useState<BulkActionResultSummary | null>(null);
   const [rowActionLoadingId, setRowActionLoadingId] = useState<string | null>(null);
 
   const bulkAiBusy = bulkSummarizing || bulkSteeringAnalyzing;
@@ -113,12 +193,11 @@ export function useBulkActions({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'Status konnte nicht geändert werden.');
+      await readApiJsonOk<{ error?: string }>(res, 'Status konnte nicht geändert werden.');
       clearSelection();
       reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'Fehler beim Workflow-Schritt.');
+      toastApiError(e, 'Fehler beim Workflow-Schritt.');
     } finally {
       setRowActionLoadingId(null);
     }
@@ -135,12 +214,11 @@ export function useBulkActions({
     clearAllResults();
     try {
       const res = await fetch(`/api/documents/${documentId}`, { method: 'DELETE' });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'Fehler beim Löschen.');
+      await readApiJsonOk<{ error?: string }>(res, 'Fehler beim Löschen.');
       clearSelection();
       reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'Fehler beim Löschen.');
+      toastApiError(e, 'Fehler beim Löschen.');
     } finally {
       setRowActionLoadingId(null);
     }
@@ -161,12 +239,11 @@ export function useBulkActions({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ archived: true }),
       });
-      const data = (await res.json()) as { error?: string };
-      if (!res.ok) throw new Error(data.error ?? 'Archivierung fehlgeschlagen.');
+      await readApiJsonOk<{ error?: string }>(res, 'Archivierung fehlgeschlagen.');
       clearSelection();
       reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'Archivierung fehlgeschlagen.');
+      toastApiError(e, 'Archivierung fehlgeschlagen.');
     } finally {
       setRowActionLoadingId(null);
     }
@@ -190,7 +267,7 @@ export function useBulkActions({
       clearSelection();
       reload();
     } catch (e) {
-      window.alert(e instanceof Error ? e.message : 'Wiederherstellen fehlgeschlagen.');
+      toastApiError(e, 'Wiederherstellen fehlgeschlagen.');
     } finally {
       setRowActionLoadingId(null);
     }
@@ -214,16 +291,15 @@ export function useBulkActions({
       const results = await Promise.allSettled(
         ids.map(async (id) => {
           const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
-          const data = (await res.json()) as { error?: string };
-          if (!res.ok) throw new Error(data.error ?? 'Fehler beim Löschen.');
+          await readApiJsonOk<{ error?: string }>(res, 'Fehler beim Löschen.');
         }),
       );
-      setBulkDeleteResult(buildBulkResult(results, selectedIds.length, ids.length, 'gelöscht'));
+      setBulkDeleteResult(buildBulkSummary(results, ids, selectedIds, docs, 'gelöscht'));
       setDocs((prev) => prev.filter((d) => !ids.includes(d.id)));
       clearSelection();
       reload();
     } catch (e) {
-      setBulkDeleteResult(e instanceof Error ? e.message : 'Bulk-Löschen fehlgeschlagen.');
+      setBulkDeleteResult(errorSummary(serializeApiError(e, 'Bulk-Löschen fehlgeschlagen.').userMessage));
     } finally {
       setBulkDeleting(false);
     }
@@ -250,16 +326,15 @@ export function useBulkActions({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ archived: true }),
           });
-          const data = (await res.json()) as { error?: string };
-          if (!res.ok) throw new Error(data.error ?? 'Archivierung fehlgeschlagen.');
+          await readApiJsonOk<{ error?: string }>(res, 'Archivierung fehlgeschlagen.');
         }),
       );
-      setBulkDeleteResult(buildBulkResult(results, selectedIds.length, ids.length, 'ins Archiv gelegt'));
+      setBulkDeleteResult(buildBulkSummary(results, ids, selectedIds, docs, 'ins Archiv gelegt'));
       setDocs((prev) => prev.filter((d) => !ids.includes(d.id)));
       clearSelection();
       reload();
     } catch (e) {
-      setBulkDeleteResult(e instanceof Error ? e.message : 'Bulk-Archivierung fehlgeschlagen.');
+      setBulkDeleteResult(errorSummary(serializeApiError(e, 'Bulk-Archivierung fehlgeschlagen.').userMessage));
     } finally {
       setBulkArchiving(false);
     }
@@ -286,16 +361,15 @@ export function useBulkActions({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ archived: false }),
           });
-          const data = (await res.json()) as { error?: string };
-          if (!res.ok) throw new Error(data.error ?? 'Wiederherstellen fehlgeschlagen.');
+          await readApiJsonOk<{ error?: string }>(res, 'Wiederherstellen fehlgeschlagen.');
         }),
       );
-      setBulkDeleteResult(buildBulkResult(results, selectedIds.length, ids.length, 'wiederhergestellt'));
+      setBulkDeleteResult(buildBulkSummary(results, ids, selectedIds, docs, 'wiederhergestellt'));
       setDocs((prev) => prev.filter((d) => !ids.includes(d.id)));
       clearSelection();
       reload();
     } catch (e) {
-      setBulkDeleteResult(e instanceof Error ? e.message : 'Bulk-Wiederherstellen fehlgeschlagen.');
+      setBulkDeleteResult(errorSummary(serializeApiError(e, 'Bulk-Wiederherstellen fehlgeschlagen.').userMessage));
     } finally {
       setBulkArchiving(false);
     }
@@ -316,15 +390,14 @@ export function useBulkActions({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ status: targetStatus }),
           });
-          const data = (await res.json()) as { error?: string };
-          if (!res.ok) throw new Error(data.error ?? 'Fehler beim Statuswechsel.');
+          await readApiJsonOk<{ error?: string }>(res, 'Fehler beim Statuswechsel.');
         }),
       );
-      setBulkUpdateResult(buildBulkResult(results, selectedIds.length, ids.length, 'aktualisiert (Status)'));
+      setBulkUpdateResult(buildBulkSummary(results, ids, selectedIds, docs, 'aktualisiert (Status)'));
       clearSelection();
       reload();
     } catch (e) {
-      setBulkUpdateResult(e instanceof Error ? e.message : 'Bulk-Statuswechsel fehlgeschlagen.');
+      setBulkUpdateResult(errorSummary(serializeApiError(e, 'Bulk-Statuswechsel fehlgeschlagen.').userMessage));
     } finally {
       setBulkUpdating(false);
     }
@@ -345,15 +418,14 @@ export function useBulkActions({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ protection_class_id: targetClassId }),
           });
-          const data = (await res.json()) as { error?: string };
-          if (!res.ok) throw new Error(data.error ?? 'Fehler beim Schutzklassenwechsel.');
+          await readApiJsonOk<{ error?: string }>(res, 'Fehler beim Schutzklassenwechsel.');
         }),
       );
-      setBulkUpdateResult(buildBulkResult(results, selectedIds.length, ids.length, 'aktualisiert (Schutzklasse)'));
+      setBulkUpdateResult(buildBulkSummary(results, ids, selectedIds, docs, 'aktualisiert (Schutzklasse)'));
       clearSelection();
       reload();
     } catch (e) {
-      setBulkUpdateResult(e instanceof Error ? e.message : 'Bulk-Schutzklassenwechsel fehlgeschlagen.');
+      setBulkUpdateResult(errorSummary(serializeApiError(e, 'Bulk-Schutzklassenwechsel fehlgeschlagen.').userMessage));
     } finally {
       setBulkUpdating(false);
     }
@@ -374,17 +446,16 @@ export function useBulkActions({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ reach_scope: targetScope }),
           });
-          const data = (await res.json()) as { error?: string };
-          if (!res.ok) throw new Error(data.error ?? 'Fehler beim Setzen der Reichweite.');
+          await readApiJsonOk<{ error?: string }>(res, 'Fehler beim Setzen der Reichweite.');
         }),
       );
       setBulkUpdateResult(
-        buildBulkResult(results, selectedIds.length, ids.length, `aktualisiert (Reichweite → ${targetScope})`),
+        buildBulkSummary(results, ids, selectedIds, docs, `aktualisiert (Reichweite → ${targetScope})`),
       );
       clearSelection();
       reload();
     } catch (e) {
-      setBulkUpdateResult(e instanceof Error ? e.message : 'Bulk-Update der Reichweite fehlgeschlagen.');
+      setBulkUpdateResult(errorSummary(serializeApiError(e, 'Bulk-Update der Reichweite fehlgeschlagen.').userMessage));
     } finally {
       setBulkUpdating(false);
     }
@@ -407,21 +478,18 @@ export function useBulkActions({
         credentials: 'include',
         body: JSON.stringify({ documentIds: ids }),
       });
-      const data = await readApiJson<{ okCount?: number; failCount?: number; error?: string }>(res);
-      if (!res.ok) throw new Error(data.error ?? 'Fehler beim Erzeugen der Zusammenfassungen.');
-      const okCount = data.okCount ?? 0;
-      const failCount = data.failCount ?? (ids.length - okCount);
-      const skippedCount = selectedIds.length - ids.length;
-      setBulkSummarizeResult(
-        failCount === 0
-          ? `${okCount}/${ids.length} Dokument(e) aktualisiert (Zusammenfassung)${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.`
-          : `${okCount}/${ids.length} aktualisiert (Zusammenfassung), ${failCount} fehlgeschlagen${skippedCount > 0 ? `, ${skippedCount} übersprungen` : ''}.`,
-      );
+      const data = await readApiJsonOk<{
+        okCount?: number;
+        failCount?: number;
+        error?: string;
+        results?: Array<{ documentId: string; ok: boolean; error?: string }>;
+      }>(res, 'Fehler beim Erzeugen der Zusammenfassungen.');
+      setBulkSummarizeResult(buildSummarizeBatchSummary(ids, selectedIds, docs, data.results));
       setBulkSummariesArmed(false);
       clearSelection();
       reload();
     } catch (e) {
-      setBulkSummarizeResult(e instanceof Error ? e.message : 'Bulk-Zusammenfassung fehlgeschlagen.');
+      setBulkSummarizeResult(errorSummary(serializeApiError(e, 'Bulk-Zusammenfassung fehlgeschlagen.').userMessage));
     } finally {
       setBulkSummarizing(false);
     }
@@ -446,16 +514,17 @@ export function useBulkActions({
             credentials: 'include',
             body: JSON.stringify({ force: true }),
           });
-          const data = await readApiJson<{ error?: string }>(res);
-          if (!res.ok) throw new Error(data.error ?? 'Fehler bei der Steuerungsanalyse.');
+          await readApiJsonOk<{ error?: string }>(res, 'Fehler bei der Steuerungsanalyse.');
         }),
       );
-      setBulkSteeringResult(buildBulkResult(results, selectedIds.length, ids.length, 'aktualisiert (Steuerungsanalyse)'));
+      setBulkSteeringResult(
+        buildBulkSummary(results, ids, selectedIds, docs, 'aktualisiert (Steuerungsanalyse)'),
+      );
       setBulkSteeringArmed(false);
       clearSelection();
       reload();
     } catch (e) {
-      setBulkSteeringResult(e instanceof Error ? e.message : 'Bulk-Steuerungsanalyse fehlgeschlagen.');
+      setBulkSteeringResult(errorSummary(serializeApiError(e, 'Bulk-Steuerungsanalyse fehlgeschlagen.').userMessage));
     } finally {
       setBulkSteeringAnalyzing(false);
     }

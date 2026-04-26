@@ -28,6 +28,10 @@ import { useDocumentSummary } from './hooks/useDocumentSummary';
 import { useDocumentSteering } from './hooks/useDocumentSteering';
 import { useDocumentAsk } from './hooks/useDocumentAsk';
 import { useDocumentMetadataOptions } from './hooks/useDocumentMetadataOptions';
+import { ApiErrorCallout } from '@/components/ApiErrorCallout';
+import { LONG_RUNNING_EXPECTATION_HINT } from '@/lib/longRunningExpectationHint';
+import { CONTEXT_HELP } from '@/lib/contextHelpUrls';
+import { ContextHelpLink } from '@/components/ContextHelpLink';
 import type { AuditEntry, DocumentDetail } from './types';
 
 // ── Reine Hilfsfunktionen (kein Component-State) ─────────────────────────────
@@ -273,6 +277,10 @@ export function DocumentDetailPageClient() {
 
   const handleEdit = () => {
     if (doc) {
+      const units =
+        responsibleUnitOptions.length > 0 ? responsibleUnitOptions : DEFAULT_ORG_UNIT_NAMES;
+      const ru = (doc.responsible_unit ?? '').trim();
+      setResponsibleCustom(Boolean(ru) && !units.includes(ru));
       setEditForm({
         title: doc.title,
         legal_reference: doc.legal_reference ?? '',
@@ -496,6 +504,10 @@ export function DocumentDetailPageClient() {
               <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
                 Detailansicht eines schulischen Dokuments.
               </p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                <ContextHelpLink href={CONTEXT_HELP.dokumentDetail}>Hilfe zur Dokumentansicht</ContextHelpLink>
+                <ContextHelpLink href={CONTEXT_HELP.workflow}>Hilfe zum Workflow</ContextHelpLink>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -565,11 +577,7 @@ export function DocumentDetailPageClient() {
         </header>
 
         {loading && <p className="text-sm text-zinc-600 dark:text-zinc-400">Lade Dokument…</p>}
-        {error && (
-          <p className="text-sm text-red-600">
-            Fehler beim Laden des Dokuments: {error}
-          </p>
-        )}
+        {error && <ApiErrorCallout error={error} title="Dokument" className="text-sm" />}
         {!loading && !error && !doc && (
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             Dokument wurde nicht gefunden.
@@ -718,6 +726,11 @@ export function DocumentDetailPageClient() {
                       ? 'Zusammenfassung aktualisieren'
                       : 'Zusammenfassung erzeugen'}
                 </button>
+                {summaryLoading && (
+                  <p className="mb-2 text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
+                    {LONG_RUNNING_EXPECTATION_HINT}
+                  </p>
+                )}
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                   Letzte Aktualisierung:{' '}
                   <span className="font-medium">
@@ -726,7 +739,9 @@ export function DocumentDetailPageClient() {
                       : '—'}
                   </span>
                 </p>
-                {summaryError && <p className="text-[11px] text-red-500">{summaryError}</p>}
+                {summaryError && (
+                  <ApiErrorCallout error={summaryError} className="mt-1 text-xs" />
+                )}
                 {summary && !summaryError && (
                   <p className="mt-1 whitespace-pre-wrap text-zinc-700 dark:text-zinc-200">
                     {summary}
@@ -773,6 +788,11 @@ export function DocumentDetailPageClient() {
                       {docAskLoading ? 'Anfrage läuft…' : 'fragen'}
                     </button>
                   </div>
+                  {docAskLoading && (
+                    <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
+                      {LONG_RUNNING_EXPECTATION_HINT}
+                    </p>
+                  )}
                   {docAskError && <p className="mt-1 text-[11px] text-red-500">{docAskError}</p>}
                 </div>
 
@@ -822,11 +842,16 @@ export function DocumentDetailPageClient() {
                         ? 'Analyse des Steuerungsbedarfs aktualisieren'
                         : 'Analyse des Steuerungsbedarfs'}
                   </button>
+                  {steeringLoading && (
+                    <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
+                      {LONG_RUNNING_EXPECTATION_HINT}
+                    </p>
+                  )}
                   <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                     Prüft das Dokument per KI auf Tragfähigkeit, Belastungsgrad, Entscheidungsstruktur und
                     Verbindlichkeit und ermittelt daraus den Steuerungsbedarf.
                   </p>
-                  {steeringError && <p className="mt-2 text-[11px] text-red-500">{steeringError}</p>}
+                  {steeringError && <ApiErrorCallout error={steeringError} className="mt-2 text-xs" />}
                   {steeringUpdatedAt && (
                     <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                       Letzte Analyse: {new Date(steeringUpdatedAt).toLocaleString('de-DE')}
@@ -888,10 +913,15 @@ export function DocumentDetailPageClient() {
                           : 'ToDos/Aufgaben extrahieren'}
                     </button>
                   </div>
+                  {todosLoading && (
+                    <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
+                      {LONG_RUNNING_EXPECTATION_HINT}
+                    </p>
+                  )}
                   <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                     Ermittelt aus dem Dokument konkrete Aufgaben, Fristen und Zuständigkeitshinweise als Liste.
                   </p>
-                  {todosError && <p className="mt-2 text-[11px] text-red-500">{todosError}</p>}
+                  {todosError && <ApiErrorCallout error={todosError} className="mt-2 text-xs" />}
                   {steeringTodosUpdatedAt && (
                     <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
                       Letzte Extraktion: {new Date(steeringTodosUpdatedAt).toLocaleString('de-DE')}
@@ -986,7 +1016,7 @@ export function DocumentDetailPageClient() {
                   </div>
                 )}
               </div>
-              {saveError && <p className="mb-2 text-[11px] text-red-500">{saveError}</p>}
+              {saveError && <ApiErrorCallout error={saveError} className="mb-2 text-xs" />}
               {/* Status & Workflow: Entwurf → Freigegeben → Beschluss → Veröffentlicht */}
               {doc && (
                 <div className="mb-3 rounded border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-800/50">
@@ -1073,11 +1103,7 @@ export function DocumentDetailPageClient() {
                     </p>
                   )}
 
-                  {workflowError && (
-                    <div className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-200">
-                      {workflowError}
-                    </div>
-                  )}
+                  {workflowError && <ApiErrorCallout error={workflowError} className="mt-2 text-xs" />}
                 </div>
               )}
               {isEditing ? (
@@ -1128,7 +1154,7 @@ export function DocumentDetailPageClient() {
                             {u}
                           </option>
                         ))}
-                        <option value="__custom__">Andere…</option>
+                        <option value="__custom__">Andere… (Freitext)</option>
                       </select>
                     ) : (
                       <div className="flex gap-2">
@@ -1137,17 +1163,40 @@ export function DocumentDetailPageClient() {
                           value={editForm.responsible_unit ?? ''}
                           onChange={(e) => setEditForm((f) => ({ ...f, responsible_unit: e.target.value }))}
                           className="w-full rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600 dark:bg-zinc-950"
-                          placeholder="Verantwortlich"
+                          placeholder="z. B. Fachschaft Musik"
                         />
                         <button
                           type="button"
-                          onClick={() => setResponsibleCustom(false)}
-                          className="rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
+                          onClick={() => {
+                            const units =
+                              responsibleUnitOptions.length > 0
+                                ? responsibleUnitOptions
+                                : DEFAULT_ORG_UNIT_NAMES;
+                            const cur = (editForm.responsible_unit ?? '').trim();
+                            setResponsibleCustom(false);
+                            if (!cur || !units.includes(cur)) {
+                              setEditForm((f) => ({
+                                ...f,
+                                responsible_unit: units[0] ?? 'Schulleitung',
+                              }));
+                            }
+                          }}
+                          className="shrink-0 rounded border border-zinc-300 px-2 py-1 text-[11px] hover:bg-zinc-50 dark:border-zinc-600 dark:hover:bg-zinc-800"
                         >
                           Liste
                         </button>
                       </div>
                     )}
+                    <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Auswahlliste unter{' '}
+                      <Link
+                        href="/admin"
+                        className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                      >
+                        Admin → Metadaten
+                      </Link>
+                      . „Andere…“ nur bei Bedarf.
+                    </p>
                   </div>
                   <div>
                     <label className="mb-0.5 block text-zinc-500">Reichweite</label>
@@ -1403,6 +1452,11 @@ export function DocumentDetailPageClient() {
                   >
                     {versionLoading ? 'Wird hochgeladen…' : 'Version hochladen'}
                   </button>
+                  {versionLoading && (
+                    <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
+                      {LONG_RUNNING_EXPECTATION_HINT}
+                    </p>
+                  )}
                   {versionError && <p className="mt-1 text-[11px] text-red-500">{versionError}</p>}
                 </form>
               </div>
@@ -1492,7 +1546,7 @@ export function DocumentDetailPageClient() {
                     {archiveLoading ? '…' : 'Ins Archiv legen'}
                   </button>
                 )}
-                {deleteError && <p className="text-[11px] text-red-500">{deleteError}</p>}
+                {deleteError && <ApiErrorCallout error={deleteError} className="text-xs" />}
               </div>
             </aside>
           </section>

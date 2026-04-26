@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { LONG_RUNNING_EXPECTATION_HINT } from '@/lib/longRunningExpectationHint';
 import type { BulkActionsResult } from '../hooks/useBulkActions';
 
 type Props = Pick<
@@ -152,44 +153,51 @@ export function BulkActionsBar({
           </div>
 
           {/* KI */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
-            <span className="w-28 shrink-0 text-zinc-600 dark:text-zinc-300">KI</span>
-            <label className="inline-flex cursor-pointer items-center gap-2 text-zinc-600 dark:text-zinc-300">
-              <input
-                type="checkbox"
-                checked={bulkSummariesArmed}
-                onChange={(e) => setBulkSummariesArmed(e.target.checked)}
-                disabled={btnDisabled}
-                className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-zinc-600"
-              />
-              <span className="text-[11px] font-medium">Zusammenfassung (Batch)</span>
-            </label>
-            <button
-              type="button"
-              onClick={() => void handleBulkGenerateSummaries()}
-              disabled={btnDisabled || !bulkSummariesArmed}
-              className={btnClass}
-            >
-              {bulkSummarizing ? 'KI fasst zusammen…' : 'Zusammenfassungen erzeugen'}
-            </button>
-            <label className="inline-flex cursor-pointer items-center gap-2 text-zinc-600 dark:text-zinc-300">
-              <input
-                type="checkbox"
-                checked={bulkSteeringArmed}
-                onChange={(e) => setBulkSteeringArmed(e.target.checked)}
-                disabled={btnDisabled}
-                className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-zinc-600"
-              />
-              <span className="text-[11px] font-medium">Steuerungsanalyse (Batch)</span>
-            </label>
-            <button
-              type="button"
-              onClick={() => void handleBulkGenerateSteeringAnalyses()}
-              disabled={btnDisabled || !bulkSteeringArmed}
-              className={btnClass}
-            >
-              {bulkSteeringAnalyzing ? 'KI analysiert…' : 'Steuerungsanalysen erzeugen'}
-            </button>
+          <div className="flex flex-col gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-28 shrink-0 text-zinc-600 dark:text-zinc-300">KI</span>
+              <label className="inline-flex cursor-pointer items-center gap-2 text-zinc-600 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={bulkSummariesArmed}
+                  onChange={(e) => setBulkSummariesArmed(e.target.checked)}
+                  disabled={btnDisabled}
+                  className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-zinc-600"
+                />
+                <span className="text-[11px] font-medium">Zusammenfassung (Batch)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => void handleBulkGenerateSummaries()}
+                disabled={btnDisabled || !bulkSummariesArmed}
+                className={btnClass}
+              >
+                {bulkSummarizing ? 'KI fasst zusammen…' : 'Zusammenfassungen erzeugen'}
+              </button>
+              <label className="inline-flex cursor-pointer items-center gap-2 text-zinc-600 dark:text-zinc-300">
+                <input
+                  type="checkbox"
+                  checked={bulkSteeringArmed}
+                  onChange={(e) => setBulkSteeringArmed(e.target.checked)}
+                  disabled={btnDisabled}
+                  className="h-4 w-4 rounded border-zinc-300 text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:opacity-60 dark:border-zinc-600"
+                />
+                <span className="text-[11px] font-medium">Steuerungsanalyse (Batch)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => void handleBulkGenerateSteeringAnalyses()}
+                disabled={btnDisabled || !bulkSteeringArmed}
+                className={btnClass}
+              >
+                {bulkSteeringAnalyzing ? 'KI analysiert…' : 'Steuerungsanalysen erzeugen'}
+              </button>
+            </div>
+            {bulkAiBusy && (
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
+                {LONG_RUNNING_EXPECTATION_HINT}
+              </p>
+            )}
           </div>
         </>
       )}

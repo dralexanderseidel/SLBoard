@@ -28,7 +28,7 @@ export async function GET() {
 
     let usersQuery = supabase
       .from('app_users')
-      .select('id, username, full_name, email, org_unit, school_number, created_at, password_change_required')
+      .select('id, username, full_name, email, org_unit, school_number, created_at, password_change_required, active')
       .order('username');
     if (adminSchool) usersQuery = usersQuery.eq('school_number', adminSchool);
     const { data: users, error } = await usersQuery;

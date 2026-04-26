@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiUserError, type SerializedApiError } from '@/lib/apiUserError';
 import type { DocumentFilters } from './useDocumentFilters';
 import type { DocumentListItem } from '../types';
 
@@ -6,7 +7,7 @@ type UseDocumentListResult = {
   docs: DocumentListItem[];
   setDocs: React.Dispatch<React.SetStateAction<DocumentListItem[]>>;
   loading: boolean;
-  error: string | null;
+  error: SerializedApiError | null;
   reload: () => void;
   /** In-flight Ladeanfragen abbrechen (für Bulk-Aktionen) */
   cancelInFlight: () => void;
@@ -18,7 +19,7 @@ export function useDocumentList(
 ): UseDocumentListResult {
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SerializedApiError | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const loadSeqRef = useRef(0);
 
@@ -53,20 +54,35 @@ export function useDocumentList(
         res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
       } catch {
         if (controller.signal.aborted) return;
-        setError('Netzwerkfehler beim Laden.');
+        setError({ userMessage: 'Netzwerkfehler beim Laden.', detail: null });
         setLoading(false);
         return;
       }
 
       if (seq !== loadSeqRef.current) return;
 
-      const json = (await res.json()) as { data?: DocumentListItem[]; error?: string };
+      const text = await res.text();
       if (!res.ok) {
-        setError(json.error ?? 'Fehler beim Laden.');
+        setError(ApiUserError.fromFailedResponse(res.status, text, 'Fehler beim Laden der Dokumente.').toJSON());
         setDocs([]);
-      } else {
-        setDocs(json.data ?? []);
+        setLoading(false);
+        return;
       }
+
+      let json: { data?: DocumentListItem[]; error?: string };
+      try {
+        json = JSON.parse(text) as { data?: DocumentListItem[]; error?: string };
+      } catch {
+        setError({
+          userMessage: 'Ungültige Antwort beim Laden der Dokumentenliste.',
+          detail: text.slice(0, 2000) + (text.length > 2000 ? '…' : ''),
+        });
+        setDocs([]);
+        setLoading(false);
+        return;
+      }
+
+      setDocs(json.data ?? []);
       setLoading(false);
     };
 

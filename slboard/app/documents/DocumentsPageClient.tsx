@@ -12,9 +12,11 @@ import { useBulkActions } from './hooks/useBulkActions';
 import { useViewMode } from './hooks/useViewMode';
 import { DocumentFilterBar } from './components/DocumentFilterBar';
 import { BulkActionsBar } from './components/BulkActionsBar';
+import { BulkActionResultPanel } from './components/BulkActionResultPanel';
 import { DocumentTableView } from './components/DocumentTableView';
 import { DocumentCardsView } from './components/DocumentCardsView';
 import { DocumentCompactView } from './components/DocumentCompactView';
+import { ApiErrorCallout } from '@/components/ApiErrorCallout';
 import type { SortField, SortDir } from './types';
 
 export function DocumentsPageClient() {
@@ -102,11 +104,11 @@ export function DocumentsPageClient() {
     handleRowRestore: bulkActions.handleRowRestore,
   }), [bulkActions]);
 
-  const hasResults =
-    bulkActions.bulkDeleteResult ??
-    bulkActions.bulkUpdateResult ??
-    bulkActions.bulkSummarizeResult ??
-    bulkActions.bulkSteeringResult;
+  const hasBulkFeedback =
+    !!bulkActions.bulkDeleteResult ||
+    !!bulkActions.bulkUpdateResult ||
+    !!bulkActions.bulkSummarizeResult ||
+    !!bulkActions.bulkSteeringResult;
 
   const hasActiveFilters = !!(
     filters.searchQuery ||
@@ -168,10 +170,21 @@ export function DocumentsPageClient() {
         />
 
         {/* Ergebnis-Hinweis */}
-        {!loading && !error && hasResults && (
-          <section className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <span className="text-zinc-600 dark:text-zinc-300">{hasResults}</span>
-          </section>
+        {!loading && !error && hasBulkFeedback && (
+          <div className="flex flex-col gap-2">
+            {bulkActions.bulkDeleteResult && (
+              <BulkActionResultPanel summary={bulkActions.bulkDeleteResult} />
+            )}
+            {bulkActions.bulkUpdateResult && (
+              <BulkActionResultPanel summary={bulkActions.bulkUpdateResult} />
+            )}
+            {bulkActions.bulkSummarizeResult && (
+              <BulkActionResultPanel summary={bulkActions.bulkSummarizeResult} />
+            )}
+            {bulkActions.bulkSteeringResult && (
+              <BulkActionResultPanel summary={bulkActions.bulkSteeringResult} />
+            )}
+          </div>
         )}
 
         {/* Auswahl: Alle / Keine */}
@@ -266,7 +279,7 @@ export function DocumentsPageClient() {
         )}
 
         {/* Fehler */}
-        {error && <p className="text-sm text-red-600">Fehler beim Laden der Dokumente: {error}</p>}
+        {error && <ApiErrorCallout error={error} title="Dokumentenliste" className="text-sm" />}
 
         {/* Leer */}
         {!loading && !error && docs.length === 0 && (

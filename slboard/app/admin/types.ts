@@ -11,6 +11,8 @@ export type AppUser = {
   password_change_required?: boolean;
   /** false = bei Schulregistrierung angelegter Admin (nicht löschbar) */
   deletable?: boolean;
+  /** false = Konto deaktiviert (kein Schulzugriff); Standard true */
+  active?: boolean;
 };
 
 export type DocumentTypeOption = {

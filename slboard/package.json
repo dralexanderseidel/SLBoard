@@ -19,7 +19,8 @@
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^5.5.207",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "sonner": "^2.0.7"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.0",

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { readApiJson } from '@/lib/readApiJson';
+import type { SerializedApiError } from '@/lib/apiUserError';
+import { ApiUserError, serializeApiError } from '@/lib/apiUserError';
+import { readApiJsonOk } from '@/lib/readApiJson';
 import type { DocumentDetail, SteeringAnalysis, SteeringTodosResult } from '../types';
 
 type UseDocumentSteeringResult = {
@@ -7,13 +9,13 @@ type UseDocumentSteeringResult = {
   setSteeringAnalysis: React.Dispatch<React.SetStateAction<SteeringAnalysis | null>>;
   steeringUpdatedAt: string | null;
   steeringLoading: boolean;
-  steeringError: string | null;
+  steeringError: SerializedApiError | null;
   handleSteeringAnalysis: (force?: boolean) => Promise<void>;
   steeringTodos: SteeringTodosResult | null;
   setSteeringTodos: React.Dispatch<React.SetStateAction<SteeringTodosResult | null>>;
   steeringTodosUpdatedAt: string | null;
   todosLoading: boolean;
-  todosError: string | null;
+  todosError: SerializedApiError | null;
   handleSteeringTodos: (force?: boolean) => Promise<void>;
 };
 
@@ -24,12 +26,12 @@ export function useDocumentSteering(
   const [steeringAnalysis, setSteeringAnalysis] = useState<SteeringAnalysis | null>(null);
   const [steeringUpdatedAt, setSteeringUpdatedAt] = useState<string | null>(null);
   const [steeringLoading, setSteeringLoading] = useState(false);
-  const [steeringError, setSteeringError] = useState<string | null>(null);
+  const [steeringError, setSteeringError] = useState<SerializedApiError | null>(null);
 
   const [steeringTodos, setSteeringTodos] = useState<SteeringTodosResult | null>(null);
   const [steeringTodosUpdatedAt, setSteeringTodosUpdatedAt] = useState<string | null>(null);
   const [todosLoading, setTodosLoading] = useState(false);
-  const [todosError, setTodosError] = useState<string | null>(null);
+  const [todosError, setTodosError] = useState<SerializedApiError | null>(null);
 
   // Initialisierung aus dem geladenen Dokument
   useEffect(() => {
@@ -56,13 +58,19 @@ export function useDocumentSteering(
         credentials: 'include',
         body: JSON.stringify({ force }),
       });
-      const data = await readApiJson<{
+      const data = await readApiJsonOk<{
         analysis?: SteeringAnalysis;
         error?: string;
         updatedAt?: string | null;
-      }>(res);
-      if (!res.ok || !data.analysis) {
-        throw new Error(data.error ?? 'Analyse konnte nicht erstellt werden.');
+      }>(res, 'Analyse konnte nicht erstellt werden.');
+      if (!data.analysis) {
+        throw new ApiUserError(
+          typeof data.error === 'string' && data.error.trim()
+            ? data.error.trim()
+            : 'Analyse konnte nicht erstellt werden.',
+          JSON.stringify(data),
+          res.status,
+        );
       }
       setSteeringAnalysis(data.analysis);
       if (data.updatedAt !== undefined) {
@@ -71,7 +79,7 @@ export function useDocumentSteering(
         setSteeringUpdatedAt(new Date().toISOString());
       }
     } catch (e) {
-      setSteeringError(e instanceof Error ? e.message : 'Analyse konnte nicht erstellt werden.');
+      setSteeringError(serializeApiError(e, 'Analyse konnte nicht erstellt werden.'));
     } finally {
       setSteeringLoading(false);
     }
@@ -88,13 +96,19 @@ export function useDocumentSteering(
         credentials: 'include',
         body: JSON.stringify({ force }),
       });
-      const data = await readApiJson<{
+      const data = await readApiJsonOk<{
         todos?: SteeringTodosResult;
         error?: string;
         updatedAt?: string | null;
-      }>(res);
-      if (!res.ok || !data.todos) {
-        throw new Error(data.error ?? 'Aufgaben konnten nicht extrahiert werden.');
+      }>(res, 'Aufgaben konnten nicht extrahiert werden.');
+      if (!data.todos) {
+        throw new ApiUserError(
+          typeof data.error === 'string' && data.error.trim()
+            ? data.error.trim()
+            : 'Aufgaben konnten nicht extrahiert werden.',
+          JSON.stringify(data),
+          res.status,
+        );
       }
       setSteeringTodos(data.todos);
       if (data.updatedAt !== undefined) {
@@ -103,7 +117,7 @@ export function useDocumentSteering(
         setSteeringTodosUpdatedAt(new Date().toISOString());
       }
     } catch (e) {
-      setTodosError(e instanceof Error ? e.message : 'Aufgaben konnten nicht extrahiert werden.');
+      setTodosError(serializeApiError(e, 'Aufgaben konnten nicht extrahiert werden.'));
     } finally {
       setTodosLoading(false);
     }
