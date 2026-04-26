@@ -19,6 +19,7 @@ export function LoginPageClient() {
   const [message, setMessage] = useState<string | null>(null);
   const registrationDone = searchParams.get('registered') === '1';
   const schoolInactive = searchParams.get('reason') === 'school_inactive';
+  const accountInactive = searchParams.get('reason') === 'account_inactive';
   const schoolFromQuery = searchParams.get('school') ?? '';
 
   useEffect(() => {
