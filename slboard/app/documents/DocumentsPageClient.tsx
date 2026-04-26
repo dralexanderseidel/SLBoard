@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { buildDashboardDocsHref } from '@/lib/dashboardDocSelection';
 import { docTypeLabelDe } from '@/lib/documentMeta';
 import { useDocumentMetadataOptions } from '@/app/documents/[id]/hooks/useDocumentMetadataOptions';
 import { useDocumentFilters } from './hooks/useDocumentFilters';
@@ -21,7 +22,7 @@ import { useHeaderAccess } from '@/components/HeaderAccessContext';
 import type { SortField, SortDir } from './types';
 
 export function DocumentsPageClient() {
-  const { access } = useHeaderAccess();
+  const { access, accessLoading } = useHeaderAccess();
   const featureAiEnabled = access?.featureAiEnabled !== false;
 
   const router = useRouter();
@@ -47,7 +48,12 @@ export function DocumentsPageClient() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   // ── Data ───────────────────────────────────────────────────────────────────
-  const { docs, setDocs, loading, error, reload, cancelInFlight } = useDocumentList(filters, archiveView);
+  const { docs, setDocs, loading, error, reload, cancelInFlight } = useDocumentList(
+    filters,
+    archiveView,
+    sortField,
+    sortDir,
+  );
   const { documentTypeOptions, responsibleUnitOptions } = useDocumentMetadataOptions();
 
   // ── Selection + bulk ───────────────────────────────────────────────────────
@@ -88,14 +94,7 @@ export function DocumentsPageClient() {
     return sortDir === 'asc' ? '↑' : '↓';
   }, [sortField, sortDir]);
 
-  const displayedDocs = useMemo(() => [...docs].sort((a, b) => {
-    const m = sortDir === 'asc' ? 1 : -1;
-    if (sortField === 'created_at') return (new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) * m;
-    if (sortField === 'title') return a.title.localeCompare(b.title, 'de-DE') * m;
-    if (sortField === 'document_type_code') return a.document_type_code.localeCompare(b.document_type_code, 'de-DE') * m;
-    if (sortField === 'status') return a.status.localeCompare(b.status, 'de-DE') * m;
-    return 0;
-  }), [docs, sortField, sortDir]);
+  const displayedDocs = docs;
 
   const docTypeLabel = useCallback((code: string) => docTypeLabelDe(code, documentTypeOptions), [documentTypeOptions]);
   const allSelected = allVisibleIds.length > 0 && selection.selectedIds.length === allVisibleIds.length;
@@ -165,6 +164,26 @@ export function DocumentsPageClient() {
           </div>
         </header>
 
+        {!accessLoading && access?.orgUnit?.trim() && (
+          <section className="flex flex-wrap items-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 py-2 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <span className="font-medium text-zinc-600 dark:text-zinc-400">Schnellfilter</span>
+            <button
+              type="button"
+              onClick={() => {
+                const u = access.orgUnit!.trim();
+                filters.setResponsibleUnitFilter(filters.responsibleUnitFilter === u ? '' : u);
+              }}
+              className={`rounded-full border px-3 py-1 text-[11px] font-medium transition ${
+                filters.responsibleUnitFilter === access.orgUnit!.trim()
+                  ? 'border-blue-400 bg-blue-50 text-blue-950 dark:border-blue-600 dark:bg-blue-950/50 dark:text-blue-50'
+                  : 'border-zinc-300 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700'
+              }`}
+            >
+              Nur meine Organisationseinheit
+            </button>
+          </section>
+        )}
+
         {/* Filter-Leiste */}
         <DocumentFilterBar
           {...filters}
@@ -214,14 +233,24 @@ export function DocumentsPageClient() {
                 <span className="text-zinc-700 dark:text-zinc-200">Keine</span>
               </label>
             </div>
-            <span className="text-zinc-600 dark:text-zinc-300">
-              Ausgewählt: <span className="font-semibold">{selection.selectedIds.length}</span>
-            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-zinc-600 dark:text-zinc-300">
+                Ausgewählt: <span className="font-semibold">{selection.selectedIds.length}</span>
+              </span>
+              {!archiveView && featureAiEnabled && selection.selectedIds.length > 0 && (
+                <Link
+                  href={buildDashboardDocsHref(selection.selectedIds)}
+                  className="inline-flex h-8 items-center rounded-md border border-blue-300 bg-blue-50 px-3 text-xs font-medium text-blue-950 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-50 dark:hover:bg-blue-950/70"
+                >
+                  Im Dashboard fragen
+                </Link>
+              )}
+            </div>
           </section>
         )}
 
         {/* Bulk-Aktionen */}
-        {!loading && !error && docs.length > 0 && selection.selectedIds.length > 1 && (
+        {!loading && !error && docs.length > 0 && selection.selectedIds.length > 0 && (
           <BulkActionsBar
             {...bulkActions}
             selectedIds={selection.selectedIds}

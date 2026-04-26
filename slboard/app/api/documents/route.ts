@@ -44,6 +44,7 @@ const DOCUMENT_LIST_SELECT = [
   'gremium',
   'responsible_unit',
   'participation_groups',
+  'review_date',
   'summary',
   'school_number',
   'archived_at',
@@ -79,6 +80,8 @@ function mapDocumentListRow(raw: Record<string, unknown>): Record<string, unknow
  * - steering (has|missing|low|medium|high) — Steuerungsanalyse; low/medium/high = Ampel (Gesamtbewertung)
  * - archive=1 — nur archivierte Dokumente; sonst nur aktive (archived_at IS NULL)
  * - status kann als einzelne Statuskennung oder als kommaseparierte Liste kommen
+ * - sort=created_at|title|status|document_type_code|review_date (Standard: created_at)
+ * - sortDir=asc|desc (Standard: desc)
  */
 export async function GET(req: NextRequest) {
   try {
@@ -108,8 +111,13 @@ export async function GET(req: NextRequest) {
     const summaryFilter = searchParams.get('summary') ?? '';
     const steeringFilter = searchParams.get('steering') ?? '';
     const archiveParam = searchParams.get('archive') ?? '';
+    const sortRaw = (searchParams.get('sort') ?? 'created_at').trim();
+    const sortDirRaw = (searchParams.get('sortDir') ?? 'desc').trim().toLowerCase();
+    const allowedSort = new Set(['created_at', 'title', 'status', 'document_type_code', 'review_date']);
+    const sortColumn = allowedSort.has(sortRaw) ? sortRaw : 'created_at';
+    const ascending = sortDirRaw === 'asc';
 
-    let query = supabase.from('documents').select(DOCUMENT_LIST_SELECT).order('created_at', { ascending: false });
+    let query = supabase.from('documents').select(DOCUMENT_LIST_SELECT);
 
     if (access.schoolNumber) {
       query = query.eq('school_number', access.schoolNumber);
@@ -231,6 +239,10 @@ export async function GET(req: NextRequest) {
       );
     }
     // 'missing' wird nach dem Fetch in-memory gefiltert (erfordert Negation des JSON-Pfads)
+
+    query = query.order(sortColumn as 'created_at' | 'title' | 'status' | 'document_type_code' | 'review_date', {
+      ascending,
+    });
 
     // Sicherheitsnetz: max. 500 Dokumente pro Anfrage
     query = query.limit(500);

@@ -25,7 +25,7 @@ export function useBulkSelection(onClearResults: () => void = () => {}): UseBulk
   const capabilitiesSeqRef = useRef(0);
 
   useEffect(() => {
-    if (selectedIds.length <= 1) {
+    if (selectedIds.length === 0) {
       setEditableSelectedIds([]);
       setBlockedSelectedIds([]);
       setBulkCapabilitiesLoading(false);

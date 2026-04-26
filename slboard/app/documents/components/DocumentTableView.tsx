@@ -31,6 +31,7 @@ const SORT_COLUMNS = [
   { field: 'document_type_code' as const, label: 'Typ' },
   { field: 'status' as const, label: 'Status' },
   { field: 'created_at' as const, label: 'Erstellt am' },
+  { field: 'review_date' as const, label: 'Evaluation' },
 ];
 
 const SvgDots = () => (
@@ -157,6 +158,13 @@ export function DocumentTableView({
                 {isYesterday(doc.created_at) && !isToday(doc.created_at) && (
                   <span className="ml-2 inline-flex items-center rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 text-[11px] font-medium text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-200">Gestern</span>
                 )}
+              </td>
+
+              {/* Evaluation / Wiedervorlage */}
+              <td className="px-3 py-2 whitespace-nowrap text-zinc-700 dark:text-zinc-200">
+                {doc.review_date
+                  ? new Date(`${doc.review_date}T12:00:00`).toLocaleDateString('de-DE')
+                  : '—'}
               </td>
 
               {/* KI-Status */}

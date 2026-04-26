@@ -9,6 +9,7 @@ export type DocumentListItem = {
   gremium: string | null;
   responsible_unit: string;
   participation_groups?: string[] | null;
+  review_date?: string | null;
   summary: string | null;
   steering_analysis?: {
     gesamtbewertung?: {
@@ -18,5 +19,5 @@ export type DocumentListItem = {
 };
 
 export type ViewMode = 'table' | 'cards' | 'compact';
-export type SortField = 'created_at' | 'title' | 'document_type_code' | 'status';
+export type SortField = 'created_at' | 'title' | 'document_type_code' | 'status' | 'review_date';
 export type SortDir = 'asc' | 'desc';

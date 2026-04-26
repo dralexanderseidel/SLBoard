@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiUserError, type SerializedApiError } from '@/lib/apiUserError';
 import type { DocumentFilters } from './useDocumentFilters';
-import type { DocumentListItem } from '../types';
+import type { DocumentListItem, SortDir, SortField } from '../types';
 
 type UseDocumentListResult = {
   docs: DocumentListItem[];
@@ -16,6 +16,8 @@ type UseDocumentListResult = {
 export function useDocumentList(
   filters: DocumentFilters,
   archiveView: boolean,
+  sortField: SortField,
+  sortDir: SortDir,
 ): UseDocumentListResult {
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,6 +47,8 @@ export function useDocumentList(
     if (filters.steeringFilter) params.set('steering', filters.steeringFilter);
     if (filters.searchQuery.trim()) params.set('search', filters.searchQuery.trim());
     if (archiveView) params.set('archive', '1');
+    params.set('sort', sortField);
+    params.set('sortDir', sortDir);
 
     const url = `/api/documents${params.toString() ? `?${params.toString()}` : ''}`;
 
@@ -101,6 +105,8 @@ export function useDocumentList(
     filters.steeringFilter,
     filters.searchQuery,
     archiveView,
+    sortField,
+    sortDir,
     reloadKey,
   ]);
 

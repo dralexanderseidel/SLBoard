@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ApiErrorCallout } from '../components/ApiErrorCallout';
 import type { SerializedApiError } from '../lib/apiUserError';
 import { serializeApiError } from '../lib/apiUserError';
@@ -9,6 +10,7 @@ import { readApiJsonOk } from '../lib/readApiJson';
 import { LONG_RUNNING_EXPECTATION_HINT } from '../lib/longRunningExpectationHint';
 import { supabase } from '../lib/supabaseClient';
 import { useHeaderAccess } from '../components/HeaderAccessContext';
+import { parseDashboardDocsQueryParam } from '../lib/dashboardDocSelection';
 
 type RecentQuery = {
   id: number | string;
@@ -81,6 +83,11 @@ export default function Home() {
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [onboardingDismissed, setOnboardingDismissed] = useState(true);
   const dashboardAiGenRef = useRef(0);
+  /** Nach ?docs=…-Hydration: leere Frage soll die Dokumentauswahl nicht zurücksetzen. */
+  const hydratedFromDocsLinkRef = useRef(false);
+  const docsHydrateSeqRef = useRef(0);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { access, accessLoading } = useHeaderAccess();
   const dashboardAiDisabled = !accessLoading && access != null && access.featureAiEnabled === false;
   const showDraftsHomeCard = !(!accessLoading && access != null && access.featureDraftsEnabled === false);
@@ -103,11 +110,61 @@ export default function Home() {
       setQueryError(null);
       setQueryLoading(false);
       setHistoryAnswerLoading(false);
-      setSuggestLoading(false);
-      setSuggestedDocuments([]);
-      setSelectedDocumentIds([]);
+      if (!hydratedFromDocsLinkRef.current) {
+        setSuggestedDocuments([]);
+        setSelectedDocumentIds([]);
+      }
     }
   }, [question]);
+
+  /** ?docs=uuid,uuid — Kontext aus der Dokumentenliste; Query danach entfernen. */
+  useEffect(() => {
+    const raw = searchParams.get('docs')?.trim() ?? '';
+    const ids = parseDashboardDocsQueryParam(raw);
+    if (ids.length === 0) return;
+
+    if (dashboardAiDisabled) {
+      hydratedFromDocsLinkRef.current = false;
+      router.replace('/', { scroll: false });
+      return;
+    }
+
+    const seq = ++docsHydrateSeqRef.current;
+    setQueryError(null);
+    setSuggestLoading(true);
+    void (async () => {
+      try {
+        const res = await fetch('/api/ai/suggest-documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: '',
+            ensureIds: ids,
+            maxResults: Math.max(ids.length, 10),
+            allowBrowseFallback: false,
+          }),
+        });
+        const data = await readApiJsonOk<{
+          suggestedDocuments?: SuggestedDoc[];
+          error?: string;
+        }>(res, 'Dokumente für die KI konnten nicht geladen werden.');
+        if (seq !== docsHydrateSeqRef.current) return;
+        const list = data.suggestedDocuments ?? [];
+        hydratedFromDocsLinkRef.current = list.length > 0;
+        setSuggestedDocuments(list);
+        setSelectedDocumentIds(list.map((d) => d.id));
+      } catch (err: unknown) {
+        if (seq !== docsHydrateSeqRef.current) return;
+        hydratedFromDocsLinkRef.current = false;
+        setQueryError(serializeApiError(err, 'Dokumente für die KI konnten nicht geladen werden.'));
+      } finally {
+        if (seq === docsHydrateSeqRef.current) {
+          setSuggestLoading(false);
+          router.replace('/', { scroll: false });
+        }
+      }
+    })();
+  }, [searchParams, dashboardAiDisabled, router]);
 
   const daysDiffFromToday = (isoDateOrTs: string) => {
     const d = new Date(isoDateOrTs);
@@ -170,6 +227,7 @@ export default function Home() {
     const trimmed = question.trim();
     if (!trimmed) return;
     const requestGen = ++dashboardAiGenRef.current;
+    hydratedFromDocsLinkRef.current = false;
     setQueryError(null);
     setQueryAnswer(null);
     setQuerySources([]);
@@ -269,7 +327,7 @@ export default function Home() {
       void handleAskWithSelected();
       return;
     }
-    if (suggestedDocuments.length === 0) {
+    if (suggestedDocuments.length === 0 && selectedDocumentIds.length === 0) {
       void handleSuggestDocuments();
       return;
     }
@@ -292,6 +350,15 @@ export default function Home() {
           <h2 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
             Was gilt bei uns zu diesem Thema?
           </h2>
+          {suggestedDocuments.length > 0 && !question.trim() && (
+            <p className="mb-3 rounded border border-blue-200 bg-blue-50/80 px-3 py-2 text-xs text-blue-950 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-100">
+              Dokumente aus der Liste wurden als KI-Kontext übernommen. Stellen Sie unten Ihre Frage — dann{' '}
+              <kbd className="rounded border border-blue-300/80 bg-white px-1 py-px font-mono text-[10px] dark:border-blue-800 dark:bg-zinc-900">
+                Enter
+              </kbd>{' '}
+              oder „Frage mit ausgewählten Dokumenten beantworten“ nutzen.
+            </p>
+          )}
           {dashboardAiDisabled && (
             <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
               KI-Funktionen sind für Ihre Schule deaktiviert. Bei Bedarf wenden Sie sich an den Plattform-Administrator.
@@ -336,7 +403,6 @@ export default function Home() {
                   value={question}
                   onChange={(e) => {
                     setQuestion(e.target.value);
-                    if (suggestedDocuments.length > 0) setSuggestedDocuments([]);
                   }}
                   onKeyDown={handleQuestionKeyDown}
                   placeholder="z. B. Handynutzung in Pausen, Medienwoche, Leistungsbewertung Oberstufe…"
