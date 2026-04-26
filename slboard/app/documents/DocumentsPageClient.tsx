@@ -17,9 +17,12 @@ import { BulkActionResultPanel } from './components/BulkActionResultPanel';
 import { DocumentTableView } from './components/DocumentTableView';
 import { DocumentCardsView } from './components/DocumentCardsView';
 import { DocumentCompactView } from './components/DocumentCompactView';
+import { DocumentListPagination } from './components/DocumentListPagination';
 import { ApiErrorCallout } from '@/components/ApiErrorCallout';
 import { useHeaderAccess } from '@/components/HeaderAccessContext';
 import type { SortField, SortDir } from './types';
+
+const DOCUMENT_LIST_PAGE_SIZE = 25;
 
 export function DocumentsPageClient() {
   const { access, accessLoading } = useHeaderAccess();
@@ -48,7 +51,7 @@ export function DocumentsPageClient() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   // ── Data ───────────────────────────────────────────────────────────────────
-  const { docs, setDocs, loading, error, reload, cancelInFlight } = useDocumentList(
+  const { docs, setDocs, loading, error, listMeta, reload, cancelInFlight } = useDocumentList(
     filters,
     archiveView,
     sortField,
@@ -56,8 +59,70 @@ export function DocumentsPageClient() {
   );
   const { documentTypeOptions, responsibleUnitOptions } = useDocumentMetadataOptions();
 
+  const [listPage, setListPage] = useState(1);
+
+  const listPageDepsKey = useMemo(
+    () =>
+      [
+        filters.typeFilter,
+        filters.responsibleUnitFilter,
+        filters.statusFilters.join('\u0001'),
+        filters.protectionFilter,
+        filters.reachScopeFilters.join('\u0001'),
+        filters.participationFilter,
+        filters.gremiumFilter,
+        filters.reviewFilter,
+        filters.summaryFilter,
+        filters.steeringFilter,
+        filters.searchQuery,
+        archiveView,
+        sortField,
+        sortDir,
+      ].join('|'),
+    [
+      filters.typeFilter,
+      filters.responsibleUnitFilter,
+      filters.statusFilters,
+      filters.protectionFilter,
+      filters.reachScopeFilters,
+      filters.participationFilter,
+      filters.gremiumFilter,
+      filters.reviewFilter,
+      filters.summaryFilter,
+      filters.steeringFilter,
+      filters.searchQuery,
+      archiveView,
+      sortField,
+      sortDir,
+    ],
+  );
+
+  useEffect(() => {
+    setListPage(1);
+  }, [listPageDepsKey]);
+
+  const listTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(docs.length / DOCUMENT_LIST_PAGE_SIZE)),
+    [docs.length],
+  );
+
+  const listPageClamped = Math.min(Math.max(1, listPage), listTotalPages);
+
+  useEffect(() => {
+    if (listPage !== listPageClamped) setListPage(listPageClamped);
+  }, [listPage, listPageClamped]);
+
+  const pagedDocs = useMemo(
+    () =>
+      docs.slice(
+        (listPageClamped - 1) * DOCUMENT_LIST_PAGE_SIZE,
+        listPageClamped * DOCUMENT_LIST_PAGE_SIZE,
+      ),
+    [docs, listPageClamped],
+  );
+
   // ── Selection + bulk ───────────────────────────────────────────────────────
-  const allVisibleIds = useMemo(() => docs.map((d) => d.id), [docs]);
+  const allVisibleIds = useMemo(() => pagedDocs.map((d) => d.id), [pagedDocs]);
 
   const selection = useBulkSelection();
   const bulkActions = useBulkActions({
@@ -94,7 +159,7 @@ export function DocumentsPageClient() {
     return sortDir === 'asc' ? '↑' : '↓';
   }, [sortField, sortDir]);
 
-  const displayedDocs = docs;
+  const displayedDocs = pagedDocs;
 
   const docTypeLabel = useCallback((code: string) => docTypeLabelDe(code, documentTypeOptions), [documentTypeOptions]);
   const allSelected = allVisibleIds.length > 0 && selection.selectedIds.length === allVisibleIds.length;
@@ -191,6 +256,13 @@ export function DocumentsPageClient() {
           responsibleUnitOptions={responsibleUnitOptions}
           onResetFilters={filters.resetFilters}
         />
+
+        {!loading && !error && docs.length > 0 && listMeta?.truncated && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+            Die Datenbankabfrage wurde am Serverlimit begrenzt. Es können weitere Dokumente existieren, die hier nicht
+            erscheinen — bitte Filter oder Suche verfeinern.
+          </p>
+        )}
 
         {/* Ergebnis-Hinweis */}
         {!loading && !error && hasBulkFeedback && (
@@ -448,6 +520,16 @@ export function DocumentsPageClient() {
             isBusy={bulkActions.isBusy}
             docTypeLabel={docTypeLabel}
             rowActions={rowActions}
+          />
+        )}
+
+        {!loading && !error && docs.length > 0 && (
+          <DocumentListPagination
+            page={listPageClamped}
+            totalPages={listTotalPages}
+            pageSize={DOCUMENT_LIST_PAGE_SIZE}
+            totalItems={docs.length}
+            onPageChange={setListPage}
           />
         )}
 

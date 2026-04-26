@@ -3,11 +3,19 @@ import { ApiUserError, type SerializedApiError } from '@/lib/apiUserError';
 import type { DocumentFilters } from './useDocumentFilters';
 import type { DocumentListItem, SortDir, SortField } from '../types';
 
+export type DocumentListMeta = {
+  /** Anzahl der nach Berechtigungsfilter sichtbaren Einträge in dieser Antwort */
+  total: number;
+  /** true, wenn die DB-Abfrage am Abruflimit war (weitere Zeilen in der DB möglich) */
+  truncated: boolean;
+};
+
 type UseDocumentListResult = {
   docs: DocumentListItem[];
   setDocs: React.Dispatch<React.SetStateAction<DocumentListItem[]>>;
   loading: boolean;
   error: SerializedApiError | null;
+  listMeta: DocumentListMeta | null;
   reload: () => void;
   /** In-flight Ladeanfragen abbrechen (für Bulk-Aktionen) */
   cancelInFlight: () => void;
@@ -20,6 +28,7 @@ export function useDocumentList(
   sortDir: SortDir,
 ): UseDocumentListResult {
   const [docs, setDocs] = useState<DocumentListItem[]>([]);
+  const [listMeta, setListMeta] = useState<DocumentListMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<SerializedApiError | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -33,6 +42,7 @@ export function useDocumentList(
     const controller = new AbortController();
     setLoading(true);
     setError(null);
+    setListMeta(null);
 
     const params = new URLSearchParams();
     if (filters.typeFilter) params.set('type', filters.typeFilter);
@@ -59,6 +69,8 @@ export function useDocumentList(
       } catch {
         if (controller.signal.aborted) return;
         setError({ userMessage: 'Netzwerkfehler beim Laden.', detail: null });
+        setDocs([]);
+        setListMeta(null);
         setLoading(false);
         return;
       }
@@ -69,24 +81,37 @@ export function useDocumentList(
       if (!res.ok) {
         setError(ApiUserError.fromFailedResponse(res.status, text, 'Fehler beim Laden der Dokumente.').toJSON());
         setDocs([]);
+        setListMeta(null);
         setLoading(false);
         return;
       }
 
-      let json: { data?: DocumentListItem[]; error?: string };
+      let json: { data?: DocumentListItem[]; meta?: { total?: number; truncated?: boolean }; error?: string };
       try {
-        json = JSON.parse(text) as { data?: DocumentListItem[]; error?: string };
+        json = JSON.parse(text) as {
+          data?: DocumentListItem[];
+          meta?: { total?: number; truncated?: boolean };
+          error?: string;
+        };
       } catch {
         setError({
           userMessage: 'Ungültige Antwort beim Laden der Dokumentenliste.',
           detail: text.slice(0, 2000) + (text.length > 2000 ? '…' : ''),
         });
         setDocs([]);
+        setListMeta(null);
         setLoading(false);
         return;
       }
 
-      setDocs(json.data ?? []);
+      const rows = json.data ?? [];
+      setDocs(rows);
+      const m = json.meta;
+      if (m && typeof m.total === 'number') {
+        setListMeta({ total: m.total, truncated: !!m.truncated });
+      } else {
+        setListMeta({ total: rows.length, truncated: false });
+      }
       setLoading(false);
     };
 
@@ -110,5 +135,5 @@ export function useDocumentList(
     reloadKey,
   ]);
 
-  return { docs, setDocs, loading, error, reload, cancelInFlight };
+  return { docs, setDocs, loading, error, listMeta, reload, cancelInFlight };
 }

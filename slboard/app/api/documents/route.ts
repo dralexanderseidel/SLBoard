@@ -31,6 +31,8 @@ function isSteeringAnalysisPresent(steering_analysis: unknown): boolean {
 }
 
 const LIST_SUMMARY_MAX_CHARS = 320;
+/** Max. Zeilen aus der DB pro Anfrage (danach Berechtigungsfilter im Speicher). */
+const DOCUMENT_LIST_FETCH_CAP = 2000;
 
 /** Liste: nur Gesamtbewertung aus JSON (PostgREST-Pfad), kein vollständiges steering_analysis. */
 const DOCUMENT_LIST_SELECT = [
@@ -82,6 +84,10 @@ function mapDocumentListRow(raw: Record<string, unknown>): Record<string, unknow
  * - status kann als einzelne Statuskennung oder als kommaseparierte Liste kommen
  * - sort=created_at|title|status|document_type_code|review_date (Standard: created_at)
  * - sortDir=asc|desc (Standard: desc)
+ *
+ * Antwort enthält optional `meta`: `{ total, truncated }` — `truncated` wenn die DB-Abfrage
+ * am Abruflimit anstößt (es können weitere Zeilen existieren, die nach Berechtigungsfilter
+ * nicht mitgezählt werden).
  */
 export async function GET(req: NextRequest) {
   try {
@@ -244,8 +250,7 @@ export async function GET(req: NextRequest) {
       ascending,
     });
 
-    // Sicherheitsnetz: max. 500 Dokumente pro Anfrage
-    query = query.limit(500);
+    query = query.limit(DOCUMENT_LIST_FETCH_CAP);
 
     const { data, error } = await query;
 
@@ -253,7 +258,10 @@ export async function GET(req: NextRequest) {
       return apiError(500, 'INTERNAL_ERROR', error.message);
     }
 
-    const mapped = (data ?? []).map((d) => mapDocumentListRow(d as unknown as Record<string, unknown>));
+    const rawRows = data ?? [];
+    const dbTruncated = rawRows.length >= DOCUMENT_LIST_FETCH_CAP;
+
+    const mapped = rawRows.map((d) => mapDocumentListRow(d as unknown as Record<string, unknown>));
 
     let filtered = mapped.filter((d) =>
       canAccessSchool(access, d.school_number as string | null) &&
@@ -264,7 +272,10 @@ export async function GET(req: NextRequest) {
       filtered = filtered.filter((d) => !isSteeringAnalysisPresent(d.steering_analysis));
     }
 
-    return NextResponse.json({ data: filtered });
+    return NextResponse.json({
+      data: filtered,
+      meta: { total: filtered.length, truncated: dbTruncated },
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return apiError(500, 'INTERNAL_ERROR', message);
