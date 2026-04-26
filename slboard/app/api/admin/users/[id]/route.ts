@@ -131,19 +131,18 @@ export async function PATCH(
 
     const { id } = await params;
     const body = await req.json();
-    const updates: Record<string, string> = {};
-    if (typeof body.username === 'string' && body.username.trim()) updates.username = body.username.trim();
-    if (typeof body.full_name === 'string' && body.full_name.trim()) updates.full_name = body.full_name.trim();
+    const dbUpdates: Record<string, string | boolean> = {};
+    if (typeof body.username === 'string' && body.username.trim()) dbUpdates.username = body.username.trim();
+    if (typeof body.full_name === 'string' && body.full_name.trim()) dbUpdates.full_name = body.full_name.trim();
     if (typeof body.email === 'string' && body.email.trim()) {
-      updates.email = body.email.trim().toLowerCase();
+      dbUpdates.email = body.email.trim().toLowerCase();
     }
-    if (typeof body.org_unit === 'string' && body.org_unit.trim()) updates.org_unit = body.org_unit.trim();
+    if (typeof body.org_unit === 'string' && body.org_unit.trim()) dbUpdates.org_unit = body.org_unit.trim();
+    if (typeof body.active === 'boolean') dbUpdates.active = body.active;
 
     const tempPwd = (body.temporary_password as string | undefined)?.trim() ?? '';
-    const activePatch =
-      typeof body.active === 'boolean' ? { active: body.active as boolean } : null;
 
-    if (Object.keys(updates).length === 0 && !tempPwd && !activePatch) {
+    if (Object.keys(dbUpdates).length === 0 && !tempPwd) {
       return apiError(400, 'VALIDATION_ERROR', 'Keine Felder zum Aktualisieren.');
     }
 
@@ -158,12 +157,12 @@ export async function PATCH(
       return apiError(403, 'FORBIDDEN', 'Keine Berechtigung für diesen Nutzer.');
     }
 
-    if (Object.keys(updates).length > 0) {
+    if (Object.keys(dbUpdates).length > 0) {
       let updateQuery = supabase
         .from('app_users')
-        .update(updates)
+        .update(dbUpdates)
         .eq('id', id)
-        .select('id, username, full_name, email, org_unit, school_number, created_at');
+        .select('id, username, full_name, email, org_unit, school_number, created_at, active');
       if (targetSchool) updateQuery = updateQuery.eq('school_number', targetSchool);
       const { data, error } = await updateQuery.single();
 
