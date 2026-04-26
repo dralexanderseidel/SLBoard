@@ -268,8 +268,14 @@ export type DocumentTextDiagnostics = {
   pdfJsError: string | null;
 };
 
-export async function getDocumentTextDiagnostics(documentId: string): Promise<DocumentTextDiagnostics> {
-  const base: DocumentTextDiagnostics = {
+export type DocumentTextResult = {
+  diagnostics: DocumentTextDiagnostics;
+  /** Extrahierter bzw. Metadaten-Text; ein Download/Parse pro Aufruf. */
+  text: string | null;
+};
+
+function emptyDiagnostics(documentId: string): DocumentTextDiagnostics {
+  return {
     documentId,
     currentVersionId: null,
     fileUri: null,
@@ -289,9 +295,17 @@ export async function getDocumentTextDiagnostics(documentId: string): Promise<Do
     pdfJsTextLength: 0,
     pdfJsError: null,
   };
+}
 
+/**
+ * Lädt den Dokumenttext höchstens einmal (Storage + Parser). Nutzen für Diagnose und Volltext.
+ */
+export async function getDocumentTextWithDiagnostics(documentId: string): Promise<DocumentTextResult> {
+  const base = emptyDiagnostics(documentId);
   const supabase = supabaseServer();
-  if (!supabase) return base;
+  if (!supabase) {
+    return { diagnostics: base, text: null };
+  }
 
   const { data: doc, error: docError } = await supabase
     .from('documents')
@@ -299,17 +313,22 @@ export async function getDocumentTextDiagnostics(documentId: string): Promise<Do
     .eq('id', documentId)
     .single();
 
-  if (docError || !doc) return base;
+  if (docError || !doc) {
+    return { diagnostics: base, text: null };
+  }
 
   base.currentVersionId = (doc.current_version_id as string | null) ?? null;
   const legalRef = (doc.legal_reference as string | null)?.trim() ?? '';
   if (legalRef.length > 0) {
     base.usedLegalReference = true;
     base.textLength = legalRef.length;
-    return base;
+    base.extractionMethod = 'none';
+    return { diagnostics: base, text: legalRef };
   }
 
-  if (!doc.current_version_id) return base;
+  if (!doc.current_version_id) {
+    return { diagnostics: base, text: null };
+  }
 
   const { data: ver, error: verError } = await supabase
     .from('document_versions')
@@ -319,7 +338,7 @@ export async function getDocumentTextDiagnostics(documentId: string): Promise<Do
 
   if (verError || !ver?.file_uri) {
     base.parserError = verError?.message ?? 'Version oder file_uri nicht gefunden.';
-    return base;
+    return { diagnostics: base, text: null };
   }
 
   const rawMime = (ver.mime_type as string | null) ?? 'application/octet-stream';
@@ -340,17 +359,15 @@ export async function getDocumentTextDiagnostics(documentId: string): Promise<Do
 
   if (!isPdf && !isWord) {
     base.parserError = `Dateityp wird nicht unterstützt: ${normalizedMime}`;
-    return base;
+    return { diagnostics: base, text: null };
   }
 
   base.attemptedDownload = true;
-  const { data: fileData, error: downloadError } = await supabase.storage
-    .from('documents')
-    .download(fileUri);
+  const { data: fileData, error: downloadError } = await supabase.storage.from('documents').download(fileUri);
 
   if (downloadError || !fileData) {
     base.downloadError = downloadError?.message ?? 'Datei konnte nicht geladen werden.';
-    return base;
+    return { diagnostics: base, text: null };
   }
 
   try {
@@ -369,67 +386,26 @@ export async function getDocumentTextDiagnostics(documentId: string): Promise<Do
         : (extMime ?? normalizedMime);
     const extracted = await extractTextFromBuffer(buffer, parserMime);
     base.extractionMethod = extracted.method;
-    base.textLength = extracted.text?.trim().length ?? 0;
+    const trimmed = extracted.text?.trim() ?? '';
+    base.textLength = trimmed.length;
     base.pdfParseTextLength = extracted.pdfParseTextLength ?? 0;
     base.pdfParsePagesTextLength = extracted.pdfParsePagesTextLength ?? 0;
     base.pdfParseError = extracted.pdfParseError ?? null;
     base.pdfJsTextLength = extracted.pdfJsTextLength ?? 0;
     base.pdfJsError = extracted.pdfJsError ?? null;
-    return base;
+    return { diagnostics: base, text: trimmed.length > 0 ? trimmed : null };
   } catch (e) {
     base.parserError = e instanceof Error ? e.message : 'Unbekannter Parser-Fehler.';
-    return base;
+    return { diagnostics: base, text: null };
   }
 }
 
+export async function getDocumentTextDiagnostics(documentId: string): Promise<DocumentTextDiagnostics> {
+  const { diagnostics } = await getDocumentTextWithDiagnostics(documentId);
+  return diagnostics;
+}
+
 export async function getDocumentText(documentId: string): Promise<string | null> {
-  const diagnostics = await getDocumentTextDiagnostics(documentId);
-  if (diagnostics.usedLegalReference) {
-    const supabase = supabaseServer();
-    if (!supabase) return null;
-    const { data: doc } = await supabase
-      .from('documents')
-      .select('legal_reference')
-      .eq('id', documentId)
-      .single();
-    const t = (doc?.legal_reference as string | null)?.trim() ?? '';
-    return t.length > 0 ? t : null;
-  }
-
-  if (diagnostics.textLength <= 0) return null;
-
-  // Für den eigentlichen Rückgabepfad erneut extrahieren, um den Text auszugeben.
-  // Diagnose hat nur Längen-/Fehlerinfos geliefert.
-  const supabase = supabaseServer();
-  if (!supabase) return null;
-  const { data: doc } = await supabase
-    .from('documents')
-    .select('current_version_id')
-    .eq('id', documentId)
-    .single();
-  const currentVersionId = (doc?.current_version_id as string | null) ?? null;
-  if (!currentVersionId) return null;
-  const { data: ver } = await supabase
-    .from('document_versions')
-    .select('file_uri, mime_type')
-    .eq('id', currentVersionId)
-    .single();
-  if (!ver?.file_uri) return null;
-  const fileUri = String(ver.file_uri ?? '');
-  const fileUriLower = fileUri.toLowerCase();
-  const rawMime = (ver.mime_type as string | null) ?? 'application/octet-stream';
-  const extMime = mimeFromFileUri(fileUriLower);
-  const normalizedMime = rawMime === 'application/octet-stream' && extMime ? extMime : rawMime;
-  const isPdf = normalizedMime === 'application/pdf' || fileUriLower.endsWith('.pdf');
-  const { data: fileData, error: downloadError } = await supabase.storage.from('documents').download(fileUri);
-  if (downloadError || !fileData) return null;
-  const buffer = Buffer.from(await fileData.arrayBuffer());
-  const parserMime = isPdf
-    ? 'application/pdf'
-    : isWordDocument(normalizedMime)
-      ? normalizedMime
-      : (extMime ?? normalizedMime);
-  const extracted = await extractTextFromBuffer(buffer, parserMime);
-  const text = extracted.text?.trim() ?? '';
-  return text.length > 0 ? text : null;
+  const { text } = await getDocumentTextWithDiagnostics(documentId);
+  return text;
 }

@@ -8,7 +8,7 @@ type RecentQuery = {
   id: number | string;
   question: string;
   created_at: string;
-  answer_text?: string | null;
+  answer_excerpt?: string | null;
   sources?: unknown;
 };
 
@@ -714,21 +714,32 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => {
-                        dashboardAiGenRef.current += 1;
+                        const gen = ++dashboardAiGenRef.current;
                         setQuestion(q.question);
                         setQueryError(null);
                         setQueryLoading(false);
                         setSuggestLoading(false);
                         setSuggestedDocuments([]);
                         setSelectedDocumentIds([]);
-                        const storedAnswer = (q.answer_text ?? '').trim();
-                        if (storedAnswer) {
-                          setQueryAnswer(q.answer_text ?? null);
-                          setQuerySources(normalizeQuerySources(q.sources));
-                        } else {
-                          setQueryAnswer(null);
-                          setQuerySources([]);
-                        }
+                        setQuerySources(normalizeQuerySources(q.sources));
+                        const excerpt = (q.answer_excerpt ?? '').trim();
+                        setQueryAnswer(excerpt.length > 0 ? excerpt : null);
+                        void (async () => {
+                          try {
+                            const { data: row } = await supabase
+                              .from('ai_queries')
+                              .select('answer_text')
+                              .eq('id', q.id)
+                              .maybeSingle();
+                            if (gen !== dashboardAiGenRef.current) return;
+                            const full = (row?.answer_text as string | null | undefined)?.trim() ?? '';
+                            if (full.length > 0) {
+                              setQueryAnswer(full);
+                            }
+                          } catch {
+                            /* Antwort bleibt ggf. bei Kurzauszug */
+                          }
+                        })();
                       }}
                       className="text-left text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
                     >

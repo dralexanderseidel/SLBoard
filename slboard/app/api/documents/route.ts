@@ -30,6 +30,43 @@ function isSteeringAnalysisPresent(steering_analysis: unknown): boolean {
   );
 }
 
+const LIST_SUMMARY_MAX_CHARS = 320;
+
+/** Liste: nur Gesamtbewertung aus JSON (PostgREST-Pfad), kein vollständiges steering_analysis. */
+const DOCUMENT_LIST_SELECT = [
+  'id',
+  'title',
+  'document_type_code',
+  'created_at',
+  'status',
+  'protection_class_id',
+  'reach_scope',
+  'gremium',
+  'responsible_unit',
+  'participation_groups',
+  'summary',
+  'school_number',
+  'archived_at',
+  'steering_gesamt_score:steering_analysis->gesamtbewertung->>score',
+].join(',');
+
+function mapDocumentListRow(raw: Record<string, unknown>): Record<string, unknown> {
+  const scoreRaw = raw.steering_gesamt_score;
+  const { steering_gesamt_score: _sg, ...rest } = raw;
+  const score = typeof scoreRaw === 'string' ? scoreRaw.trim() : '';
+  const steering_analysis =
+    score === 'niedriger Steuerungsbedarf' ||
+    score === 'mittlerer Steuerungsbedarf' ||
+    score === 'hoher Steuerungsbedarf'
+      ? { gesamtbewertung: { score } }
+      : null;
+  let summary = rest.summary;
+  if (typeof summary === 'string' && summary.length > LIST_SUMMARY_MAX_CHARS) {
+    summary = `${summary.slice(0, LIST_SUMMARY_MAX_CHARS)}…`;
+  }
+  return { ...rest, summary, steering_analysis };
+}
+
 /**
  * GET: Dokumentenliste mit Berechtigungs- und Schutzklassenfilter.
  * Query-Parameter:
@@ -72,12 +109,7 @@ export async function GET(req: NextRequest) {
     const steeringFilter = searchParams.get('steering') ?? '';
     const archiveParam = searchParams.get('archive') ?? '';
 
-    let query = supabase
-      .from('documents')
-      .select(
-        'id, title, document_type_code, created_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, summary, steering_analysis, school_number, archived_at'
-      )
-      .order('created_at', { ascending: false });
+    let query = supabase.from('documents').select(DOCUMENT_LIST_SELECT).order('created_at', { ascending: false });
 
     if (access.schoolNumber) {
       query = query.eq('school_number', access.schoolNumber);
@@ -209,7 +241,9 @@ export async function GET(req: NextRequest) {
       return apiError(500, 'INTERNAL_ERROR', error.message);
     }
 
-    let filtered = (data ?? []).filter((d) =>
+    const mapped = (data ?? []).map((d) => mapDocumentListRow(d as unknown as Record<string, unknown>));
+
+    let filtered = mapped.filter((d) =>
       canAccessSchool(access, d.school_number as string | null) &&
       canReadDocument(access, d.protection_class_id as number, d.responsible_unit as string | null)
     );

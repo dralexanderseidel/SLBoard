@@ -70,8 +70,8 @@ export async function GET(
       );
     }
 
-    const { getDocumentTextDiagnostics } = await import('../../../../../lib/documentText');
-    const diag = await getDocumentTextDiagnostics(documentId);
+    const { getDocumentTextWithDiagnostics } = await import('../../../../../lib/documentText');
+    const { diagnostics: diag } = await getDocumentTextWithDiagnostics(documentId);
     const debugBase = {
       currentVersionId: diag.currentVersionId,
       fileUri: diag.fileUri,
