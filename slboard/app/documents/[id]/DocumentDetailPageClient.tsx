@@ -32,6 +32,7 @@ import { ApiErrorCallout } from '@/components/ApiErrorCallout';
 import { LONG_RUNNING_EXPECTATION_HINT } from '@/lib/longRunningExpectationHint';
 import { CONTEXT_HELP } from '@/lib/contextHelpUrls';
 import { ContextHelpLink } from '@/components/ContextHelpLink';
+import { useHeaderAccess } from '@/components/HeaderAccessContext';
 import type { AuditEntry, DocumentDetail } from './types';
 
 // ── Reine Hilfsfunktionen (kein Component-State) ─────────────────────────────
@@ -211,6 +212,11 @@ export function DocumentDetailPageClient() {
     handleAskAboutThisDocument,
   } = useDocumentAsk(params?.id, doc);
 
+  const { access } = useHeaderAccess();
+  const featureAiEnabled = access?.featureAiEnabled !== false;
+  const featureDraftsEnabled = access?.featureDraftsEnabled !== false;
+  const maxVersionUploadBytes = access?.effectiveMaxUploadBytes ?? 20 * 1024 * 1024;
+
   // ── Bearbeiten ──────────────────────────────────────────────────────────────
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState<Partial<DocumentDetail>>({});
@@ -332,6 +338,10 @@ export function DocumentDetailPageClient() {
         : null);
     if (!file || !(file instanceof File) || file.size === 0) {
       setVersionError('Bitte wählen Sie eine Datei aus.');
+      return;
+    }
+    if (file.size > maxVersionUploadBytes) {
+      setVersionError(`Datei zu groß (max. ${Math.round(maxVersionUploadBytes / 1024 / 1024)} MB).`);
       return;
     }
     setVersionLoading(true);
@@ -711,25 +721,34 @@ export function DocumentDetailPageClient() {
                 <h3 className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
                   KI-Kurz­zusammenfassung
                 </h3>
-                <p className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">
-                  Wird für KI-Suche und KI-Antworten als bevorzugter Kontext genutzt.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleSummarize}
-                  disabled={summaryLoading}
-                  className="mb-2 inline-flex items-center justify-center rounded bg-blue-600 px-3 py-1.5 text-[11px] font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
-                >
-                  {summaryLoading
-                    ? 'KI fasst zusammen…'
-                    : summary && summary.trim().length > 0
-                      ? 'Zusammenfassung aktualisieren'
-                      : 'Zusammenfassung erzeugen'}
-                </button>
-                {summaryLoading && (
-                  <p className="mb-2 text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
-                    {LONG_RUNNING_EXPECTATION_HINT}
+                {!featureAiEnabled && (
+                  <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+                    KI-Funktionen sind für diese Schule deaktiviert. Eine vorhandene Kurzfassung wird weiter angezeigt.
                   </p>
+                )}
+                {featureAiEnabled && (
+                  <>
+                    <p className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">
+                      Wird für KI-Suche und KI-Antworten als bevorzugter Kontext genutzt.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleSummarize}
+                      disabled={summaryLoading}
+                      className="mb-2 inline-flex items-center justify-center rounded bg-blue-600 px-3 py-1.5 text-[11px] font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      {summaryLoading
+                        ? 'KI fasst zusammen…'
+                        : summary && summary.trim().length > 0
+                          ? 'Zusammenfassung aktualisieren'
+                          : 'Zusammenfassung erzeugen'}
+                    </button>
+                    {summaryLoading && (
+                      <p className="mb-2 text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
+                        {LONG_RUNNING_EXPECTATION_HINT}
+                      </p>
+                    )}
+                  </>
                 )}
                 <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                   Letzte Aktualisierung:{' '}
@@ -747,11 +766,14 @@ export function DocumentDetailPageClient() {
                     {summary}
                   </p>
                 )}
-                {!summary && !summaryLoading && !summaryError && (
+                {featureAiEnabled && !summary && !summaryLoading && !summaryError && (
                   <p className="text-zinc-600 dark:text-zinc-300">
                     Noch keine Zusammenfassung vorhanden. Klicken Sie auf „Zusammenfassung
                     erzeugen", um eine KI-basierte Kurzfassung zu erhalten.
                   </p>
+                )}
+                {!featureAiEnabled && !summary && !summaryError && (
+                  <p className="text-zinc-600 dark:text-zinc-300">Keine Kurz-Zusammenfassung gespeichert.</p>
                 )}
               </div>
 
@@ -759,7 +781,8 @@ export function DocumentDetailPageClient() {
                 <h3 className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
                   KI-Aktionen
                 </h3>
-
+                {featureAiEnabled ? (
+                <>
                 <div className="mb-2">
                   <label className="mb-1 block text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
                     Fragen zu diesem Dokument
@@ -971,14 +994,23 @@ export function DocumentDetailPageClient() {
                     </p>
                   )}
                 </div>
+                </>
+                ) : (
+                  <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-300">
+                    KI-Funktionen sind für diese Schule deaktiviert. Bestehende Analysen und frühere Antworten
+                    werden weiterhin angezeigt.
+                  </p>
+                )}
               </div>
 
+              {featureDraftsEnabled ? (
               <Link
                 href={`/drafts?sourceId=${doc.id}&subject=${encodeURIComponent(doc.title)}`}
                 className="mt-3 inline-flex items-center justify-center rounded border border-dashed border-zinc-400 px-3 py-2 text-xs font-medium text-zinc-700 shadow-sm transition hover:border-zinc-500 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-900"
               >
                 Entwurf erstellen
               </Link>
+              ) : null}
             </div>
 
             {/* Rechte Spalte: Details + Bearbeiten + Neue Version */}
@@ -1414,6 +1446,9 @@ export function DocumentDetailPageClient() {
                 <h3 className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
                   Neue Version hochladen
                 </h3>
+                <p className="mb-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                  Maximal {Math.round(maxVersionUploadBytes / 1024 / 1024)} MB pro Datei (PDF oder Word).
+                </p>
                 <form
                   ref={versionFormRef}
                   onSubmit={(e) => {

@@ -13,6 +13,8 @@ export type ApiErrorCode =
   | 'SCHOOL_INACTIVE'
   | 'ACCOUNT_INACTIVE'
   | 'DELETE_REQUEST_OPEN'
+  | 'FEATURE_AI_DISABLED'
+  | 'FEATURE_DRAFTS_DISABLED'
   | 'QUOTA_EXCEEDED';
 
 export function apiError(

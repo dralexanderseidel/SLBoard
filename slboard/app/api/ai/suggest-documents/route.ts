@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient
 import { supabaseServer } from '../../../../lib/supabaseServer';
 import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
+import { loadSchoolFeatureFlags, apiResponseIfAiDisabled } from '../../../../lib/schoolFeatureFlags';
 import {
   getSuggestedDocuments,
   getDocumentsByIds,
@@ -44,6 +45,10 @@ export async function POST(req: NextRequest) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
     const access = await resolveUserAccess(user.email, supabase);
+
+    const schoolFeatures = await loadSchoolFeatureFlags(supabase, access.schoolNumber);
+    const aiBlocked = apiResponseIfAiDisabled(schoolFeatures);
+    if (aiBlocked) return aiBlocked;
 
     const body = (await req.json()) as SuggestBody;
     const trimmed = typeof body.question === 'string' ? body.question.trim() : '';

@@ -9,11 +9,10 @@ import { callLlm, isLlmConfigured } from '../../../lib/llmClient';
 import { getAiSettingsForSchool } from '../../../lib/aiSettings';
 import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../lib/aiPromptTemplates';
 import { ensureGlobalDocumentTypeRows } from '../../../lib/ensureGlobalDocumentTypes';
+import { loadSchoolFeatureFlags, effectiveMaxUploadBytes } from '../../../lib/schoolFeatureFlags';
 
 /** Vercel: Hintergrund-Indexierung/KI nach dem Upload kann länger laufen als das Standard-Limit. */
 export const maxDuration = 60;
-
-const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
@@ -89,14 +88,6 @@ export async function POST(req: NextRequest) {
       return apiError(400, 'VALIDATION_ERROR', 'Ungültiger Status.');
     }
 
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      return apiError(
-        400,
-        'VALIDATION_ERROR',
-        `Datei ist zu groß. Maximale Größe: ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB.`
-      );
-    }
-
     const mimeType = file.type || 'application/octet-stream';
     if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
       return apiError(400, 'VALIDATION_ERROR', 'Nur PDF- und Word-Dateien (.pdf, .doc, .docx, .odt) sind erlaubt.');
@@ -114,6 +105,16 @@ export async function POST(req: NextRequest) {
     const access = await resolveUserAccess(user.email, supabase);
     const createdById = access.appUserId;
     const schoolNumber = access.schoolNumber ?? '000000';
+
+    const schoolFeatures = await loadSchoolFeatureFlags(supabase, schoolNumber);
+    const maxUploadBytes = effectiveMaxUploadBytes(schoolFeatures);
+    if (file.size > maxUploadBytes) {
+      return apiError(
+        400,
+        'VALIDATION_ERROR',
+        `Datei ist zu groß. Maximale Größe: ${Math.round(maxUploadBytes / 1024 / 1024)} MB.`
+      );
+    }
 
     // Dokumenten-Quota prüfen (parallel: Quota-Wert + aktuelle Anzahl)
     const [schoolQuotaRes, docCountRes] = await Promise.all([
@@ -252,7 +253,12 @@ export async function POST(req: NextRequest) {
           .eq('school_number', schoolNumber);
 
         // Automatische KI-Zusammenfassung, wenn LLM konfiguriert und Text vorhanden
-        if (isLlmConfigured() && extracted.text && extracted.text.length > 100) {
+        if (
+          schoolFeatures.feature_ai_enabled &&
+          isLlmConfigured() &&
+          extracted.text &&
+          extracted.text.length > 100
+        ) {
           try {
             const MAX_SUMMARY_CHARS = 12_000;
             const basisText = extracted.text.length > MAX_SUMMARY_CHARS

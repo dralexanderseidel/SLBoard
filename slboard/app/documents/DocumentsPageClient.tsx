@@ -17,9 +17,13 @@ import { DocumentTableView } from './components/DocumentTableView';
 import { DocumentCardsView } from './components/DocumentCardsView';
 import { DocumentCompactView } from './components/DocumentCompactView';
 import { ApiErrorCallout } from '@/components/ApiErrorCallout';
+import { useHeaderAccess } from '@/components/HeaderAccessContext';
 import type { SortField, SortDir } from './types';
 
 export function DocumentsPageClient() {
+  const { access } = useHeaderAccess();
+  const featureAiEnabled = access?.featureAiEnabled !== false;
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const archiveView = searchParams.get('archive') === '1';
@@ -225,6 +229,7 @@ export function DocumentsPageClient() {
             blockedSelectedIds={selection.blockedSelectedIds}
             bulkCapabilitiesLoading={selection.bulkCapabilitiesLoading}
             archiveView={archiveView}
+            featureAiEnabled={featureAiEnabled}
           />
         )}
 

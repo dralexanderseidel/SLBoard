@@ -19,7 +19,7 @@ type UploadItem = {
   validationError?: string;
 };
 
-const MAX_FILE_MB = 20;
+const DEFAULT_MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME_TYPES_CLIENT = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -51,12 +51,40 @@ export default function UploadPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [maxUploadBytes, setMaxUploadBytes] = useState(DEFAULT_MAX_UPLOAD_BYTES);
 
   // Laufende Upload-Requests beim Unmount abbrechen
   const uploadControllersRef = useRef<AbortController[]>([]);
   useEffect(() => {
     return () => { uploadControllersRef.current.forEach((c) => c.abort()); };
   }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/me/access', { credentials: 'include', cache: 'no-store' });
+        if (!res.ok) return;
+        const data = (await res.json()) as { effectiveMaxUploadBytes?: number };
+        if (typeof data.effectiveMaxUploadBytes === 'number' && data.effectiveMaxUploadBytes > 0) {
+          setMaxUploadBytes(data.effectiveMaxUploadBytes);
+        }
+      } catch { /* Standardlimit */ }
+    })();
+  }, []);
+
+  useEffect(() => {
+    setItems((prev) =>
+      prev.map((it) => {
+        let validationError: string | undefined;
+        if (it.file.size > maxUploadBytes) {
+          validationError = `Zu groß (max. ${Math.round(maxUploadBytes / 1024 / 1024)} MB)`;
+        } else if (!ALLOWED_MIME_TYPES_CLIENT.has(it.file.type)) {
+          validationError = 'Nur PDF / Word (.pdf, .doc, .docx, .odt)';
+        }
+        return { ...it, validationError };
+      }),
+    );
+  }, [maxUploadBytes]);
 
   useEffect(() => {
     const load = async () => {
@@ -458,7 +486,7 @@ export default function UploadPage() {
 
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
-              Dateien (PDF/Word) *
+              Dateien (PDF/Word) * — max. {Math.round(maxUploadBytes / 1024 / 1024)} MB pro Datei
             </label>
             <input
               id="file"
@@ -470,8 +498,8 @@ export default function UploadPage() {
                 const list = Array.from(e.target.files ?? []);
                 const mapped: UploadItem[] = list.map((f) => {
                   let validationError: string | undefined;
-                  if (f.size > MAX_FILE_MB * 1024 * 1024) {
-                    validationError = `Zu groß (max. ${MAX_FILE_MB} MB)`;
+                  if (f.size > maxUploadBytes) {
+                    validationError = `Zu groß (max. ${Math.round(maxUploadBytes / 1024 / 1024)} MB)`;
                   } else if (!ALLOWED_MIME_TYPES_CLIENT.has(f.type)) {
                     validationError = 'Nur PDF / Word (.pdf, .doc, .docx, .odt)';
                   }

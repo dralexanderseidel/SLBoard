@@ -49,6 +49,8 @@ function MoreChevronIcon({ open }: { open: boolean }) {
 export function HeaderNav() {
   const { access, accessLoading } = useHeaderAccess();
   const showSuperOnMobile = !accessLoading && !!access?.superAdmin;
+  const hideDraftsAssistant =
+    !accessLoading && access != null && access.featureDraftsEnabled === false;
 
   const [moreOpen, setMoreOpen] = useState(false);
   const moreWrapRef = useRef<HTMLDivElement>(null);
@@ -149,14 +151,16 @@ export function HeaderNav() {
               aria-labelledby="header-nav-more-button"
               className="absolute right-0 top-full z-50 mt-1 min-w-[13.5rem] max-w-[min(100vw-2rem,20rem)] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
             >
-              <AppNavLink
-                href="/drafts"
-                role="menuitem"
-                onClick={closeMore}
-                className={moreMenuItem}
-              >
-                Entwurfsassistent
-              </AppNavLink>
+              {!hideDraftsAssistant ? (
+                <AppNavLink
+                  href="/drafts"
+                  role="menuitem"
+                  onClick={closeMore}
+                  className={moreMenuItem}
+                >
+                  Entwurfsassistent
+                </AppNavLink>
+              ) : null}
               <AppNavLink href={CONTEXT_HELP.einleitung} role="menuitem" onClick={closeMore} className={moreMenuItem}>
                 Hilfe
               </AppNavLink>

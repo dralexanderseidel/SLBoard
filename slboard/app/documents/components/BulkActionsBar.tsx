@@ -18,6 +18,8 @@ type Props = Pick<
   blockedSelectedIds: string[];
   bulkCapabilitiesLoading: boolean;
   archiveView: boolean;
+  /** Wenn false, werden Batch-KI-Aktionen ausgeblendet (Schul-Feature-Flag). */
+  featureAiEnabled?: boolean;
 };
 
 export function BulkActionsBar({
@@ -29,6 +31,7 @@ export function BulkActionsBar({
   handleBulkDelete, handleBulkArchive, handleBulkRestore,
   handleBulkSetStatus, handleBulkSetProtectionClass, handleBulkSetReachScope,
   handleBulkGenerateSummaries, handleBulkGenerateSteeringAnalyses,
+  featureAiEnabled = true,
 }: Props) {
   const bulkAiBusy = bulkSummarizing || bulkSteeringAnalyzing;
   const anyBusy = bulkDeleting || bulkArchiving || bulkUpdating || bulkAiBusy;
@@ -153,6 +156,7 @@ export function BulkActionsBar({
           </div>
 
           {/* KI */}
+          {featureAiEnabled ? (
           <div className="flex flex-col gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800">
             <div className="flex flex-wrap items-center gap-2">
               <span className="w-28 shrink-0 text-zinc-600 dark:text-zinc-300">KI</span>
@@ -199,6 +203,7 @@ export function BulkActionsBar({
               </p>
             )}
           </div>
+          ) : null}
         </>
       )}
     </section>

@@ -45,7 +45,7 @@ export async function GET() {
     const { data: schools, error: schoolErr } = await supabase
       .from('schools')
       .select(
-        'school_number, name, active, created_at, initial_admin_app_user_id, quota_max_users, quota_max_documents, quota_max_ai_queries_per_month'
+        'school_number, name, active, created_at, initial_admin_app_user_id, quota_max_users, quota_max_documents, quota_max_ai_queries_per_month, feature_ai_enabled, feature_drafts_enabled, max_upload_file_mb'
       )
       .order('school_number');
 

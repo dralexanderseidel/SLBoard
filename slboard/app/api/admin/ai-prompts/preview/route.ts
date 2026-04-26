@@ -11,6 +11,7 @@ import {
 import { callLlm, isLlmConfigured } from '../../../../../lib/llmClient';
 import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
 import { apiError } from '../../../../../lib/apiError';
+import { loadSchoolFeatureFlags, apiResponseIfAiDisabled } from '../../../../../lib/schoolFeatureFlags';
 import { buildDocumentMetadataPromptSection } from '../../../../../lib/aiSearch';
 
 export const runtime = 'nodejs';
@@ -178,6 +179,10 @@ export async function POST(req: NextRequest) {
             : 'LLM nicht konfiguriert: nur Prompt-Vorschau erzeugt.',
       });
     }
+
+    const schoolFlags = await loadSchoolFeatureFlags(supabase, schoolNumber);
+    const aiFeatureBlocked = apiResponseIfAiDisabled(schoolFlags);
+    if (aiFeatureBlocked) return aiFeatureBlocked;
 
     const aiSettings = await getAiSettingsForSchool(schoolNumber);
     const raw = await callLlm(systemPrompt, userPrompt, {

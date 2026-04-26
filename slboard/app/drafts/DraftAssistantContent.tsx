@@ -7,6 +7,7 @@ import { getDraftDocTypeConfig } from '@/lib/draftDocTypes';
 import { METADATA_BROADCAST_CHANNEL } from '@/lib/metadataBroadcast';
 import { readApiJson } from '@/lib/readApiJson';
 import { LONG_RUNNING_EXPECTATION_HINT } from '@/lib/longRunningExpectationHint';
+import { useHeaderAccess } from '@/components/HeaderAccessContext';
 
 type DbDocType = {
   code: string;
@@ -320,6 +321,30 @@ export function DraftAssistantContent() {
       setDraftLoading(false);
     }
   };
+
+  const { access, accessLoading } = useHeaderAccess();
+  const draftsDisabled = !accessLoading && access != null && access.featureDraftsEnabled === false;
+
+  if (draftsDisabled) {
+    return (
+      <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
+        <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
+          <header className="border-b border-zinc-200 pb-3 dark:border-zinc-800">
+            <h1 className="text-xl font-semibold">Entwurfsassistent</h1>
+          </header>
+          <p className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+            Der Entwurfsassistent ist für Ihre Schule deaktiviert. Bitte wenden Sie sich an den Plattform-Administrator.
+          </p>
+          <Link
+            href="/"
+            className="text-sm font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+          >
+            ← Zur Startseite
+          </Link>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">

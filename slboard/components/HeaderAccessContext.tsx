@@ -17,6 +17,10 @@ export type HeaderMeAccess = {
   roles: string[];
   superAdmin: boolean;
   accountInactive: boolean;
+  featureAiEnabled: boolean;
+  featureDraftsEnabled: boolean;
+  /** Server-seitig begrenzt; für Client-Validierung von Uploads. */
+  effectiveMaxUploadBytes: number;
 };
 
 type HeaderAccessValue = {
@@ -54,7 +58,14 @@ export function HeaderAccessProvider({ children }: { children: React.ReactNode }
         roles?: string[];
         superAdmin?: boolean;
         accountInactive?: boolean;
+        featureAiEnabled?: boolean;
+        featureDraftsEnabled?: boolean;
+        effectiveMaxUploadBytes?: number;
       };
+      const effBytes =
+        typeof data.effectiveMaxUploadBytes === 'number' && data.effectiveMaxUploadBytes > 0
+          ? data.effectiveMaxUploadBytes
+          : 20 * 1024 * 1024;
       setAccess({
         schoolNumber: data.schoolNumber ?? null,
         schoolName: data.schoolName ?? null,
@@ -62,6 +73,9 @@ export function HeaderAccessProvider({ children }: { children: React.ReactNode }
         roles: Array.isArray(data.roles) ? data.roles : [],
         superAdmin: !!data.superAdmin,
         accountInactive: !!data.accountInactive,
+        featureAiEnabled: data.featureAiEnabled !== false,
+        featureDraftsEnabled: data.featureDraftsEnabled !== false,
+        effectiveMaxUploadBytes: effBytes,
       });
     } catch {
       setAccess(null);

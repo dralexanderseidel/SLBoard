@@ -5,7 +5,7 @@ import { getDocumentText } from '../../../../../lib/documentText';
 import { buildSearchIndex } from '../../../../../lib/indexing';
 import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../../lib/documentAccess';
 import { apiError } from '../../../../../lib/apiError';
-const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+import { loadSchoolFeatureFlags, effectiveMaxUploadBytes } from '../../../../../lib/schoolFeatureFlags';
 const ALLOWED_MIME_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -82,6 +82,10 @@ export async function POST(
       return apiError(403, 'FORBIDDEN', 'Keine Berechtigung, dieses Dokument zu bearbeiten.');
     }
 
+    const flagSchool = (docSchool ?? access.schoolNumber ?? '000000').trim();
+    const schoolFeatures = await loadSchoolFeatureFlags(supabase, flagSchool);
+    const maxUploadBytes = effectiveMaxUploadBytes(schoolFeatures);
+
     const formData = await req.formData();
     const file = formData.get('file') as File | null;
     const comment = (formData.get('comment') as string)?.trim() || 'Neue Version';
@@ -89,10 +93,11 @@ export async function POST(
     if (!file || !(file instanceof File)) {
       return apiError(400, 'VALIDATION_ERROR', 'Keine gültige Datei übergeben.');
     }
-    if (file.size > MAX_FILE_SIZE_BYTES) {
-      return NextResponse.json(
-        { error: `Datei zu groß. Max. ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB.` },
-        { status: 400 }
+    if (file.size > maxUploadBytes) {
+      return apiError(
+        400,
+        'VALIDATION_ERROR',
+        `Datei zu groß. Max. ${Math.round(maxUploadBytes / 1024 / 1024)} MB.`
       );
     }
 

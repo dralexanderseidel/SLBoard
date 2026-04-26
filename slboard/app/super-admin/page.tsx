@@ -25,6 +25,9 @@ type SchoolRow = {
   quota_max_users: number | null;
   quota_max_documents: number | null;
   quota_max_ai_queries_per_month: number | null;
+  feature_ai_enabled?: boolean;
+  feature_drafts_enabled?: boolean;
+  max_upload_file_mb?: number | null;
   usage: SchoolUsage;
 };
 
@@ -34,6 +37,9 @@ type Draft = {
   quota_max_users: string;
   quota_max_documents: string;
   quota_max_ai_queries_per_month: string;
+  feature_ai_enabled: boolean;
+  feature_drafts_enabled: boolean;
+  max_upload_file_mb: string;
 };
 
 /** API-Shape von PATCH /api/super-admin/schools/[id] (ohne usage) */
@@ -46,6 +52,9 @@ type SchoolPatchPayload = {
   quota_max_users: number | null;
   quota_max_documents: number | null;
   quota_max_ai_queries_per_month: number | null;
+  feature_ai_enabled: boolean;
+  feature_drafts_enabled: boolean;
+  max_upload_file_mb: number | null;
 };
 
 function fmtQuota(used: number, max: number | null): string {
@@ -61,6 +70,17 @@ function parseDraftInt(s: string): number | null | undefined {
   return Math.floor(n);
 }
 
+/** Leer = Plattform-Standard (NULL in DB); sonst 1–100 MB. */
+function parseMaxUploadMbDraft(s: string): number | null | undefined {
+  const t = s.trim();
+  if (t === '') return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return undefined;
+  const i = Math.floor(n);
+  if (i < 1 || i > 100) return undefined;
+  return i;
+}
+
 function draftFromSchoolPayload(s: SchoolPatchPayload): Draft {
   return {
     name: s.name,
@@ -69,6 +89,9 @@ function draftFromSchoolPayload(s: SchoolPatchPayload): Draft {
     quota_max_documents: s.quota_max_documents === null ? '' : String(s.quota_max_documents),
     quota_max_ai_queries_per_month:
       s.quota_max_ai_queries_per_month === null ? '' : String(s.quota_max_ai_queries_per_month),
+    feature_ai_enabled: s.feature_ai_enabled !== false,
+    feature_drafts_enabled: s.feature_drafts_enabled !== false,
+    max_upload_file_mb: s.max_upload_file_mb == null ? '' : String(s.max_upload_file_mb),
   };
 }
 
@@ -172,6 +195,32 @@ const SuperAdminSchoolRow = memo(function SuperAdminSchoolRow({
           className="w-20 rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
           inputMode="numeric"
           placeholder="∞"
+        />
+      </td>
+      <td className="p-2 text-center" title="KI-Funktionen (Fragen, Zusammenfassung, Steuerung, Entwürfe-KI)">
+        <input
+          type="checkbox"
+          checked={draft.feature_ai_enabled}
+          onChange={(e) => updateDraft(schoolNumber, { feature_ai_enabled: e.target.checked })}
+          className="rounded"
+        />
+      </td>
+      <td className="p-2 text-center" title="Entwurfsassistent (Seite /drafts und Übernahme)">
+        <input
+          type="checkbox"
+          checked={draft.feature_drafts_enabled}
+          onChange={(e) => updateDraft(schoolNumber, { feature_drafts_enabled: e.target.checked })}
+          className="rounded"
+        />
+      </td>
+      <td className="p-2">
+        <input
+          value={draft.max_upload_file_mb}
+          onChange={(e) => updateDraft(schoolNumber, { max_upload_file_mb: e.target.value })}
+          className="w-14 rounded border border-zinc-300 px-1 py-0.5 dark:border-zinc-600 dark:bg-zinc-950"
+          inputMode="numeric"
+          placeholder="20"
+          title="Max. MB pro Upload (leer = Plattform-Standard 20 MB)"
         />
       </td>
       <td className="p-2">
@@ -338,6 +387,9 @@ export default function SuperAdminPage() {
           quota_max_documents: s.quota_max_documents === null ? '' : String(s.quota_max_documents),
           quota_max_ai_queries_per_month:
             s.quota_max_ai_queries_per_month === null ? '' : String(s.quota_max_ai_queries_per_month),
+          feature_ai_enabled: s.feature_ai_enabled !== false,
+          feature_drafts_enabled: s.feature_drafts_enabled !== false,
+          max_upload_file_mb: s.max_upload_file_mb == null ? '' : String(s.max_upload_file_mb),
         };
       }
       setDrafts(next);
@@ -363,8 +415,13 @@ export default function SuperAdminPage() {
     const qu = parseDraftInt(d.quota_max_users);
     const qd = parseDraftInt(d.quota_max_documents);
     const qa = parseDraftInt(d.quota_max_ai_queries_per_month);
+    const maxUploadMb = parseMaxUploadMbDraft(d.max_upload_file_mb);
     if (qu === undefined || qd === undefined || qa === undefined) {
       setError('Quotas: nur nicht-negative Zahlen oder leer (= unbegrenzt).');
+      return;
+    }
+    if (maxUploadMb === undefined) {
+      setError('Max. Upload: leer (= Standard 20 MB) oder ganze Zahl 1–100.');
       return;
     }
     setSavingId(schoolNumber);
@@ -380,6 +437,9 @@ export default function SuperAdminPage() {
           quota_max_users: qu,
           quota_max_documents: qd,
           quota_max_ai_queries_per_month: qa,
+          feature_ai_enabled: d.feature_ai_enabled,
+          feature_drafts_enabled: d.feature_drafts_enabled,
+          max_upload_file_mb: maxUploadMb,
         }),
       });
       const data = (await res.json()) as { error?: string; school?: SchoolPatchPayload };
@@ -654,7 +714,7 @@ export default function SuperAdminPage() {
           {initialLoading ? (
             <p className="p-4 text-sm text-zinc-500">Lade…</p>
           ) : (
-            <table className="min-w-[1200px] w-full border-collapse text-left text-xs">
+            <table className="min-w-[1480px] w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="border-b border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
                   <th className="p-2 font-medium">Nr.</th>
@@ -684,6 +744,15 @@ export default function SuperAdminPage() {
                   <th className="p-2 font-medium">Quota Nutzer</th>
                   <th className="p-2 font-medium">Quota Dok.</th>
                   <th className="p-2 font-medium">Quota KI/Monat</th>
+                  <th className="p-2 font-medium" title="KI-Funktionen für diese Schule">
+                    KI
+                  </th>
+                  <th className="p-2 font-medium" title="Entwurfsassistent">
+                    Entw.
+                  </th>
+                  <th className="p-2 font-medium" title="Max. MB pro Datei (Upload & neue Version); leer = 20 MB">
+                    Max MB
+                  </th>
                   <th
                     className="p-2 font-medium"
                     title="Speichern · Admin-PW (Erst-Admin) · Löschen (nur ohne Dokumente, ein Nutzer = Erst-Admin)"

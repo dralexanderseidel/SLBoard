@@ -13,6 +13,11 @@ import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
 import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../../lib/aiQueryDebugLog';
 import { apiError } from '../../../../../lib/apiError';
+import {
+  loadSchoolFeatureFlags,
+  apiResponseIfAiDisabled,
+  apiResponseIfDraftsDisabled,
+} from '../../../../../lib/schoolFeatureFlags';
 
 export const maxDuration = 60;
 
@@ -53,6 +58,12 @@ export async function POST(req: NextRequest) {
     }
 
     const access = await resolveUserAccess(user.email, supabase);
+    const schoolFlags = await loadSchoolFeatureFlags(supabase, access.schoolNumber);
+    const draftsBlocked = apiResponseIfDraftsDisabled(schoolFlags);
+    if (draftsBlocked) return draftsBlocked;
+    const aiBlocked = apiResponseIfAiDisabled(schoolFlags);
+    if (aiBlocked) return aiBlocked;
+
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
     const schoolProfile = await getSchoolProfileText(access.schoolNumber);
     const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);

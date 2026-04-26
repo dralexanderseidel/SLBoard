@@ -15,6 +15,11 @@ import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../
 import { apiError } from '../../../../../lib/apiError';
 import { getDraftDocTypeConfig } from '../../../../../lib/draftDocTypes';
 import { checkAiQuota } from '../../../../../lib/quotaCheck';
+import {
+  loadSchoolFeatureFlags,
+  apiResponseIfAiDisabled,
+  apiResponseIfDraftsDisabled,
+} from '../../../../../lib/schoolFeatureFlags';
 
 /** Vercel: KI + Dokumenttext können die Standard-Timeout-Grenze überschreiten. */
 export const maxDuration = 60;
@@ -62,6 +67,11 @@ export async function POST(req: NextRequest) {
     }
 
     const access = await resolveUserAccess(user.email, supabase);
+    const schoolFlags = await loadSchoolFeatureFlags(supabase, access.schoolNumber);
+    const draftsBlocked = apiResponseIfDraftsDisabled(schoolFlags);
+    if (draftsBlocked) return draftsBlocked;
+    const aiBlocked = apiResponseIfAiDisabled(schoolFlags);
+    if (aiBlocked) return aiBlocked;
 
     // KI-Quota prüfen
     const quotaError = await checkAiQuota(supabase, access.schoolNumber);

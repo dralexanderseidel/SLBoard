@@ -23,6 +23,7 @@ import { getSchoolProfileText } from '../../../../lib/schoolProfile';
 import { apiError } from '../../../../lib/apiError';
 import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../../lib/aiPromptTemplates';
 import { checkAiQuota } from '../../../../lib/quotaCheck';
+import { loadSchoolFeatureFlags, apiResponseIfAiDisabled } from '../../../../lib/schoolFeatureFlags';
 
 export const runtime = 'nodejs';
 
@@ -69,6 +70,10 @@ export async function POST(req: NextRequest) {
     }
 
     const access = await resolveUserAccess(user.email, supabase);
+
+    const schoolFeatures = await loadSchoolFeatureFlags(supabase, access.schoolNumber);
+    const aiBlocked = apiResponseIfAiDisabled(schoolFeatures);
+    if (aiBlocked) return aiBlocked;
 
     // KI-Quota prüfen (parallel zu anderen Initialisierungen)
     const [quotaError, aiSettings, schoolProfile] = await Promise.all([

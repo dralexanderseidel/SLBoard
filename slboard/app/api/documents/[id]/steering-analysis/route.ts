@@ -7,6 +7,7 @@ import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
 import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../../lib/aiQueryDebugLog';
 import { apiError } from '../../../../../lib/apiError';
+import { loadSchoolFeatureFlags, apiResponseIfAiDisabled } from '../../../../../lib/schoolFeatureFlags';
 import { chunkTextByParagraphs } from '../../../../../lib/chunkingOnTheFly';
 import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../../../lib/aiPromptTemplates';
 import { buildDocumentMetadataPromptSection, type DocRow } from '../../../../../lib/aiSearch';
@@ -140,6 +141,8 @@ export async function POST(
       return apiError(403, 'FORBIDDEN', 'Keine Berechtigung für dieses Dokument.');
     }
 
+    const schoolFlags = await loadSchoolFeatureFlags(supabase, docSchool ?? access.schoolNumber);
+
     const cached = normalizeAnalysis((doc as { steering_analysis?: unknown }).steering_analysis);
     const cachedVersionId = (doc as { steering_analysis_version_id?: string | null }).steering_analysis_version_id ?? null;
     const currentVersionId = (doc as { current_version_id?: string | null }).current_version_id ?? null;
@@ -151,6 +154,9 @@ export async function POST(
         updatedAt: (doc as { steering_analysis_updated_at?: string | null }).steering_analysis_updated_at ?? null,
       });
     }
+
+    const aiBlocked = apiResponseIfAiDisabled(schoolFlags);
+    if (aiBlocked) return aiBlocked;
 
     const { getDocumentText } = await import('../../../../../lib/documentText');
     const extracted = await getDocumentText(documentId);

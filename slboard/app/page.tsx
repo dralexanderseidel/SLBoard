@@ -8,6 +8,7 @@ import { serializeApiError } from '../lib/apiUserError';
 import { readApiJsonOk } from '../lib/readApiJson';
 import { LONG_RUNNING_EXPECTATION_HINT } from '../lib/longRunningExpectationHint';
 import { supabase } from '../lib/supabaseClient';
+import { useHeaderAccess } from '../components/HeaderAccessContext';
 
 type RecentQuery = {
   id: number | string;
@@ -80,6 +81,9 @@ export default function Home() {
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
   const [onboardingDismissed, setOnboardingDismissed] = useState(true);
   const dashboardAiGenRef = useRef(0);
+  const { access, accessLoading } = useHeaderAccess();
+  const dashboardAiDisabled = !accessLoading && access != null && access.featureAiEnabled === false;
+  const showDraftsHomeCard = !(!accessLoading && access != null && access.featureDraftsEnabled === false);
 
   // Show onboarding when all notification sections are empty (likely a new school).
   // Dismissed state is persisted in localStorage to avoid repeated display.
@@ -162,6 +166,7 @@ export default function Home() {
   }, [refreshRecentQueries]);
 
   const handleSuggestDocuments = async () => {
+    if (dashboardAiDisabled) return;
     const trimmed = question.trim();
     if (!trimmed) return;
     const requestGen = ++dashboardAiGenRef.current;
@@ -213,6 +218,7 @@ export default function Home() {
   };
 
   const handleAskWithSelected = async () => {
+    if (dashboardAiDisabled) return;
     const trimmed = question.trim();
     if (!trimmed) return;
     const requestGen = ++dashboardAiGenRef.current;
@@ -253,6 +259,7 @@ export default function Home() {
   const handleQuestionKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
     if (!question.trim()) return;
+    if (dashboardAiDisabled) return;
     if (suggestLoading || queryLoading) {
       e.preventDefault();
       return;
@@ -285,6 +292,20 @@ export default function Home() {
           <h2 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
             Was gilt bei uns zu diesem Thema?
           </h2>
+          {dashboardAiDisabled && (
+            <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
+              KI-Funktionen sind für Ihre Schule deaktiviert. Bei Bedarf wenden Sie sich an den Plattform-Administrator.
+              Gespeicherte Anfragen aus der Vergangenheit können Sie weiter unten einsehen.
+            </p>
+          )}
+          <div
+            className={
+              dashboardAiDisabled
+                ? 'pointer-events-none select-none opacity-50'
+                : undefined
+            }
+            aria-hidden={dashboardAiDisabled || undefined}
+          >
           <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
             <span
               className={`inline-flex items-center rounded-full border px-2 py-0.5 ${
@@ -500,6 +521,7 @@ export default function Home() {
               )}
             </div>
           )}
+          </div>
         </section>
 
         {/* Erste Schritte – nur für neue Schulen sichtbar (alle Benachrichtigungsfelder leer) */}
@@ -534,30 +556,37 @@ export default function Home() {
                 </svg>
               </button>
             </div>
-            <ol className="mt-4 grid gap-3 sm:grid-cols-3">
-              {([
-                {
-                  n: 1,
-                  title: 'Metadaten einrichten',
-                  desc: 'Dokumenttypen, Organisationseinheiten und KI-Einstellungen im Admin-Bereich konfigurieren.',
-                  href: '/admin',
-                  cta: 'Zum Admin-Bereich',
-                },
-                {
-                  n: 2,
-                  title: 'Dokumente hochladen',
-                  desc: 'PDFs oder Word-Dateien mit Metadaten hochladen – Texte werden automatisch indiziert.',
-                  href: '/upload',
-                  cta: 'Dokument hochladen',
-                },
-                {
-                  n: 3,
-                  title: 'KI & Analyse nutzen',
-                  desc: 'Dokumente zusammenfassen, Steuerungsrelevanz analysieren und Fragen per KI beantworten.',
-                  href: '/#ki-anfrage',
-                  cta: 'KI-Anfrage stellen',
-                },
-              ] as const).map(({ n, title, desc, href, cta }) => (
+            <ol
+              className={`mt-4 grid gap-3 ${dashboardAiDisabled ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}
+            >
+              {(
+                [
+                  {
+                    n: 1,
+                    title: 'Metadaten einrichten',
+                    desc: 'Dokumenttypen, Organisationseinheiten und KI-Einstellungen im Admin-Bereich konfigurieren.',
+                    href: '/admin',
+                    cta: 'Zum Admin-Bereich',
+                  },
+                  {
+                    n: 2,
+                    title: 'Dokumente hochladen',
+                    desc: 'PDFs oder Word-Dateien mit Metadaten hochladen – Texte werden automatisch indiziert.',
+                    href: '/upload',
+                    cta: 'Dokument hochladen',
+                  },
+                  ...(dashboardAiDisabled
+                    ? []
+                    : [
+                        {
+                          n: 3,
+                          title: 'KI & Analyse nutzen',
+                          desc: 'Dokumente zusammenfassen, Steuerungsrelevanz analysieren und Fragen per KI beantworten.',
+                          href: '/#ki-anfrage',
+                          cta: 'KI-Anfrage stellen',
+                        },
+                      ]),
+              ]).map(({ n, title, desc, href, cta }) => (
                 <li key={n} className="flex flex-col gap-2 rounded-md border border-blue-200 bg-white p-4 dark:border-blue-900/40 dark:bg-zinc-900">
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-[11px] font-bold text-white">
                     {n}
@@ -577,7 +606,7 @@ export default function Home() {
         )}
 
         {/* Navigation */}
-        <section className="grid gap-3 md:grid-cols-3">
+        <section className={`grid gap-3 ${showDraftsHomeCard ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
           <Link
             href="/documents"
             className="group flex min-h-[150px] flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-blue-700"
@@ -626,29 +655,31 @@ export default function Home() {
             </span>
           </Link>
 
-          <Link
-            href="/drafts"
-            className="group flex min-h-[150px] flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-violet-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-violet-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-violet-700"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                  Entwurfsassistent
-                </h2>
-                <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
-                  KI-gestützt Entwürfe erstellen und als Dokument speichern.
-                </p>
+          {showDraftsHomeCard ? (
+            <Link
+              href="/drafts"
+              className="group flex min-h-[150px] flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-violet-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-violet-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-violet-700"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                    Entwurfsassistent
+                  </h2>
+                  <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
+                    KI-gestützt Entwürfe erstellen und als Dokument speichern.
+                  </p>
+                </div>
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-700 ring-1 ring-violet-100 transition group-hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-200 dark:ring-violet-900/50">
+                  <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M4 19h16M7 17l10-10 2 2-10 10H7v-2z" strokeLinecap="round" />
+                  </svg>
+                </span>
               </div>
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-700 ring-1 ring-violet-100 transition group-hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-200 dark:ring-violet-900/50">
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 19h16M7 17l10-10 2 2-10 10H7v-2z" strokeLinecap="round" />
-                </svg>
+              <span className="mt-auto inline-flex w-full items-center justify-center rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
+                Neuen Entwurf erstellen
               </span>
-            </div>
-            <span className="mt-auto inline-flex w-full items-center justify-center rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
-              Neuen Entwurf erstellen
-            </span>
-          </Link>
+            </Link>
+          ) : null}
         </section>
 
         {/* Neu veröffentlicht + Aktuelle Anfragen (2 Spalten) */}

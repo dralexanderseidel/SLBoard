@@ -4,6 +4,7 @@ import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { canAccessSchool, resolveUserAccess } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
+import { loadSchoolFeatureFlags, apiResponseIfAiDisabled } from '../../../lib/schoolFeatureFlags';
 import { getAiSettingsForSchool } from '../../../lib/aiSettings';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../lib/aiQueryDebugLog';
 import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../lib/aiPromptTemplates';
@@ -36,7 +37,16 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = supabaseServer();
+    if (!supabase) {
+      return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
+    }
+
     const access = await resolveUserAccess(user.email, supabase);
+
+    const schoolFeatures = await loadSchoolFeatureFlags(supabase, access.schoolNumber);
+    const aiBlocked = apiResponseIfAiDisabled(schoolFeatures);
+    if (aiBlocked) return aiBlocked;
+
     const aiSettings = await getAiSettingsForSchool(access.schoolNumber);
     const promptTemplate = await getSchoolPromptTemplate(access.schoolNumber ?? '000000', 'summary');
     const systemPrompt = [promptTemplate.system_locked, promptTemplate.system_editable].filter(Boolean).join('\n\n').trim();

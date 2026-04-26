@@ -3,6 +3,7 @@ import { supabaseServer } from '../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../lib/supabaseServerClient';
 import { resolveUserAccess } from '../../../../lib/documentAccess';
 import { apiError } from '../../../../lib/apiError';
+import { loadSchoolFeatureFlags, apiResponseIfDraftsDisabled } from '../../../../lib/schoolFeatureFlags';
 import { DRAFT_DOC_TYPE_CODES } from '../../../../lib/draftDocTypes';
 
 export const maxDuration = 60;
@@ -23,6 +24,10 @@ export async function POST(req: NextRequest) {
       return apiError(500, 'SERVICE_UNAVAILABLE', 'Service nicht verfügbar.');
     }
     const access = await resolveUserAccess(user.email, supabase);
+    const schoolFlags = await loadSchoolFeatureFlags(supabase, access.schoolNumber);
+    const draftsBlocked = apiResponseIfDraftsDisabled(schoolFlags);
+    if (draftsBlocked) return draftsBlocked;
+
     const createdById = access.appUserId;
     const schoolNumber = access.schoolNumber ?? '000000';
 

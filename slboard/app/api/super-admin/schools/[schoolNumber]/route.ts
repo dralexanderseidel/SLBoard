@@ -3,6 +3,7 @@ import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { isSuperAdmin } from '../../../../../lib/superAdminAuth';
 import { apiError } from '../../../../../lib/apiError';
+import { parseSuperAdminMaxUploadMbInput } from '../../../../../lib/schoolFeatureFlags';
 import { deleteSchoolAsSuperAdmin } from '../../../../../lib/superAdminDeleteSchool';
 
 function parseQuota(n: unknown): number | null | undefined {
@@ -71,6 +72,20 @@ export async function PATCH(
     if (qDocs !== undefined) patch.quota_max_documents = qDocs;
     if (qAi !== undefined) patch.quota_max_ai_queries_per_month = qAi;
 
+    if (typeof body.feature_ai_enabled === 'boolean') {
+      patch.feature_ai_enabled = body.feature_ai_enabled;
+    }
+    if (typeof body.feature_drafts_enabled === 'boolean') {
+      patch.feature_drafts_enabled = body.feature_drafts_enabled;
+    }
+    if (body.max_upload_file_mb !== undefined) {
+      const parsedMb = parseSuperAdminMaxUploadMbInput(body.max_upload_file_mb);
+      if (parsedMb === undefined) {
+        return apiError(400, 'VALIDATION_ERROR', 'max_upload_file_mb muss eine Zahl zwischen 1 und 100 sein oder leer (Standard).');
+      }
+      patch.max_upload_file_mb = parsedMb;
+    }
+
     if (Object.keys(patch).length === 0) {
       return apiError(400, 'VALIDATION_ERROR', 'Keine Änderungen übermittelt.');
     }
@@ -80,7 +95,7 @@ export async function PATCH(
       .update(patch)
       .eq('school_number', schoolNumber)
       .select(
-        'school_number, name, active, created_at, initial_admin_app_user_id, quota_max_users, quota_max_documents, quota_max_ai_queries_per_month'
+        'school_number, name, active, created_at, initial_admin_app_user_id, quota_max_users, quota_max_documents, quota_max_ai_queries_per_month, feature_ai_enabled, feature_drafts_enabled, max_upload_file_mb'
       )
       .maybeSingle();
 
