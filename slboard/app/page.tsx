@@ -406,7 +406,6 @@ export default function Home() {
                   }}
                   onKeyDown={handleQuestionKeyDown}
                   placeholder="z. B. Handynutzung in Pausen, Medienwoche, Leistungsbewertung Oberstufe…"
-                  aria-describedby="dashboard-ai-kbd-hint"
                   className="w-full min-w-0 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-50 dark:placeholder:text-zinc-500"
                 />
               </div>
@@ -430,25 +429,6 @@ export default function Home() {
                 </button>
               </div>
             </div>
-            <p id="dashboard-ai-kbd-hint" className="text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
-              <span className="font-medium text-zinc-600 dark:text-zinc-300">Tastatur:</span>{' '}
-              <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1 py-px font-mono text-[10px] text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
-                Enter
-              </kbd>{' '}
-              startet die Dokumentensuche – oder die Antwort, sobald die Trefferliste geladen ist.{' '}
-              <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1 py-px font-mono text-[10px] text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
-                Umschalt+Enter
-              </kbd>
-              ,{' '}
-              <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1 py-px font-mono text-[10px] text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
-                Strg+Enter
-              </kbd>{' '}
-              oder{' '}
-              <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1 py-px font-mono text-[10px] text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
-                Cmd+Enter
-              </kbd>{' '}
-              (macOS) überspringen die Suche und beantworten sofort (wie „Direkt antworten“).
-            </p>
             {(suggestLoading || queryLoading || historyAnswerLoading) && (
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400" aria-live="polite">
                 {LONG_RUNNING_EXPECTATION_HINT}

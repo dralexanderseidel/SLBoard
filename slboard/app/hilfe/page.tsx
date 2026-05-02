@@ -162,6 +162,26 @@ export default function HilfePage() {
               wählen Sie <strong>„Ohne Auswahl direkt beantworten“</strong>, wenn keine Dokumentenvorschau nötig ist.
             </li>
           </ol>
+          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Tastenkürzel im Fragefeld</h3>
+          <p>
+            <span className="font-medium text-zinc-900 dark:text-zinc-100">Tastatur:</span>{' '}
+            <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
+              Enter
+            </kbd>{' '}
+            startet die Dokumentensuche – oder die Antwort, sobald die Trefferliste geladen ist.{' '}
+            <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
+              Umschalt+Enter
+            </kbd>
+            ,{' '}
+            <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
+              Strg+Enter
+            </kbd>{' '}
+            oder{' '}
+            <kbd className="rounded border border-zinc-300 bg-zinc-100 px-1.5 py-0.5 font-mono text-xs text-zinc-800 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200">
+              Cmd+Enter
+            </kbd>{' '}
+            (macOS) überspringen die Suche und beantworten sofort (wie „Direkt antworten“).
+          </p>
           <p>
             Unter der Antwort listet die Oberfläche die <strong>verwendeten Dokumente</strong> mit Link und – falls
             vorhanden – einen kurzen Zusammenfassungsauszug; die KI soll diese Liste nicht noch einmal in den
