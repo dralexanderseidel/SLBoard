@@ -1,4 +1,4 @@
-# NOMOS EduGovernance Pro – Funktionsübersicht
+# log/os Edu Governance Pro – Funktionsübersicht
 
 Detaillierte Beschreibung der bisherigen Funktionsweise der Anwendung (Stand: Projektfortschritt).
 
@@ -39,7 +39,7 @@ Ohne Login können viele APIs mit 401 antworten; die UI leitet ggf. zur Anmeldun
 | **/login** | Anmeldeseite |
 | **/supabase-test** | Einfacher Verbindungstest zur Supabase-Datenbank (optional) |
 
-Gemeinsamer Header mit NOMOS-Logo, Links (Dashboard, Dokumente, Entwurfsassistent, Admin) und UserMenu.
+Gemeinsamer Header mit log/os-Logo, Links (Dashboard, Dokumente, Entwurfsassistent, Admin) und UserMenu.
 
 ---
 
@@ -211,7 +211,7 @@ Storage: Bucket `documents` für Dokumentdateien; Zugriff über signierte URLs u
 - **Rechtsbezug** in der Dokumentdetailseite: In der Leseansicht nach drei Zeilen mit „[…]“ abgekürzt; vollständig im Bearbeiten-Modus und im Entwurfstext-Block (wenn keine Dateivorschau).
 - **Versionen:** Links in der Dokumentdetailseite Liste „Versionen“ mit Auswahl; gewählte Version bestimmt Vorschau und Download-Link.
 - **Hintergrund:** Heller Grauton (z. B. bg-zinc-100) hinter den weißen Inhaltsboxen für bessere Abgrenzung.
-- **NOMOS-Logo** in der Topzeile (nomos-logo-crop.png), verlinkt zur Startseite.
+- **log/os-Logo** in der Topzeile (SVG-Markenzeile), verlinkt zur Startseite.
 - **Admin-Bereich:** verwaltet Benutzer/Rollen, KI-Konfiguration und Metadatenlisten pro Schule.
 
 ---

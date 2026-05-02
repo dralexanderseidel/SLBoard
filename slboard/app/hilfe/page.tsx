@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 const helpClassName = 'text-blue-600 underline-offset-2 hover:underline dark:text-blue-400';
 
 export const metadata: Metadata = {
-  title: 'Hilfe und Dokumentation | NOMOS Edu Governance Pro',
+  title: 'Hilfe und Dokumentation | log/os Edu Governance Pro',
   description:
     'Ausführliche Anleitung für Schulen: Anmeldung, Dokumente, KI-Funktionen, Entwurfsassistent und häufige Fragen.',
 };
@@ -33,7 +33,7 @@ export default function HilfePage() {
           Endnutzer-Dokumentation
         </p>
         <h1 className="mt-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Hilfe zu NOMOS Edu Governance Pro
+          Hilfe zu log/os Edu Governance Pro
         </h1>
         <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
           Diese Seite erklärt die wichtigsten Funktionen der Anwendung für Schulen: von der Anmeldung über die
@@ -64,7 +64,7 @@ export default function HilfePage() {
         <section id="einleitung" className="space-y-3">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Über diese Hilfe</h2>
           <p>
-            <strong>NOMOS Edu Governance Pro</strong> unterstützt Schulen bei der zentralen Ablage, Suche und
+            <strong>log/os Edu Governance Pro</strong> unterstützt Schulen bei der zentralen Ablage, Suche und
             Bearbeitung schulischer Dokumente (z.&nbsp;B. Elternbriefe, Konzepte, Protokolle, Beschlüsse). Zusätzlich
             stehen KI-Funktionen zur Verfügung – immer im Rahmen der für Ihre Schule konfigurierten Rechte und
             Kontingente.

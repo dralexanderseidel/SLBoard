@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { createServerSupabaseClient } from '../../lib/supabaseServerClient';
 
 export const metadata: Metadata = {
-  title: 'Impressum | NOMOS Edu Governance Pro',
+  title: 'Impressum | log/os Edu Governance Pro',
   description: 'Impressum und Anbieterkennzeichnung',
 };
 

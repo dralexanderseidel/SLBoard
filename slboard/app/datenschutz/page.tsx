@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { createServerSupabaseClient } from '../../lib/supabaseServerClient';
 
 export const metadata: Metadata = {
-  title: 'Datenschutz | NOMOS Edu Governance Pro',
+  title: 'Datenschutz | log/os Edu Governance Pro',
   description: 'Informationen zur Verarbeitung personenbezogener Daten',
 };
 
@@ -27,7 +27,7 @@ export default async function DatenschutzPage() {
         Datenschutzhinweise
       </h1>
       <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-        Stand: April 2026 · Produktbezeichnung: NOMOS Edu Governance Pro
+        Stand: April 2026 · Produktbezeichnung: log/os Edu Governance Pro
       </p>
 
       <p className="mt-6 rounded border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">

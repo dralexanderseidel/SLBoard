@@ -5,7 +5,7 @@ import { AppNavLink } from '../components/AppNavLink';
 import { HeaderNav } from '../components/HeaderNav';
 import { UserMenu } from '../components/UserMenu';
 import { HeaderAccessProvider } from '../components/HeaderAccessContext';
-import { NomosLogo } from '../components/NomosLogo';
+import { LogOsLogo } from '../components/LogOsLogo';
 import { GlobalSearch } from '../components/GlobalSearch';
 import { ScrollToTop } from '../components/ScrollToTop';
 import { AppToaster } from '../components/AppToaster';
@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'NOMOS Edu Governance Pro',
+  title: 'log/os Edu Governance Pro',
   description: 'KI-gestützte Dokumentenverwaltung für Schulen',
 };
 
@@ -48,7 +48,7 @@ export default function RootLayout({
               <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-3 sm:px-6 md:flex-row md:items-center md:gap-3 lg:gap-4">
                 <div className="flex min-w-0 w-full flex-1 items-center gap-2 sm:gap-3 md:gap-3 lg:gap-4">
                   <AppNavLink href="/" className="flex shrink-0 items-center self-center">
-                    <NomosLogo />
+                    <LogOsLogo />
                   </AppNavLink>
                   <HeaderNav />
                 </div>

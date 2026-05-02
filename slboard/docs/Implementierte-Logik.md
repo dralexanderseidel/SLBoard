@@ -1,4 +1,4 @@
-# NOMOS EduGovernance Pro – Implementierte Logik (Detail)
+# log/os Edu Governance Pro – Implementierte Logik (Detail)
 
 Stand: 2026-04-02
 
