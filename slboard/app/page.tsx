@@ -63,10 +63,13 @@ function normalizeQuerySources(raw: unknown): QuerySource[] {
   return out;
 }
 
+const RECENTLY_PUBLISHED_PREVIEW = 5;
+
 export default function Home() {
   const [question, setQuestion] = useState('');
   const [recentQueries, setRecentQueries] = useState<RecentQuery[]>([]);
   const [recentlyPublished, setRecentlyPublished] = useState<RecentlyPublished[]>([]);
+  const [recentPublishedExpanded, setRecentPublishedExpanded] = useState(false);
   const [reviewOverdue, setReviewOverdue] = useState<ReviewOverdue[]>([]);
   const [publishedLoading, setPublishedLoading] = useState(true);
   const [reviewOverdueLoading, setReviewOverdueLoading] = useState(true);
@@ -755,7 +758,10 @@ export default function Home() {
                   Diese Dokumente wurden kürzlich veröffentlicht – Hinweis für Gremien.
                 </p>
                 <ul className="divide-y divide-zinc-200 text-xs dark:divide-zinc-800">
-                  {recentlyPublished.map((item) => (
+                  {(recentPublishedExpanded
+                    ? recentlyPublished
+                    : recentlyPublished.slice(0, RECENTLY_PUBLISHED_PREVIEW)
+                  ).map((item) => (
                     <li key={item.documentId} className="flex items-center justify-between py-2">
                       <div className="min-w-0">
                         <Link
@@ -778,6 +784,24 @@ export default function Home() {
                     </li>
                   ))}
                 </ul>
+                {recentlyPublished.length > RECENTLY_PUBLISHED_PREVIEW && !recentPublishedExpanded && (
+                  <button
+                    type="button"
+                    onClick={() => setRecentPublishedExpanded(true)}
+                    className="mt-2 text-left text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+                  >
+                    Weitere
+                  </button>
+                )}
+                {recentPublishedExpanded && recentlyPublished.length > RECENTLY_PUBLISHED_PREVIEW && (
+                  <button
+                    type="button"
+                    onClick={() => setRecentPublishedExpanded(false)}
+                    className="mt-2 text-left text-xs font-medium text-zinc-600 underline-offset-2 hover:underline dark:text-zinc-400"
+                  >
+                    Weniger anzeigen
+                  </button>
+                )}
               </div>
             ) : (
               <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

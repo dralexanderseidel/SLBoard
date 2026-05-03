@@ -37,7 +37,7 @@ export async function GET() {
           .eq('action', 'document.update')
           .not('new_values', 'is', null)
           .order('created_at', { ascending: false })
-          .limit(50);
+          .limit(120);
         if (access.schoolNumber) q = q.eq('school_number', access.schoolNumber);
         return q;
       })(),
@@ -65,7 +65,7 @@ export async function GET() {
         return nv?.status === 'VEROEFFENTLICHT' && ov?.status !== 'VEROEFFENTLICHT';
       });
 
-      const documentIds = [...new Set(publishedEvents.map((e) => e.entity_id as string))].slice(0, 15);
+      const documentIds = [...new Set(publishedEvents.map((e) => e.entity_id as string))].slice(0, 45);
       if (documentIds.length > 0) {
         const { data: docs } = await supabase
           .from('documents')
@@ -91,7 +91,7 @@ export async function GET() {
               publishedAt: byId.get(d.id) ?? today.toISOString(),
             }))
             .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))
-            .slice(0, 10);
+            .slice(0, 40);
         }
       }
     }
