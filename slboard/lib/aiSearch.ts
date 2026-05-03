@@ -42,6 +42,7 @@ function filterDocsByReadAccess(access: UserAccessContext, rows: DocRow[]): DocR
 }
 
 import { STOP_WORDS } from './indexing';
+import { schulentwicklungFieldLabelDe } from './steeringAnalysisV2';
 
 const COMPOUND_PARTS = new Set([
   'handy', 'konzept', 'nutzung', 'medien', 'schule', 'schüler', 'eltern', 'leistung',
@@ -118,6 +119,9 @@ export type DocRow = {
   summary: string | null;
   search_text?: string | null;
   keywords?: string[] | null;
+  /** Denormalisiert aus Steuerungsanalyse; Kontext für KI-Prompts */
+  schulentwicklung_primary_field?: string | null;
+  schulentwicklung_fields?: string[] | null;
 };
 
 /**
@@ -125,7 +129,7 @@ export type DocRow = {
  */
 export function buildDocumentMetadataPromptSection(doc: DocRow): string {
   const lines: string[] = [
-    'Metadaten (verbindlich für Fragen zu Gremium, Status, Reichweite, Evaluation/Wiedervorlage, Verantwortung):',
+    'Metadaten (verbindlich für Fragen zu Gremium, Status, Reichweite, Evaluation/Wiedervorlage, Verantwortung, Schulentwicklungs-Zuordnung):',
   ];
   lines.push(`- Dokumenttyp (Code): ${doc.document_type_code ?? '—'}`);
   if (doc.status) {
@@ -162,6 +166,22 @@ export function buildDocumentMetadataPromptSection(doc: DocRow): string {
       `- Kurzbeschreibung (Metadaten): ${sum.length > 600 ? `${sum.slice(0, 600)}…` : sum}`,
     );
   }
+  const swPrimary = doc.schulentwicklung_primary_field?.trim() ?? '';
+  const swFieldsRaw = Array.isArray(doc.schulentwicklung_fields)
+    ? doc.schulentwicklung_fields.map((s) => String(s).trim()).filter(Boolean)
+    : [];
+  const swFields = swFieldsRaw.length > 0 ? swFieldsRaw : swPrimary ? [swPrimary] : [];
+  if (swPrimary || swFields.length > 0) {
+    const primaryLabel = swPrimary
+      ? schulentwicklungFieldLabelDe(swPrimary)
+      : swFields[0]
+        ? schulentwicklungFieldLabelDe(swFields[0])
+        : '—';
+    const fieldLabels = swFields.map((c) => schulentwicklungFieldLabelDe(c)).join(', ');
+    lines.push(
+      `- Schulentwicklung (Metadaten, letzte KI-Zuordnung): Primär: ${primaryLabel}; zugeordnete Aufgabenfelder: ${fieldLabels}`,
+    );
+  }
   lines.push(
     '- Hinweis: Konkrete Zeitpunkte einzelner Workflow-Schritte (z. B. wie lange „Entwurf“ dauerte) sind in diesen Metadaten nicht als Historie gespeichert; sichtbar sind Erstellungsdatum und aktueller Status. Für Zeitverläufe ggf. Versions- oder Änderungsverlauf prüfen.',
   );
@@ -181,7 +201,7 @@ export function scoreRelevance(doc: DocRow, keywords: string[]): number {
 }
 
 const DOC_SELECT_FOR_SEARCH =
-  'id, title, document_type_code, created_at, status, reach_scope, participation_groups, review_date, legal_reference, responsible_unit, protection_class_id, school_number, gremium, summary, search_text, keywords';
+  'id, title, document_type_code, created_at, status, reach_scope, participation_groups, review_date, legal_reference, responsible_unit, protection_class_id, school_number, gremium, summary, search_text, keywords, schulentwicklung_primary_field, schulentwicklung_fields';
 
 /**
  * Sucht Dokumente nach Frage (Keywords), sortiert nach Relevanz. Kein LLM.

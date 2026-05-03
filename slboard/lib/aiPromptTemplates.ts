@@ -1,4 +1,5 @@
 import { supabaseServer } from './supabaseServer';
+import { STEERING_USER_LOCKED_TEMPLATE } from './steeringUserPromptLocked';
 
 export type PromptUseCase = 'qa' | 'summary' | 'steering' | 'todos';
 
@@ -39,67 +40,40 @@ const LOCKED_TEMPLATES: Record<PromptUseCase, PromptTemplateParts> = {
     user_editable_default: '',
   },
   steering: {
-    system_locked: `Du bist ein Experte fuer Schulorganisation und institutionelle Steuerung im deutschen Schulsystem.
+    system_locked: `Du bist ein Experte für Schulorganisation und institutionelle Steuerung im deutschen Schulsystem.
 
-Du analysierst schulische Dokumente nicht inhaltlich, sondern strukturell entlang eines Steuerungsmodells.
+Du analysierst schulische Dokumente nicht primär inhaltlich, sondern strukturell entlang einer Schulentwicklungs-Matrix.
 
-Das Modell umfasst vier Dimensionen:
+Die Matrix besteht aus:
+A) 7 Aufgabenfeldern der Schulentwicklung:
+- Unterrichtsentwicklung
+- Personalentwicklung
+- Organisationsentwicklung
+- Qualitätsentwicklung
+- Strategie
+- Kooperation
+- Führung & Governance
 
+B) 3 Steuerungsdimensionen (im JSON unter scores):
 1. Tragfähigkeit (Organisation)
-→ Was kann die Schule aktuell leisten?
+2. Entscheidungslogik (JSON-Schlüssel: entscheidungslogik)
+3. Verbindlichkeit
 
-2. Belastungsgrad (Dokument)
-→ Wie stark fordert das Dokument die Organisation heraus?
-
-3. Entscheidungsstruktur
-→ Ist klar geregelt, wer wann entscheidet und wie?
-
-4. Verbindlichkeit
-→ Wie klar und stabil sind die Regelungen formuliert?
-
-Bestimme zusätzlich die PASSUNG:
-
-- gut → Tragfähigkeit ≥ Belastungsgrad
-- kritisch → Tragfähigkeit < Belastungsgrad
-
-Vergleiche die Stufen ordinal: niedrig < mittel < hoch (gleiche Stufe zählt als Gleichstand, also „≥“).
+Analyseprinzipien:
+- Arbeite evidenzbasiert (nur Text + ggf. Schulprofil und Metadatenblock).
+- Keine Spekulationen.
+- Wenn etwas nicht im Dokument steht: explizit benennen.
+- Trenne strikt zwischen Beschreibung und Bewertung.
+- Formuliere präzise, knapp und strukturiert.
 
 Evidenz-Logik:
-- Fuer Tragfaehigkeit: Schul-Steckbrief (falls vorhanden) einbeziehen.
-- Strukturelle Metadaten (Gremium, Status, Fristen, Zustaendigkeit, Reichweite, Rechtsbezug, Kurzbeschreibung) duerfen fuer Tragfaehigkeit und Passung herangezogen werden.
-- Belastungsgrad: primaer am Fliesstext des Dokuments (Umfang, Komplexitaet, Dichte); Metadaten nur ergaenzend, wenn sie die Bearbeitungslast einordnen.
-- Entscheidungsstruktur und Verbindlichkeit: werten am Fliesstext aus; Metadaten duerfen mit einfliessen, wenn sie Beschlusswege, Zustaendigkeiten, Verfahrensstand oder rechtliche Einordnung konkretisieren (z. B. Gremium, Workflow-Status, Rechtsbezug), und der Fliesstext dazu nichts oder zu wenig hergibt.
+- Für Tragfähigkeit: Schul-Steckbrief (falls vorhanden) einbeziehen.
+- Strukturelle Metadaten (Gremium, Status, Fristen, Zuständigkeit, Reichweite, Rechtsbezug, Kurzbeschreibung) dürfen einfließen, wenn sie belegbar sind.
 - Fehlende Belege explizit benennen und konservativ bewerten.
 - Keine freien Erfindungen: nur Schul-Steckbrief, Metadatenblock und Dokumenttext als Belegbasis.
-- Praezise, kurze Begruendungen.`,
-    user_locked: `Analysiere das folgende Dokument anhand der vier Dimensionen.
 
-Dokumenttitel: {{document_title}}
-
-{{document_metadata_block}}
-
-{{school_profile_block}}Dokumenttext:
-{{document_text}}
-
-Wichtig:
-- Analysiere das konkrete Dokument, nicht die Schule im Allgemeinen.
-- Falls Schul-Steckbrief, Metadaten und Dokumenttext sich widersprechen, hat der formulierte Dokumenttext (Fliesstext) Vorrang; Metadaten dennoch erwaehnen, wenn sie die Einordnung aendern wuerden.
-- Begruende jede Bewertung mit expliziten Signalen aus Fliesstext und/oder Metadaten (siehe Systemanweisung, Evidenz-Logik) oder benenne fehlende Belege klar.
-
-Antwortformat (MUSS exakt als JSON-Objekt eingehalten werden):
-{
-  "tragfaehigkeit": { "score": "", "begruendung": "" },
-  "belastungsgrad": { "score": "", "begruendung": "" },
-  "entscheidungsstruktur": { "score": "", "begruendung": "" },
-  "verbindlichkeit": { "score": "", "begruendung": "" },
-  "passung": { "score": "", "begruendung": "" },
-  "gesamtbewertung": { "score": "", "begruendung": "" }
-}
-
-Nutze fuer score ausschliesslich diese Werte:
-- niedrig|mittel|hoch
-- passung: gut|kritisch
-- gesamtbewertung: niedriger Steuerungsbedarf|mittlerer Steuerungsbedarf|hoher Steuerungsbedarf.`,
+Das exakte JSON-Ausgabeformat steht im User-Prompt; halte Feldnamen und erlaubte Enum-Werte strikt ein.`,
+    user_locked: STEERING_USER_LOCKED_TEMPLATE,
     system_editable_default:
       'Bewerte streng anhand klarer Textindizien. Bei Unklarheit konservativ bleiben.',
     user_editable_default: '',

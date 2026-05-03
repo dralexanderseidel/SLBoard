@@ -13,6 +13,7 @@ import { getAiSettingsForSchool } from '../../../../../lib/aiSettings';
 import { apiError } from '../../../../../lib/apiError';
 import { loadSchoolFeatureFlags, apiResponseIfAiDisabled } from '../../../../../lib/schoolFeatureFlags';
 import { buildDocumentMetadataPromptSection } from '../../../../../lib/aiSearch';
+import { mapDbStatusToSteeringDocumentStatus, parseSteeringAnalysisV2 } from '../../../../../lib/steeringAnalysisV2';
 
 export const runtime = 'nodejs';
 
@@ -36,49 +37,9 @@ function extractJsonObject(raw: string): unknown {
 }
 
 function validateSteeringShape(raw: unknown): { ok: boolean; errors: string[] } {
-  const errors: string[] = [];
-  if (!raw || typeof raw !== 'object') {
-    return { ok: false, errors: ['Antwort ist kein gueltiges JSON-Objekt.'] };
-  }
-  const o = raw as Record<string, unknown>;
-  const expectObject = (key: string): Record<string, unknown> | null => {
-    const v = o[key];
-    if (!v || typeof v !== 'object') {
-      errors.push(`Feld "${key}" fehlt oder ist kein Objekt.`);
-      return null;
-    }
-    return v as Record<string, unknown>;
-  };
-  const checkEnum = (obj: Record<string, unknown> | null, key: string, allowed: string[]) => {
-    if (!obj) return;
-    const val = obj.score;
-    if (typeof val !== 'string' || !allowed.includes(val)) {
-      errors.push(`"${key}.score" ungueltig (erlaubt: ${allowed.join('|')}).`);
-    }
-    if (typeof obj.begruendung !== 'string' || !obj.begruendung.trim()) {
-      errors.push(`"${key}.begruendung" fehlt oder ist leer.`);
-    }
-  };
-
-  const t = expectObject('tragfaehigkeit');
-  const b = expectObject('belastungsgrad');
-  const e = expectObject('entscheidungsstruktur');
-  const v = expectObject('verbindlichkeit');
-  const p = expectObject('passung');
-  const g = expectObject('gesamtbewertung');
-
-  checkEnum(t, 'tragfaehigkeit', ['niedrig', 'mittel', 'hoch']);
-  checkEnum(b, 'belastungsgrad', ['niedrig', 'mittel', 'hoch']);
-  checkEnum(e, 'entscheidungsstruktur', ['niedrig', 'mittel', 'hoch']);
-  checkEnum(v, 'verbindlichkeit', ['niedrig', 'mittel', 'hoch']);
-  checkEnum(p, 'passung', ['gut', 'kritisch']);
-  checkEnum(g, 'gesamtbewertung', [
-    'niedriger Steuerungsbedarf',
-    'mittlerer Steuerungsbedarf',
-    'hoher Steuerungsbedarf',
-  ]);
-
-  return { ok: errors.length === 0, errors };
+  const r = parseSteeringAnalysisV2(raw, '00000000-0000-0000-0000-000000000001');
+  if (r.ok) return { ok: true, errors: [] };
+  return { ok: false, errors: r.errors };
 }
 
 function validateTodosShape(raw: unknown): { ok: boolean; errors: string[] } {
@@ -138,8 +99,9 @@ export async function POST(req: NextRequest) {
     const systemPrompt = [template.system_locked, template.system_editable].filter(Boolean).join('\n\n').trim();
 
     const userTemplate = [template.user_locked, template.user_editable].filter(Boolean).join('\n\n').trim();
+    const previewDocId = '00000000-0000-0000-0000-000000000001';
     const sampleMetadataBlock = buildDocumentMetadataPromptSection({
-      id: '00000000-0000-0000-0000-000000000001',
+      id: previewDocId,
       title: 'Testdokument',
       document_type_code: 'PROTOKOLL',
       created_at: new Date().toISOString(),
@@ -151,12 +113,18 @@ export async function POST(req: NextRequest) {
       participation_groups: ['Lehrkräfte'],
       review_date: '2026-12-31',
       summary: 'Kurzbeschreibung fuer die Vorschau.',
+      schulentwicklung_primary_field: 'qualitaetsentwicklung',
+      schulentwicklung_fields: ['qualitaetsentwicklung', 'fuehrung_governance'],
     });
+    const analysisDate = new Date().toISOString().slice(0, 10);
     const userPrompt = renderPromptTemplate(userTemplate, {
       question: 'Welche Fristen gelten fuer die Zeugnisabgabe?',
       context: 'Dokumentpassage A: Zeugnisabgabe bis 20.06. durch Klassenleitungen.',
       school_profile_block: 'Schul-Steckbrief:\nMittelgrosse Gesamtschule.\n\n',
       document_title: 'Testdokument',
+      document_id: previewDocId,
+      analysis_date: analysisDate,
+      document_status_json: mapDbStatusToSteeringDocumentStatus('ENTWURF', null),
       document_metadata_block: sampleMetadataBlock,
       document_text:
         'Die Klassenleitungen melden Zeugnisdaten bis 20.06. Das Sekretariat prueft Vollstaendigkeit. Beschlusswege sind im Dokument nur teilweise konkretisiert.',

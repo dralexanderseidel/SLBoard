@@ -1,13 +1,18 @@
 import React from 'react';
+import { steeringListChipFromAnalysis } from '@/lib/steeringAnalysisV2';
 import type { DocumentListItem } from './types';
 
 // ── Steering helpers ──────────────────────────────────────────────────────────
 
 export function steeringNeedScore(doc: DocumentListItem): 'low' | 'medium' | 'high' | null {
-  const score = doc.steering_analysis?.gesamtbewertung?.score;
-  if (score === 'niedriger Steuerungsbedarf') return 'low';
-  if (score === 'mittlerer Steuerungsbedarf') return 'medium';
-  if (score === 'hoher Steuerungsbedarf') return 'high';
+  const chip = steeringListChipFromAnalysis(doc.steering_analysis);
+  if (chip.overallRating === 'robust') return 'low';
+  if (chip.overallRating === 'instabil') return 'medium';
+  if (chip.overallRating === 'kritisch') return 'high';
+  const g = chip.legacyGesamt;
+  if (g === 'niedriger Steuerungsbedarf') return 'low';
+  if (g === 'mittlerer Steuerungsbedarf') return 'medium';
+  if (g === 'hoher Steuerungsbedarf') return 'high';
   return null;
 }
 
@@ -20,6 +25,10 @@ export function steeringIconTone(doc: DocumentListItem): string {
 }
 
 export function steeringIconTitle(doc: DocumentListItem): string {
+  const chip = steeringListChipFromAnalysis(doc.steering_analysis);
+  if (chip.overallRating === 'robust') return 'Steuerungsanalyse vorhanden: robust (strukturell)';
+  if (chip.overallRating === 'instabil') return 'Steuerungsanalyse vorhanden: instabil (strukturell)';
+  if (chip.overallRating === 'kritisch') return 'Steuerungsanalyse vorhanden: kritisch (strukturell)';
   const score = steeringNeedScore(doc);
   if (score === 'low') return 'Steuerungsanalyse vorhanden: niedriger Steuerungsbedarf';
   if (score === 'medium') return 'Steuerungsanalyse vorhanden: mittlerer Steuerungsbedarf';

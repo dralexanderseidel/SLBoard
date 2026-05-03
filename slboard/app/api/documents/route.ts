@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { DocumentListItem } from '../../../app/documents/types';
 import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
+import { steeringListChipFromAnalysis } from '../../../lib/steeringAnalysisV2';
 
 const STEERING_GESAMT_BY_LEVEL: Record<'low' | 'medium' | 'high', string> = {
   low: 'niedriger Steuerungsbedarf',
@@ -10,24 +12,15 @@ const STEERING_GESAMT_BY_LEVEL: Record<'low' | 'medium' | 'high', string> = {
   high: 'hoher Steuerungsbedarf',
 };
 
-/** Entspricht der Anzeige-Logik in app/documents/page.tsx (steeringNeedScore). */
-function steeringGesamtScore(steering_analysis: unknown): string | undefined {
-  const score =
-    steering_analysis &&
-    typeof steering_analysis === 'object' &&
-    'gesamtbewertung' in steering_analysis
-      ? (steering_analysis as { gesamtbewertung?: { score?: string } }).gesamtbewertung?.score
-      : undefined;
-  return typeof score === 'string' ? score : undefined;
-}
+const STEERING_RATING_BY_LEVEL: Record<'low' | 'medium' | 'high', string> = {
+  low: 'robust',
+  medium: 'instabil',
+  high: 'kritisch',
+};
 
 function isSteeringAnalysisPresent(steering_analysis: unknown): boolean {
-  const score = steeringGesamtScore(steering_analysis);
-  return (
-    score === 'niedriger Steuerungsbedarf' ||
-    score === 'mittlerer Steuerungsbedarf' ||
-    score === 'hoher Steuerungsbedarf'
-  );
+  const chip = steeringListChipFromAnalysis(steering_analysis);
+  return Boolean(chip.overallRating || chip.legacyGesamt);
 }
 
 const LIST_SUMMARY_MAX_CHARS = 320;
@@ -50,19 +43,26 @@ const DOCUMENT_LIST_SELECT = [
   'summary',
   'school_number',
   'archived_at',
-  'steering_gesamt_score:steering_analysis->gesamtbewertung->>score',
+  'steering_gesamt_legacy:steering_analysis->gesamtbewertung->>score',
+  'steering_overall_rating:steering_analysis->overall->>rating',
 ].join(',');
 
 function mapDocumentListRow(raw: Record<string, unknown>): Record<string, unknown> {
-  const scoreRaw = raw.steering_gesamt_score;
-  const { steering_gesamt_score: _sg, ...rest } = raw;
-  const score = typeof scoreRaw === 'string' ? scoreRaw.trim() : '';
-  const steering_analysis =
-    score === 'niedriger Steuerungsbedarf' ||
-    score === 'mittlerer Steuerungsbedarf' ||
-    score === 'hoher Steuerungsbedarf'
-      ? { gesamtbewertung: { score } }
-      : null;
+  const legacyRaw = raw.steering_gesamt_legacy;
+  const ratingRaw = raw.steering_overall_rating;
+  const { steering_gesamt_legacy: _lg, steering_overall_rating: _rt, ...rest } = raw;
+  const legacy = typeof legacyRaw === 'string' ? legacyRaw.trim() : '';
+  const rating = typeof ratingRaw === 'string' ? ratingRaw.trim() : '';
+  let steering_analysis: DocumentListItem['steering_analysis'] = null;
+  if (rating === 'robust' || rating === 'instabil' || rating === 'kritisch') {
+    steering_analysis = { overall: { rating } };
+  } else if (
+    legacy === 'niedriger Steuerungsbedarf' ||
+    legacy === 'mittlerer Steuerungsbedarf' ||
+    legacy === 'hoher Steuerungsbedarf'
+  ) {
+    steering_analysis = { gesamtbewertung: { score: legacy } };
+  }
   let summary = rest.summary;
   if (typeof summary === 'string' && summary.length > LIST_SUMMARY_MAX_CHARS) {
     summary = `${summary.slice(0, LIST_SUMMARY_MAX_CHARS)}…`;
@@ -230,18 +230,20 @@ export async function GET(req: NextRequest) {
       query = query.is('summary', null);
     }
 
-    // Steering-Filter: has/low/medium/high direkt in SQL via JSON-Operator
+    // Steering-Filter: has / low|medium|high (neues overall.rating oder Legacy-Score)
     if (steeringFilter === 'has') {
+      const legacyScores = Object.values(STEERING_GESAMT_BY_LEVEL);
+      const newRatings = ['robust', 'instabil', 'kritisch'];
       query = query.or(
-        Object.values(STEERING_GESAMT_BY_LEVEL)
-          .map((v) => `steering_analysis->gesamtbewertung->>score.eq.${v}`)
-          .join(',')
+        [...newRatings.map((r) => `steering_analysis->overall->>rating.eq.${r}`), ...legacyScores.map(
+          (v) => `steering_analysis->gesamtbewertung->>score.eq.${v}`,
+        )].join(','),
       );
     } else if (steeringFilter === 'low' || steeringFilter === 'medium' || steeringFilter === 'high') {
-      query = query.filter(
-        'steering_analysis->gesamtbewertung->>score',
-        'eq',
-        STEERING_GESAMT_BY_LEVEL[steeringFilter]
+      const rating = STEERING_RATING_BY_LEVEL[steeringFilter];
+      const legacy = STEERING_GESAMT_BY_LEVEL[steeringFilter];
+      query = query.or(
+        `steering_analysis->overall->>rating.eq.${rating},steering_analysis->gesamtbewertung->>score.eq.${legacy}`,
       );
     }
     // 'missing' wird nach dem Fetch in-memory gefiltert (erfordert Negation des JSON-Pfads)

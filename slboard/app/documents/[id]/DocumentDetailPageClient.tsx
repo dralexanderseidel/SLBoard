@@ -28,25 +28,17 @@ import { useDocumentSummary } from './hooks/useDocumentSummary';
 import { useDocumentSteering } from './hooks/useDocumentSteering';
 import { useDocumentAsk } from './hooks/useDocumentAsk';
 import { useDocumentMetadataOptions } from './hooks/useDocumentMetadataOptions';
+import { SteeringAnalysisPanel } from './SteeringAnalysisPanel';
 import { ApiErrorCallout } from '@/components/ApiErrorCallout';
 import { LONG_RUNNING_EXPECTATION_HINT } from '@/lib/longRunningExpectationHint';
+import { schulentwicklungFieldLabelDe } from '@/lib/steeringAnalysisV2';
+import type { SteeringAnalysis } from '@/lib/steeringAnalysisV2';
 import { CONTEXT_HELP } from '@/lib/contextHelpUrls';
 import { ContextHelpLink } from '@/components/ContextHelpLink';
 import { useHeaderAccess } from '@/components/HeaderAccessContext';
 import type { AuditEntry, DocumentDetail } from './types';
 
 // ── Reine Hilfsfunktionen (kein Component-State) ─────────────────────────────
-
-function trafficLight(score: 'niedrig' | 'mittel' | 'hoch', invert = false) {
-  if (invert) {
-    if (score === 'niedrig') return 'bg-red-500';
-    if (score === 'mittel') return 'bg-amber-400';
-    return 'bg-emerald-500';
-  }
-  if (score === 'niedrig') return 'bg-emerald-500';
-  if (score === 'mittel') return 'bg-amber-400';
-  return 'bg-red-500';
-}
 
 function whoLabel(email: string) {
   const base = (email ?? '').trim();
@@ -203,7 +195,7 @@ export function DocumentDetailPageClient() {
     steeringTodosUpdatedAt,
     todosLoading, todosError,
     handleSteeringTodos,
-  } = useDocumentSteering(params?.id, doc);
+  } = useDocumentSteering(params?.id, doc, setDoc);
 
   const {
     docQuestionInput, setDocQuestionInput,
@@ -871,8 +863,9 @@ export function DocumentDetailPageClient() {
                     </p>
                   )}
                   <p className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                    Prüft das Dokument per KI auf Tragfähigkeit, Belastungsgrad, Entscheidungsstruktur und
-                    Verbindlichkeit und ermittelt daraus den Steuerungsbedarf.
+                    Matrix (7 Aufgabenfelder), drei Steuerungsdimensionen mit 0–100-Scoring, Risiken und
+                    strukturelle Verbesserungsvorschläge — Einordnung wird in den Metadaten (Schulentwicklung)
+                    gespeichert.
                   </p>
                   {steeringError && <ApiErrorCallout error={steeringError} className="mt-2 text-xs" />}
                   {steeringUpdatedAt && (
@@ -881,47 +874,18 @@ export function DocumentDetailPageClient() {
                     </p>
                   )}
 
-                  {steeringAnalysis && (
-                    <div className="mt-2 rounded border border-zinc-200 bg-zinc-50/80 p-2 dark:border-zinc-800 dark:bg-zinc-900/40">
-                      <p className="mb-2 text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
-                        Steuerungsanalyse
-                      </p>
-                      <ul className="space-y-2">
-                        {([
-                          ['Tragfähigkeit', steeringAnalysis.tragfaehigkeit, true],
-                          ['Belastungsgrad', steeringAnalysis.belastungsgrad, false],
-                          ['Entscheidungsstruktur', steeringAnalysis.entscheidungsstruktur, true],
-                          ['Verbindlichkeit', steeringAnalysis.verbindlichkeit, true],
-                        ] as const).map(([label, item, invert]) => (
-                          <li key={label} className="rounded border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950">
-                            <div className="mb-1 flex items-center gap-2">
-                              <span className={`inline-block h-2.5 w-2.5 rounded-full ${trafficLight(item.score, invert)}`} />
-                              <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
-                                {label}: {item.score}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-zinc-600 dark:text-zinc-300">{item.begruendung}</p>
-                          </li>
-                        ))}
-                      </ul>
-                      <div className="mt-2 rounded border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950">
-                        <p className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">
-                          Passung: {steeringAnalysis.passung.score}
-                        </p>
-                        <p className="text-[11px] text-zinc-600 dark:text-zinc-300">
-                          {steeringAnalysis.passung.begruendung}
-                        </p>
-                      </div>
-                      <div className="mt-2 rounded border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950">
-                        <p className="text-[11px] font-semibold text-zinc-800 dark:text-zinc-100">
-                          Steuerungsbedarf: {steeringAnalysis.gesamtbewertung.score}
-                        </p>
-                        <p className="text-[11px] text-zinc-600 dark:text-zinc-300">
-                          {steeringAnalysis.gesamtbewertung.begruendung}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  {steeringAnalysis &&
+                  typeof steeringAnalysis === 'object' &&
+                  steeringAnalysis !== null &&
+                  'overall' in steeringAnalysis ? (
+                    <SteeringAnalysisPanel analysis={steeringAnalysis as SteeringAnalysis} />
+                  ) : steeringAnalysis ? (
+                    <p className="mt-2 rounded border border-amber-200 bg-amber-50/80 p-2 text-[11px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                      Gespeicherte Analyse nutzt ein älteres Format. Bitte auf{' '}
+                      <strong>Analyse des Steuerungsbedarfs aktualisieren</strong> klicken, um die neue Matrix-Auswertung
+                      zu erzeugen.
+                    </p>
+                  ) : null}
                   <div className="mt-2 flex flex-wrap items-start gap-2">
                     <button
                       type="button"
@@ -1427,6 +1391,22 @@ export function DocumentDetailPageClient() {
                     <dt className="text-zinc-500">Beteiligung</dt>
                     <dd>{(doc.participation_groups ?? []).length ? (doc.participation_groups ?? []).join(', ') : '—'}</dd>
                   </div>
+                  {doc.schulentwicklung_primary_field ? (
+                    <div className="flex flex-col gap-0.5 border-t border-zinc-100 pt-1 dark:border-zinc-800">
+                      <dt className="text-zinc-500">Schulentwicklung (KI)</dt>
+                      <dd className="text-right text-[11px] text-zinc-800 dark:text-zinc-200">
+                        <span className="font-medium">
+                          Primär: {schulentwicklungFieldLabelDe(doc.schulentwicklung_primary_field)}
+                        </span>
+                        {doc.schulentwicklung_fields && doc.schulentwicklung_fields.length > 0 ? (
+                          <span className="mt-0.5 block text-zinc-500 dark:text-zinc-400">
+                            Felder:{' '}
+                            {doc.schulentwicklung_fields.map((f) => schulentwicklungFieldLabelDe(f)).join(', ')}
+                          </span>
+                        ) : null}
+                      </dd>
+                    </div>
+                  ) : null}
                   <div className="flex flex-col gap-0.5">
                     <dt className="text-zinc-500">Rechtsbezug</dt>
                     <dd className="min-w-0 whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">

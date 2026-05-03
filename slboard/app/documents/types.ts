@@ -12,6 +12,10 @@ export type DocumentListItem = {
   review_date?: string | null;
   summary: string | null;
   steering_analysis?: {
+    overall?: {
+      rating?: 'kritisch' | 'instabil' | 'robust' | string;
+      score?: number;
+    } | null;
     gesamtbewertung?: {
       score?: 'niedriger Steuerungsbedarf' | 'mittlerer Steuerungsbedarf' | 'hoher Steuerungsbedarf' | string;
     } | null;

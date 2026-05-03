@@ -1,32 +1,42 @@
 'use client';
 
+import type { ComponentType } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { AppNavLink } from './AppNavLink';
+import {
+  NavIconAdmin,
+  NavIconDashboard,
+  NavIconDocuments,
+  NavIconDrafts,
+  NavIconHelp,
+} from './navLinkIcons';
 import { SuperAdminNavLink } from './SuperAdminNavLink';
 import { useHeaderAccess } from './HeaderAccessContext';
 import { CONTEXT_HELP } from '../lib/contextHelpUrls';
 
 const pill =
-  'rounded-full px-3 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800';
+  'inline-flex items-center gap-1.5 rounded-full px-3 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800';
 
 const pillCompact =
-  'shrink-0 rounded-full px-2.5 py-1 text-[11px] hover:bg-zinc-100 dark:hover:bg-zinc-800';
+  'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] hover:bg-zinc-100 dark:hover:bg-zinc-800';
 
 const pillSuperCompact =
-  'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-950/60';
+  'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium text-amber-900 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-950/60';
 
 const pillAdmin =
-  'rounded-full px-3 py-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200';
+  'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200';
+
+const navIconSm = 'size-3.5 opacity-85 sm:size-4 sm:opacity-90';
 
 const moreMenuItem =
-  'block w-full rounded-md px-3 py-2.5 text-left text-xs font-medium text-zinc-800 no-underline hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800';
+  'flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-xs font-medium text-zinc-800 no-underline hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800';
 
 const moreMenuItemAdmin =
-  'block w-full rounded-md px-3 py-2.5 text-left text-xs font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200';
+  'flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-xs font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200';
 
 const moreMenuSuperAdmin =
-  'block w-full rounded-md px-3 py-2.5 text-left text-xs font-medium text-amber-900 hover:bg-amber-50 dark:text-amber-200 dark:hover:bg-amber-950/50';
+  'flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-xs font-medium text-amber-900 hover:bg-amber-50 dark:text-amber-200 dark:hover:bg-amber-950/50';
 
 function pathMatches(pathname: string, href: string): boolean {
   const base = (href.split('#')[0] ?? href).trim();
@@ -102,7 +112,8 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
   const closeMore = () => setMoreOpen(false);
 
   if (layout === 'sidebar') {
-    const sideItem = (href: string, label: string, extraInactive = '') => {
+    type IconComp = ComponentType<{ className?: string }>;
+    const sideItem = (href: string, label: string, Icon: IconComp, extraInactive = '') => {
       const on = pathMatches(pathname, href);
       return (
         <AppNavLink
@@ -114,25 +125,29 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
               : `text-slate-200 hover:bg-slate-800/80 hover:text-white ${extraInactive}`
           }`}
         >
-          {label}
+          <span className="flex items-center gap-2.5">
+            <Icon className="size-4 shrink-0 opacity-90" />
+            {label}
+          </span>
         </AppNavLink>
       );
     };
 
     return (
       <nav className="flex flex-col gap-0.5" aria-label="Hauptnavigation">
-        {sideItem('/', 'Dashboard')}
-        {sideItem('/documents', 'Dokumente')}
-        {!hideDraftsAssistant ? sideItem('/drafts', 'Entwurfsassistent') : null}
-        {sideItem(CONTEXT_HELP.einleitung, 'Hilfe')}
+        {sideItem('/', 'Dashboard', NavIconDashboard)}
+        {sideItem('/documents', 'Dokumente', NavIconDocuments)}
+        {!hideDraftsAssistant ? sideItem('/drafts', 'Entwurfsassistent', NavIconDrafts) : null}
+        {sideItem(CONTEXT_HELP.einleitung, 'Hilfe', NavIconHelp)}
         {sideItem(
           '/admin',
           'Admin',
+          NavIconAdmin,
           'text-slate-400 hover:text-slate-100',
         )}
         {accessLoading ? null : access?.superAdmin ? (
           <SuperAdminNavLink
-            className={`block rounded-md px-3 py-2 text-sm font-medium no-underline transition ${
+            className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium no-underline transition ${
               pathMatches(pathname, '/super-admin')
                 ? 'bg-amber-900/60 text-amber-50 shadow-sm'
                 : 'text-amber-200 hover:bg-amber-950/40 hover:text-amber-50'
@@ -150,20 +165,25 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
         aria-label="Hauptnavigation"
       >
         <AppNavLink href="/" className={pill}>
+          <NavIconDashboard className={navIconSm} />
           Dashboard
         </AppNavLink>
         <AppNavLink href="/documents" className={pill}>
+          <NavIconDocuments className={navIconSm} />
           Dokumente
         </AppNavLink>
         {!hideDraftsAssistant ? (
           <AppNavLink href="/drafts" className={pill}>
+            <NavIconDrafts className={navIconSm} />
             Entwurfsassistent
           </AppNavLink>
         ) : null}
         <AppNavLink href={CONTEXT_HELP.einleitung} className={pill}>
+          <NavIconHelp className={navIconSm} />
           Hilfe
         </AppNavLink>
         <AppNavLink href="/admin" className={pillAdmin}>
+          <NavIconAdmin className={navIconSm} />
           Admin
         </AppNavLink>
         <SuperAdminNavLink />
@@ -171,6 +191,7 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
 
       <div className="relative flex min-h-[2.5rem] min-w-0 flex-1 items-center gap-1.5 pl-0.5 md:hidden">
         <AppNavLink href="/" onClick={closeMore} className={`${pillCompact} text-zinc-700 dark:text-zinc-200`}>
+          <NavIconDashboard className="size-3.5 opacity-90" />
           Dashboard
         </AppNavLink>
         <AppNavLink
@@ -178,6 +199,7 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
           onClick={closeMore}
           className={`${pillCompact} text-zinc-700 dark:text-zinc-200`}
         >
+          <NavIconDocuments className="size-3.5 opacity-90" />
           Dokumente
         </AppNavLink>
         {showSuperOnMobile ? (
@@ -213,13 +235,16 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
                   onClick={closeMore}
                   className={moreMenuItem}
                 >
+                  <NavIconDrafts className="size-4 opacity-90" />
                   Entwurfsassistent
                 </AppNavLink>
               ) : null}
               <AppNavLink href={CONTEXT_HELP.einleitung} role="menuitem" onClick={closeMore} className={moreMenuItem}>
+                <NavIconHelp className="size-4 opacity-90" />
                 Hilfe
               </AppNavLink>
               <AppNavLink href="/admin" role="menuitem" onClick={closeMore} className={moreMenuItemAdmin}>
+                <NavIconAdmin className="size-4 opacity-90" />
                 Admin
               </AppNavLink>
               {!showSuperOnMobile ? (

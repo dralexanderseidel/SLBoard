@@ -15,7 +15,7 @@ export function LogOsLogo() {
         width={320}
         height={120}
         decoding="async"
-        className="h-14 w-auto max-w-[min(100%,280px)] object-contain object-left dark:hidden sm:h-[4.25rem] sm:max-w-[min(100%,320px)]"
+        className="h-[5.25rem] w-auto max-w-[min(100%,360px)] object-contain object-left dark:hidden sm:h-[6rem] sm:max-w-[min(100%,420px)]"
       />
       <img
         src="/log-os-logo-dark.png"
@@ -23,7 +23,7 @@ export function LogOsLogo() {
         width={320}
         height={120}
         decoding="async"
-        className="hidden h-14 w-auto max-w-[min(100%,280px)] object-contain object-left dark:block sm:h-[4.25rem] sm:max-w-[min(100%,320px)]"
+        className="hidden h-[5.25rem] w-auto max-w-[min(100%,360px)] object-contain object-left dark:block sm:h-[6rem] sm:max-w-[min(100%,420px)]"
       />
     </span>
   );

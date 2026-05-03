@@ -5,6 +5,7 @@ import { AppNavLink } from './AppNavLink';
 import { GlobalSearch } from './GlobalSearch';
 import { HeaderNav } from './HeaderNav';
 import { LogOsLogo } from './LogOsLogo';
+import { SchoolPageHeader } from './SchoolPageHeader';
 import { UserMenu } from './UserMenu';
 
 type Props = {
@@ -16,7 +17,7 @@ type Props = {
  */
 export function AppChrome({ children }: Props) {
   return (
-    <div className="flex min-h-screen flex-col bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 md:flex-row">
+    <div className="flex min-h-screen flex-col bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 md:h-svh md:max-h-svh md:flex-row md:overflow-hidden">
       {/* Mobil: bisherige Kopfzeile */}
       <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90 md:hidden">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-3 sm:px-6 md:flex-row md:items-center md:gap-3 lg:gap-4">
@@ -39,7 +40,7 @@ export function AppChrome({ children }: Props) {
 
       {/* Desktop: linke Leiste */}
       <aside
-        className="relative hidden w-[17rem] shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100 md:sticky md:top-0 md:flex md:min-h-screen"
+        className="relative hidden w-[21rem] shrink-0 flex-col border-r border-slate-800 bg-slate-900 text-slate-100 md:sticky md:top-0 md:flex md:min-h-screen"
         aria-label="Hauptnavigation"
       >
         <div className="flex min-h-0 flex-1 flex-col">
@@ -51,7 +52,7 @@ export function AppChrome({ children }: Props) {
                 width={260}
                 height={96}
                 decoding="async"
-                className="h-11 w-auto max-w-full object-contain object-left"
+                className="h-[4.75rem] w-auto max-w-full object-contain object-left md:h-[6rem]"
               />
             </AppNavLink>
             <p className="mt-2 text-[11px] leading-snug text-slate-400">
@@ -59,39 +60,30 @@ export function AppChrome({ children }: Props) {
             </p>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+          <div className="min-h-0 flex-1 overflow-hidden px-2 py-3">
             <HeaderNav layout="sidebar" />
           </div>
 
-          <div className="border-t border-slate-700/80 px-3 py-3">
+          <div className="shrink-0 border-t border-slate-700/80 px-3 py-3">
             <GlobalSearch variant="sidebar" />
           </div>
 
-          <div className="border-t border-slate-700/80 px-3 py-3">
+          <div className="shrink-0 border-t border-slate-700/80 px-3 py-3">
             <UserMenu layout="sidebar" />
           </div>
-
-          <footer className="mt-auto border-t border-slate-700/80 px-4 py-3">
-            <nav className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500">
-              <AppNavLink href="/datenschutz" className="text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline">
-                Datenschutz
-              </AppNavLink>
-              <span aria-hidden className="text-slate-600">
-                ·
-              </span>
-              <AppNavLink href="/impressum" className="text-slate-400 underline-offset-2 hover:text-slate-200 hover:underline">
-                Impressum
-              </AppNavLink>
-            </nav>
-          </footer>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div id="main-content" tabIndex={-1} className="flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col md:h-full md:overflow-hidden">
+        <SchoolPageHeader />
+        <div
+          id="main-content"
+          tabIndex={-1}
+          className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain"
+        >
           {children}
         </div>
-        <footer className="border-t border-zinc-200 bg-zinc-50/80 py-4 text-center text-[11px] text-zinc-500 md:hidden dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
+        <footer className="shrink-0 border-t border-zinc-200 bg-zinc-50/80 py-4 text-center text-[11px] text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-400">
           <nav className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
             <AppNavLink href="/datenschutz" className="hover:underline">
               Datenschutz

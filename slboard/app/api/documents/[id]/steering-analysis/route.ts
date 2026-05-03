@@ -11,30 +11,23 @@ import { loadSchoolFeatureFlags, apiResponseIfAiDisabled } from '../../../../../
 import { chunkTextByParagraphs } from '../../../../../lib/chunkingOnTheFly';
 import { getSchoolPromptTemplate, renderPromptTemplate } from '../../../../../lib/aiPromptTemplates';
 import { buildDocumentMetadataPromptSection, type DocRow } from '../../../../../lib/aiSearch';
+import {
+  buildSchulentwicklungDenorm,
+  mapDbStatusToSteeringDocumentStatus,
+  parseSteeringAnalysisV2,
+  STEERING_V2_REPAIR_SCHEMA_SNIPPET,
+  type SteeringAnalysis,
+} from '../../../../../lib/steeringAnalysisV2';
 
 export const runtime = 'nodejs';
 
 /** Vercel: PDF-Extraktion + großer KI-Prompt überschreiten oft 10s. */
 export const maxDuration = 60;
 
-type AnalysisScore = 'niedrig' | 'mittel' | 'hoch';
-type PassungScore = 'gut' | 'kritisch';
-type GesamtScore = 'niedriger Steuerungsbedarf' | 'mittlerer Steuerungsbedarf' | 'hoher Steuerungsbedarf';
-
-type SteeringAnalysis = {
-  tragfaehigkeit: { score: AnalysisScore; begruendung: string };
-  belastungsgrad: { score: AnalysisScore; begruendung: string };
-  entscheidungsstruktur: { score: AnalysisScore; begruendung: string };
-  verbindlichkeit: { score: AnalysisScore; begruendung: string };
-  passung: { score: PassungScore; begruendung: string };
-  gesamtbewertung: { score: GesamtScore; begruendung: string };
-};
-
 function extractJsonObject(raw: string): unknown {
   try {
     return JSON.parse(raw);
   } catch {
-    // try fenced markdown JSON
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) return null;
     try {
@@ -45,48 +38,9 @@ function extractJsonObject(raw: string): unknown {
   }
 }
 
-function isAnalysisScore(v: unknown): v is AnalysisScore {
-  return v === 'niedrig' || v === 'mittel' || v === 'hoch';
-}
-
-function asText(v: unknown): string {
-  return typeof v === 'string' ? v.trim() : '';
-}
-
-function normalizeAnalysis(raw: unknown): SteeringAnalysis | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const o = raw as Record<string, unknown>;
-
-  const t = o.tragfaehigkeit as Record<string, unknown> | undefined;
-  const b = o.belastungsgrad as Record<string, unknown> | undefined;
-  const e = o.entscheidungsstruktur as Record<string, unknown> | undefined;
-  const v = o.verbindlichkeit as Record<string, unknown> | undefined;
-  const p = o.passung as Record<string, unknown> | undefined;
-  const g = o.gesamtbewertung as Record<string, unknown> | undefined;
-
-  if (!t || !b || !e || !v || !p || !g) return null;
-  if (!isAnalysisScore(t.score) || !isAnalysisScore(b.score) || !isAnalysisScore(e.score) || !isAnalysisScore(v.score)) {
-    return null;
-  }
-  const passungScore = p.score;
-  const gesamtScore = g.score;
-  if (passungScore !== 'gut' && passungScore !== 'kritisch') return null;
-  if (
-    gesamtScore !== 'niedriger Steuerungsbedarf' &&
-    gesamtScore !== 'mittlerer Steuerungsbedarf' &&
-    gesamtScore !== 'hoher Steuerungsbedarf'
-  ) {
-    return null;
-  }
-
-  return {
-    tragfaehigkeit: { score: t.score, begruendung: asText(t.begruendung) },
-    belastungsgrad: { score: b.score, begruendung: asText(b.begruendung) },
-    entscheidungsstruktur: { score: e.score, begruendung: asText(e.begruendung) },
-    verbindlichkeit: { score: v.score, begruendung: asText(v.begruendung) },
-    passung: { score: passungScore, begruendung: asText(p.begruendung) },
-    gesamtbewertung: { score: gesamtScore, begruendung: asText(g.begruendung) },
-  };
+function parseAnalysis(raw: unknown, documentId: string): SteeringAnalysis | null {
+  const r = parseSteeringAnalysisV2(raw, documentId);
+  return r.ok ? r.value : null;
 }
 
 export async function POST(
@@ -121,7 +75,7 @@ export async function POST(
     const { data: doc, error: docError } = await supabase
       .from('documents')
       .select(
-        'id, title, document_type_code, created_at, status, current_version_id, protection_class_id, responsible_unit, school_number, gremium, reach_scope, participation_groups, review_date, legal_reference, summary, steering_analysis, steering_analysis_updated_at, steering_analysis_version_id'
+        'id, title, document_type_code, created_at, archived_at, status, current_version_id, protection_class_id, responsible_unit, school_number, gremium, reach_scope, participation_groups, review_date, legal_reference, summary, steering_analysis, steering_analysis_updated_at, steering_analysis_version_id, schulentwicklung_primary_field, schulentwicklung_fields'
       )
       .eq('id', documentId)
       .single();
@@ -143,15 +97,18 @@ export async function POST(
 
     const schoolFlags = await loadSchoolFeatureFlags(supabase, docSchool ?? access.schoolNumber);
 
-    const cached = normalizeAnalysis((doc as { steering_analysis?: unknown }).steering_analysis);
+    const cached = parseAnalysis((doc as { steering_analysis?: unknown }).steering_analysis, documentId);
     const cachedVersionId = (doc as { steering_analysis_version_id?: string | null }).steering_analysis_version_id ?? null;
     const currentVersionId = (doc as { current_version_id?: string | null }).current_version_id ?? null;
     const cacheIsFresh = cached && cachedVersionId && currentVersionId && cachedVersionId === currentVersionId;
     if (!force && cacheIsFresh) {
+      const den = buildSchulentwicklungDenorm(cached.classification);
       return NextResponse.json({
         analysis: cached,
         cached: true,
         updatedAt: (doc as { steering_analysis_updated_at?: string | null }).steering_analysis_updated_at ?? null,
+        schulentwicklung_primary_field: den.primary,
+        schulentwicklung_fields: den.fields,
       });
     }
 
@@ -198,6 +155,7 @@ export async function POST(
       document_type_code?: string | null;
       created_at?: string | null;
       status?: string | null;
+      archived_at?: string | null;
       legal_reference?: string | null;
       responsible_unit?: string | null;
       gremium?: string | null;
@@ -205,10 +163,17 @@ export async function POST(
       participation_groups?: unknown;
       review_date?: string | null;
       summary?: string | null;
+      schulentwicklung_primary_field?: string | null;
+      schulentwicklung_fields?: unknown;
     };
     const pgRaw = dr.participation_groups;
     const participationGroups =
       Array.isArray(pgRaw) && pgRaw.every((x) => typeof x === 'string') ? (pgRaw as string[]) : null;
+    const swFieldsRaw = dr.schulentwicklung_fields;
+    const schulentwicklungFields =
+      Array.isArray(swFieldsRaw) && swFieldsRaw.every((x) => typeof x === 'string')
+        ? (swFieldsRaw as string[])
+        : null;
 
     const docRow: DocRow = {
       id: dr.id,
@@ -223,10 +188,18 @@ export async function POST(
       participation_groups: participationGroups,
       review_date: dr.review_date ?? null,
       summary: dr.summary ?? null,
+      schulentwicklung_primary_field: dr.schulentwicklung_primary_field ?? null,
+      schulentwicklung_fields: schulentwicklungFields,
     };
     const documentMetadataBlock = buildDocumentMetadataPromptSection(docRow);
 
+    const analysisDate = new Date().toISOString().slice(0, 10);
+    const documentStatusJson = mapDbStatusToSteeringDocumentStatus(dr.status, dr.archived_at ?? null);
+
     const userPrompt = renderPromptTemplate(userPromptTemplate, {
+      document_id: documentId,
+      analysis_date: analysisDate,
+      document_status_json: documentStatusJson,
       document_title: (dr.title ?? '').trim() || 'Unbenanntes Dokument',
       document_metadata_block: documentMetadataBlock,
       school_profile_block: schoolContextBlock,
@@ -265,10 +238,8 @@ export async function POST(
       },
     });
     let parsed = extractJsonObject(raw);
-    let analysis = normalizeAnalysis(parsed);
+    let analysis = parseAnalysis(parsed, documentId);
 
-    // Fallback: falls das erste Modell-Output nicht parsebar ist (z.B. abgeschnittenes JSON),
-    // erzwingen wir einen zweiten, strengeren JSON-Versuch.
     if (!analysis) {
       didRetry = true;
       const retrySystemPrompt = `${systemPrompt}
@@ -290,28 +261,22 @@ Antworte jetzt ausschließlich mit einem syntaktisch gültigen JSON-Objekt.`;
         },
       });
       parsed = extractJsonObject(raw);
-      analysis = normalizeAnalysis(parsed);
+      analysis = parseAnalysis(parsed, documentId);
     }
 
-    // Letzter Fallback: abgeschnittene/inkonsistente JSON-Antwort reparieren lassen.
     if (!analysis) {
       usedRepair = true;
       const repairSystemPrompt = `Du bist ein JSON-Reparatur-Assistent.
 Du bekommst eine unvollständige oder fehlerhafte KI-Antwort.
 Gib ausschließlich ein syntaktisch gültiges JSON-Objekt im geforderten Schema zurück.
 Keine Markdown-Backticks, keine Zusatztexte.`;
-      const repairUserPrompt = `Schema:
-{
-  "tragfaehigkeit": { "score": "niedrig|mittel|hoch", "begruendung": "" },
-  "belastungsgrad": { "score": "niedrig|mittel|hoch", "begruendung": "" },
-  "entscheidungsstruktur": { "score": "niedrig|mittel|hoch", "begruendung": "" },
-  "verbindlichkeit": { "score": "niedrig|mittel|hoch", "begruendung": "" },
-  "passung": { "score": "gut|kritisch", "begruendung": "" },
-  "gesamtbewertung": { "score": "niedriger Steuerungsbedarf|mittlerer Steuerungsbedarf|hoher Steuerungsbedarf", "begruendung": "" }
-}
+      const repairUserPrompt = `Schema (Struktur und Pflichtfelder):
+${STEERING_V2_REPAIR_SCHEMA_SNIPPET}
+
+document_id muss exakt sein: "${documentId}"
 
 Defekte Antwort:
-${raw}
+${raw.length > 14000 ? `${raw.slice(0, 14000)}…` : raw}
 `;
       raw = await callLlm(repairSystemPrompt, repairUserPrompt, {
         timeoutMs: aiSettings.llm_timeout_ms,
@@ -323,7 +288,7 @@ ${raw}
         },
       });
       parsed = extractJsonObject(raw);
-      analysis = normalizeAnalysis(parsed);
+      analysis = parseAnalysis(parsed, documentId);
     }
 
     if (debugEnabled) {
@@ -346,21 +311,30 @@ ${raw}
       return apiError(500, 'INTERNAL_ERROR', 'KI-Antwort konnte nicht als gültige Analyse verarbeitet werden.');
     }
 
+    const denorm = buildSchulentwicklungDenorm(analysis.classification);
+
     let updateQuery = supabase
       .from('documents')
       .update({
-        steering_analysis: analysis,
+        steering_analysis: analysis as unknown as Record<string, unknown>,
         steering_analysis_updated_at: new Date().toISOString(),
         steering_analysis_version_id: currentVersionId,
+        schulentwicklung_primary_field: denorm.primary,
+        schulentwicklung_fields: denorm.fields,
       })
       .eq('id', documentId);
     if (docSchool) updateQuery = updateQuery.eq('school_number', docSchool);
     await updateQuery;
 
-    return NextResponse.json({ analysis, cached: false });
+    return NextResponse.json({
+      analysis,
+      cached: false,
+      updatedAt: new Date().toISOString(),
+      schulentwicklung_primary_field: denorm.primary,
+      schulentwicklung_fields: denorm.fields,
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return apiError(500, 'INTERNAL_ERROR', msg);
   }
 }
-

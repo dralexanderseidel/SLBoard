@@ -43,7 +43,7 @@ test('smoke: documents list and steering analysis UI', async ({ page }) => {
   await expect(analysisButton).toBeVisible();
   await expect(
     page.getByText(
-      'Prüft das Dokument per KI auf Tragfähigkeit, Belastungsgrad, Entscheidungsstruktur und Verbindlichkeit und ermittelt daraus den Steuerungsbedarf.',
+      'Prüft das Dokument per KI entlang der Schulentwicklungs-Matrix (u. a. Tragfähigkeit, Belastungsgrad, Entscheidungslogik, Verbindlichkeit) und ermittelt daraus den Steuerungsbedarf.',
     ),
   ).toBeVisible();
 });

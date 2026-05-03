@@ -1,3 +1,6 @@
+import type { SteeringAnalysis } from '@/lib/steeringAnalysisV2';
+
+export type { SteeringAnalysis };
 export type DocumentDetail = {
   id: string;
   title: string;
@@ -16,6 +19,8 @@ export type DocumentDetail = {
   summary_updated_at?: string | null;
   steering_analysis?: SteeringAnalysis | null;
   steering_analysis_updated_at?: string | null;
+  schulentwicklung_primary_field?: string | null;
+  schulentwicklung_fields?: string[] | null;
   steering_todos?: SteeringTodosResult | null;
   steering_todos_updated_at?: string | null;
   current_version_id?: string | null;
@@ -59,14 +64,3 @@ export type SteeringTodosResult = {
   hinweis?: string;
 };
 
-export type SteeringAnalysis = {
-  tragfaehigkeit: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
-  belastungsgrad: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
-  entscheidungsstruktur: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
-  verbindlichkeit: { score: 'niedrig' | 'mittel' | 'hoch'; begruendung: string };
-  passung: { score: 'gut' | 'kritisch'; begruendung: string };
-  gesamtbewertung: {
-    score: 'niedriger Steuerungsbedarf' | 'mittlerer Steuerungsbedarf' | 'hoher Steuerungsbedarf';
-    begruendung: string;
-  };
-};

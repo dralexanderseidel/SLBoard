@@ -341,11 +341,12 @@ export default function HilfePage() {
 
           <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Steuerungsanalyse</h3>
           <p>
-            Die <strong>Steuerungsanalyse</strong> bewertet das Dokument entlang organisatorischer Dimensionen (z.&nbsp;B.
-            Tragfähigkeit, Belastungsgrad, Entscheidungsstruktur, Verbindlichkeit) und ordnet einen{' '}
-            <strong>Steuerungsbedarf</strong> ein. Sie dient der strukturellen Einordnung, nicht der inhaltlichen
-            Bewertung des pädagogischen Konzepts. Ergebnisse werden gespeichert und können bei geänderter
-            Dokumentversion aktualisiert werden.
+            Die <strong>Steuerungsanalyse</strong> ordnet das Dokument strukturell entlang einer{' '}
+            <strong>Schulentwicklungs-Matrix</strong> (sieben Aufgabenfelder) und drei{' '}
+            <strong>Steuerungsdimensionen</strong> (Tragfähigkeit, Entscheidungslogik, Verbindlichkeit); ergänzend
+            werden Belastungsgrad, Passung und ein Gesamt-Steuerungsbedarf ausgewiesen. Sie dient der strukturellen
+            Einordnung, nicht der inhaltlichen Bewertung des pädagogischen Konzepts. Ergebnisse werden gespeichert und
+            können bei geänderter Dokumentversion aktualisiert werden.
           </p>
 
           <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">ToDos und Aufgaben extrahieren</h3>

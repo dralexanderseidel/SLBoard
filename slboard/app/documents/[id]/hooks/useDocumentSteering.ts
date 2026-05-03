@@ -1,3 +1,4 @@
+import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useState } from 'react';
 import type { SerializedApiError } from '@/lib/apiUserError';
 import { ApiUserError, serializeApiError } from '@/lib/apiUserError';
@@ -22,7 +23,8 @@ type UseDocumentSteeringResult = {
 export function useDocumentSteering(
   id: string | undefined,
   doc: DocumentDetail | null,
-): UseDocumentSteeringResult {
+  setDoc?: Dispatch<SetStateAction<DocumentDetail | null>>,
+) {
   const [steeringAnalysis, setSteeringAnalysis] = useState<SteeringAnalysis | null>(null);
   const [steeringUpdatedAt, setSteeringUpdatedAt] = useState<string | null>(null);
   const [steeringLoading, setSteeringLoading] = useState(false);
@@ -43,6 +45,8 @@ export function useDocumentSteering(
     doc?.id,
     doc?.steering_analysis,
     doc?.steering_analysis_updated_at,
+    doc?.schulentwicklung_primary_field,
+    doc?.schulentwicklung_fields,
     doc?.steering_todos,
     doc?.steering_todos_updated_at,
   ]);
@@ -62,6 +66,8 @@ export function useDocumentSteering(
         analysis?: SteeringAnalysis;
         error?: string;
         updatedAt?: string | null;
+        schulentwicklung_primary_field?: string | null;
+        schulentwicklung_fields?: string[] | null;
       }>(res, 'Analyse konnte nicht erstellt werden.');
       if (!data.analysis) {
         throw new ApiUserError(
@@ -73,10 +79,23 @@ export function useDocumentSteering(
         );
       }
       setSteeringAnalysis(data.analysis);
-      if (data.updatedAt !== undefined) {
-        setSteeringUpdatedAt(data.updatedAt ?? null);
-      } else if (force) {
-        setSteeringUpdatedAt(new Date().toISOString());
+      const ts =
+        data.updatedAt !== undefined && data.updatedAt !== null
+          ? data.updatedAt
+          : new Date().toISOString();
+      setSteeringUpdatedAt(ts);
+      if (setDoc) {
+        setDoc((prev) =>
+          prev
+            ? {
+                ...prev,
+                steering_analysis: data.analysis ?? null,
+                steering_analysis_updated_at: ts,
+                schulentwicklung_primary_field: data.schulentwicklung_primary_field ?? null,
+                schulentwicklung_fields: data.schulentwicklung_fields ?? null,
+              }
+            : prev,
+        );
       }
     } catch (e) {
       setSteeringError(serializeApiError(e, 'Analyse konnte nicht erstellt werden.'));

@@ -111,7 +111,7 @@ export async function POST(
     const { data: doc, error: docError } = await supabase
       .from('documents')
       .select(
-        'id, title, document_type_code, created_at, status, current_version_id, protection_class_id, responsible_unit, school_number, gremium, reach_scope, participation_groups, review_date, legal_reference, summary, steering_todos, steering_todos_updated_at, steering_todos_version_id',
+        'id, title, document_type_code, created_at, status, current_version_id, protection_class_id, responsible_unit, school_number, gremium, reach_scope, participation_groups, review_date, legal_reference, summary, steering_todos, steering_todos_updated_at, steering_todos_version_id, schulentwicklung_primary_field, schulentwicklung_fields',
       )
       .eq('id', documentId)
       .single();
@@ -192,10 +192,17 @@ export async function POST(
       participation_groups?: unknown;
       review_date?: string | null;
       summary?: string | null;
+      schulentwicklung_primary_field?: string | null;
+      schulentwicklung_fields?: unknown;
     };
     const pgRaw = dr.participation_groups;
     const participationGroups =
       Array.isArray(pgRaw) && pgRaw.every((x) => typeof x === 'string') ? (pgRaw as string[]) : null;
+    const swFieldsRaw = dr.schulentwicklung_fields;
+    const schulentwicklungFields =
+      Array.isArray(swFieldsRaw) && swFieldsRaw.every((x) => typeof x === 'string')
+        ? (swFieldsRaw as string[])
+        : null;
 
     const docRow: DocRow = {
       id: dr.id,
@@ -210,6 +217,8 @@ export async function POST(
       participation_groups: participationGroups,
       review_date: dr.review_date ?? null,
       summary: dr.summary ?? null,
+      schulentwicklung_primary_field: dr.schulentwicklung_primary_field ?? null,
+      schulentwicklung_fields: schulentwicklungFields,
     };
     const documentMetadataBlock = buildDocumentMetadataPromptSection(docRow);
 
