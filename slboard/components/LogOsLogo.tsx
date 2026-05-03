@@ -1,31 +1,30 @@
-/** Markenzeile log/os; skaliert sauber im Header. */
+/**
+ * Markenlogo log/os (Hell- und Dunkelschema).
+ * Grafiken: `public/log-os-logo-light.png`, `public/log-os-logo-dark.png`
+ */
 export function LogOsLogo() {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 420 100"
-      preserveAspectRatio="xMinYMid meet"
-      className="h-14 w-auto max-w-[min(100%,220px)] text-zinc-900 dark:text-zinc-100 sm:h-[4.25rem] sm:max-w-[min(100%,280px)]"
+    <span
+      className="inline-flex shrink-0 items-center"
       role="img"
-      aria-label="log/os Edu Governance Pro"
+      aria-label="log/os – Ordnung. Struktur. Verstehen. KI für schulische Governance"
     >
-      <text
-        x="8"
-        y="58"
-        fill="currentColor"
-        style={{ fontFamily: 'system-ui, sans-serif', fontSize: 36, fontWeight: 700 }}
-      >
-        log/os
-      </text>
-      <text
-        x="8"
-        y="88"
-        fill="currentColor"
-        opacity={0.7}
-        style={{ fontFamily: 'system-ui, sans-serif', fontSize: 17, fontWeight: 500 }}
-      >
-        Edu Governance Pro
-      </text>
-    </svg>
+      <img
+        src="/log-os-logo-light.png"
+        alt=""
+        width={320}
+        height={120}
+        decoding="async"
+        className="h-14 w-auto max-w-[min(100%,280px)] object-contain object-left dark:hidden sm:h-[4.25rem] sm:max-w-[min(100%,320px)]"
+      />
+      <img
+        src="/log-os-logo-dark.png"
+        alt=""
+        width={320}
+        height={120}
+        decoding="async"
+        className="hidden h-14 w-auto max-w-[min(100%,280px)] object-contain object-left dark:block sm:h-[4.25rem] sm:max-w-[min(100%,320px)]"
+      />
+    </span>
   );
 }
