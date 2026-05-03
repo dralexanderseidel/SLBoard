@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-export function GlobalSearch() {
+export function GlobalSearch({ variant = 'header' }: { variant?: 'header' | 'sidebar' }) {
   const router = useRouter();
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -47,16 +47,28 @@ export function GlobalSearch() {
     [value, router],
   );
 
+  const isSidebar = variant === 'sidebar';
+  const formClass = isSidebar
+    ? 'flex w-full min-w-0 flex-col'
+    : 'flex w-full min-w-0 items-center md:w-auto md:shrink-0';
+  const wrapClass = isSidebar ? 'relative flex w-full min-w-0' : 'relative flex w-full min-w-0 items-center md:w-auto';
+  const iconClass = isSidebar
+    ? 'pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400'
+    : 'pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-zinc-400';
+  const inputClass = isSidebar
+    ? 'min-w-0 w-full rounded-lg border border-slate-600 bg-slate-800 py-2 pl-8 pr-2 text-xs text-slate-100 placeholder-slate-500 transition focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-400/40 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100'
+    : 'min-w-0 w-full rounded-full border border-zinc-200 bg-zinc-50 py-1 pl-7 pr-2 text-xs text-zinc-800 placeholder-zinc-400 transition focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 md:w-52 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500 dark:focus:border-zinc-600';
+
   return (
     <form
       onSubmit={handleSubmit}
       role="search"
       aria-label="Dokumente suchen"
-      className="flex w-full min-w-0 items-center md:w-auto md:shrink-0"
+      className={formClass}
     >
-      <div className="relative flex w-full min-w-0 items-center md:w-auto">
+      <div className={wrapClass}>
         <svg
-          className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 text-zinc-400"
+          className={iconClass}
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 20 20"
           fill="currentColor"
@@ -75,7 +87,7 @@ export function GlobalSearch() {
           onChange={(e) => setValue(e.target.value)}
           placeholder="Suchen …"
           aria-label="Dokumente suchen"
-          className="min-w-0 w-full rounded-full border border-zinc-200 bg-zinc-50 py-1 pl-7 pr-2 text-xs text-zinc-800 placeholder-zinc-400 transition focus:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30 md:w-52 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100 dark:placeholder-zinc-500 dark:focus:border-zinc-600"
+          className={inputClass}
         />
       </div>
     </form>

@@ -7,7 +7,6 @@ import { supabase } from '../lib/supabaseClient';
 import { ChangePasswordDialog } from './ChangePasswordDialog';
 import { useHeaderAccess } from './HeaderAccessContext';
 import { toast } from 'sonner';
-import { ACCOUNT_INACTIVE_BODY, ACCOUNT_INACTIVE_TITLE } from '../lib/accountInactiveMessages';
 
 type SessionUser = {
   email: string | null;
@@ -32,7 +31,7 @@ function formatRolesForMenu(codes: string[] | null): string {
   return codes.map((c) => ROLE_LABEL_DE[c] ?? c).join(', ');
 }
 
-export function UserMenu() {
+export function UserMenu({ layout = 'toolbar' }: { layout?: 'toolbar' | 'sidebar' }) {
   const { userEmail, sessionLoading, access, accessLoading } = useHeaderAccess();
   const [menuOpen, setMenuOpen] = useState(false);
   const [pwdOpen, setPwdOpen] = useState(false);
@@ -122,7 +121,11 @@ export function UserMenu() {
 
   if (sessionLoading) {
     return (
-      <div className="flex shrink-0 items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-300">
+      <div
+        className={`flex shrink-0 items-center gap-2 text-[11px] ${
+          layout === 'sidebar' ? 'text-slate-400' : 'text-zinc-500 dark:text-zinc-300'
+        }`}
+      >
         Lädt…
       </div>
     );
@@ -130,11 +133,19 @@ export function UserMenu() {
 
   if (!user) {
     return (
-      <div className="flex shrink-0 items-center gap-2 text-[11px] text-zinc-600 dark:text-zinc-300">
-        <span className="hidden sm:inline">Nicht angemeldet</span>
+      <div
+        className={`flex shrink-0 items-center gap-2 text-[11px] ${
+          layout === 'sidebar' ? 'text-slate-300' : 'text-zinc-600 dark:text-zinc-300'
+        }`}
+      >
+        <span className={layout === 'sidebar' ? 'inline' : 'hidden sm:inline'}>Nicht angemeldet</span>
         <Link
           href="/login"
-          className="rounded-full border border-zinc-300 px-3 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          className={
+            layout === 'sidebar'
+              ? 'rounded-lg border border-slate-600 px-3 py-1.5 text-[11px] font-medium text-slate-100 hover:bg-slate-800'
+              : 'rounded-full border border-zinc-300 px-3 py-1 text-[11px] font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800'
+          }
         >
           Anmelden
         </Link>
@@ -149,6 +160,116 @@ export function UserMenu() {
         ? `${access.schoolName} (${access.schoolNumber ?? '—'})`
         : (access.schoolNumber ?? '')
       : null;
+
+  const menuPanelClass =
+    'z-50 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900';
+  const menuPositionToolbar =
+    'absolute right-0 top-full mt-1 min-w-[13rem] max-w-[min(100vw-1.5rem,18rem)]';
+  const menuPositionSidebar = 'absolute bottom-full left-0 right-0 mb-1 w-full min-w-0 max-h-[min(70vh,24rem)] overflow-y-auto';
+
+  if (layout === 'sidebar') {
+    return (
+      <>
+        <div className="flex w-full flex-col gap-2 text-left text-slate-100">
+          <div className="min-w-0">
+            <span className="block truncate text-[11px] text-slate-300">{user.email}</span>
+            {accessLoading && !schoolLine ? (
+              <span className="text-[10px] text-slate-500">Schule wird geladen…</span>
+            ) : schoolLine ? (
+              <span
+                className="mt-0.5 block truncate text-[10px] font-medium leading-tight text-slate-400"
+                title={schoolLine}
+              >
+                {schoolLine}
+              </span>
+            ) : null}
+          </div>
+          <div className="relative w-full" ref={wrapRef}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((o) => !o)}
+              aria-expanded={menuOpen}
+              aria-haspopup="menu"
+              className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-left text-xs font-medium text-slate-100 outline-none transition hover:bg-slate-800/90 focus-visible:ring-2 focus-visible:ring-blue-400/60"
+              title="Konto"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-700 text-[11px] font-semibold text-slate-100">
+                  {initials}
+                </span>
+                <span className="truncate">Konto &amp; Abmeldung</span>
+              </span>
+              <svg className="h-4 w-4 shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {menuOpen && (
+              <div role="menu" className={`${menuPanelClass} ${menuPositionSidebar}`}>
+                <div className="border-b border-zinc-200 px-3 py-2 dark:border-zinc-700">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    Rollen
+                  </p>
+                  <p className="mt-0.5 text-xs leading-snug text-zinc-800 dark:text-zinc-100">
+                    {formatRolesForMenu(accessLoading ? null : access?.roles ?? [])}
+                  </p>
+                </div>
+                <Link
+                  href={CONTEXT_HELP.anmeldung}
+                  role="menuitem"
+                  className="block px-3 py-2 text-xs text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Hilfe: Konto &amp; Anmeldung
+                </Link>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={
+                    dataActionLoading || accessLoading || !access?.schoolNumber || access?.accountInactive
+                  }
+                  className="w-full px-3 py-2 text-left text-xs text-zinc-800 hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                  onClick={() => void handleExportData()}
+                >
+                  Daten exportieren (JSON)
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={
+                    dataActionLoading || accessLoading || !access?.schoolNumber || access?.accountInactive
+                  }
+                  className="w-full px-3 py-2 text-left text-xs text-zinc-800 hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                  onClick={() => void handleDeleteRequest()}
+                >
+                  Löschanfrage stellen
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full px-3 py-2 text-left text-xs text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setPwdOpen(true);
+                  }}
+                >
+                  Passwort ändern
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="w-full px-3 py-2 text-left text-xs text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                  onClick={() => void handleLogout()}
+                >
+                  Abmelden
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+        <ChangePasswordDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
+      </>
+    );
+  }
 
   return (
     <>
@@ -178,10 +299,7 @@ export function UserMenu() {
             {initials}
           </button>
           {menuOpen && (
-            <div
-              role="menu"
-              className="absolute right-0 top-full z-50 mt-1 min-w-[13rem] max-w-[min(100vw-1.5rem,18rem)] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
-            >
+            <div role="menu" className={`${menuPanelClass} ${menuPositionToolbar}`}>
               <div className="border-b border-zinc-200 px-3 py-2 dark:border-zinc-700">
                 <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                   Rollen

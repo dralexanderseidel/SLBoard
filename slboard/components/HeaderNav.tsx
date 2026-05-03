@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { AppNavLink } from './AppNavLink';
 import { SuperAdminNavLink } from './SuperAdminNavLink';
 import { useHeaderAccess } from './HeaderAccessContext';
@@ -27,6 +28,13 @@ const moreMenuItemAdmin =
 const moreMenuSuperAdmin =
   'block w-full rounded-md px-3 py-2.5 text-left text-xs font-medium text-amber-900 hover:bg-amber-50 dark:text-amber-200 dark:hover:bg-amber-950/50';
 
+function pathMatches(pathname: string, href: string): boolean {
+  const base = (href.split('#')[0] ?? href).trim();
+  if (!base) return false;
+  if (base === '/') return pathname === '/';
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
+
 function MoreChevronIcon({ open }: { open: boolean }) {
   return (
     <svg
@@ -46,7 +54,10 @@ function MoreChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export function HeaderNav() {
+export type HeaderNavLayout = 'horizontal' | 'sidebar';
+
+export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout }) {
+  const pathname = usePathname();
   const { access, accessLoading } = useHeaderAccess();
   const showSuperOnMobile = !accessLoading && !!access?.superAdmin;
   const hideDraftsAssistant =
@@ -90,6 +101,48 @@ export function HeaderNav() {
 
   const closeMore = () => setMoreOpen(false);
 
+  if (layout === 'sidebar') {
+    const sideItem = (href: string, label: string, extraInactive = '') => {
+      const on = pathMatches(pathname, href);
+      return (
+        <AppNavLink
+          key={href + label}
+          href={href}
+          className={`block rounded-md px-3 py-2 text-sm font-medium no-underline transition ${
+            on
+              ? 'bg-slate-800 text-white shadow-sm'
+              : `text-slate-200 hover:bg-slate-800/80 hover:text-white ${extraInactive}`
+          }`}
+        >
+          {label}
+        </AppNavLink>
+      );
+    };
+
+    return (
+      <nav className="flex flex-col gap-0.5" aria-label="Hauptnavigation">
+        {sideItem('/', 'Dashboard')}
+        {sideItem('/documents', 'Dokumente')}
+        {!hideDraftsAssistant ? sideItem('/drafts', 'Entwurfsassistent') : null}
+        {sideItem(CONTEXT_HELP.einleitung, 'Hilfe')}
+        {sideItem(
+          '/admin',
+          'Admin',
+          'text-slate-400 hover:text-slate-100',
+        )}
+        {accessLoading ? null : access?.superAdmin ? (
+          <SuperAdminNavLink
+            className={`block rounded-md px-3 py-2 text-sm font-medium no-underline transition ${
+              pathMatches(pathname, '/super-admin')
+                ? 'bg-amber-900/60 text-amber-50 shadow-sm'
+                : 'text-amber-200 hover:bg-amber-950/40 hover:text-amber-50'
+            }`}
+          />
+        ) : null}
+      </nav>
+    );
+  }
+
   return (
     <>
       <nav
@@ -102,9 +155,11 @@ export function HeaderNav() {
         <AppNavLink href="/documents" className={pill}>
           Dokumente
         </AppNavLink>
-        <AppNavLink href="/drafts" className={pill}>
-          Entwurfsassistent
-        </AppNavLink>
+        {!hideDraftsAssistant ? (
+          <AppNavLink href="/drafts" className={pill}>
+            Entwurfsassistent
+          </AppNavLink>
+        ) : null}
         <AppNavLink href={CONTEXT_HELP.einleitung} className={pill}>
           Hilfe
         </AppNavLink>
