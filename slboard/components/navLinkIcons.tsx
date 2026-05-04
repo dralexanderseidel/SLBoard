@@ -45,6 +45,32 @@ export function NavIconDocuments(props: IconProps) {
   );
 }
 
+/** Matrix / SE-Cockpit */
+export function NavIconSeCockpit(props: IconProps) {
+  const { className, ...rest } = props;
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      aria-hidden
+      className={`${base} size-4 ${className ?? ''}`}
+      {...rest}
+    >
+      <rect x="3" y="3" width="5" height="5" rx="0.8" />
+      <rect x="9.5" y="3" width="5" height="5" rx="0.8" />
+      <rect x="16" y="3" width="5" height="5" rx="0.8" />
+      <rect x="3" y="9.5" width="5" height="5" rx="0.8" />
+      <rect x="9.5" y="9.5" width="5" height="5" rx="0.8" />
+      <rect x="16" y="9.5" width="5" height="5" rx="0.8" />
+      <rect x="3" y="16" width="5" height="5" rx="0.8" />
+      <rect x="9.5" y="16" width="5" height="5" rx="0.8" />
+      <rect x="16" y="16" width="5" height="5" rx="0.8" />
+    </svg>
+  );
+}
+
 export function NavIconDrafts(props: IconProps) {
   const { className, ...rest } = props;
   return (

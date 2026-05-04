@@ -11,6 +11,10 @@ export type DocumentFilters = {
   reviewFilter: string;
   summaryFilter: string;
   steeringFilter: string;
+  /** Schulentwicklungs-Aufgabenfeld (URL: auftragfeld) — Primär oder Sekundär */
+  schulentwicklungFieldFilter: string;
+  /** Nur primäres SE-Aufgabenfeld (URL: sePrimary), Spalte schulentwicklung_primary_field */
+  schulentwicklungPrimaryFieldFilter: string;
   searchQuery: string;
 };
 
@@ -34,6 +38,8 @@ export type UseDocumentFiltersResult = DocumentFilters & {
   setReviewFilter: (v: string) => void;
   setSummaryFilter: (v: string) => void;
   setSteeringFilter: (v: string) => void;
+  setSchulentwicklungFieldFilter: (v: string) => void;
+  setSchulentwicklungPrimaryFieldFilter: (v: string) => void;
   setSearchInput: (v: string) => void;
   /** Setzt searchInput und searchQuery gleichzeitig (z. B. bei URL-Navigation). */
   setSearchDirect: (v: string) => void;
@@ -44,7 +50,11 @@ export type UseDocumentFiltersResult = DocumentFilters & {
 
 const DEBOUNCE_MS = 400;
 
-export function useDocumentFilters(initialSearchQuery = ''): UseDocumentFiltersResult {
+export function useDocumentFilters(
+  initialSearchQuery = '',
+  initialSchulentwicklungField = '',
+  initialSchulentwicklungPrimaryField = '',
+): UseDocumentFiltersResult {
   const [typeFilter, setTypeFilter] = useState('');
   const [responsibleUnitFilter, setResponsibleUnitFilter] = useState('');
   const [statusFilters, setStatusFilters] = useState<string[]>([]);
@@ -62,6 +72,12 @@ export function useDocumentFilters(initialSearchQuery = ''): UseDocumentFiltersR
   const [reviewFilter, setReviewFilter] = useState('');
   const [summaryFilter, setSummaryFilter] = useState('');
   const [steeringFilter, setSteeringFilter] = useState('');
+  const [schulentwicklungFieldFilter, setSchulentwicklungFieldFilter] = useState(
+    initialSchulentwicklungField.trim(),
+  );
+  const [schulentwicklungPrimaryFieldFilter, setSchulentwicklungPrimaryFieldFilter] = useState(
+    initialSchulentwicklungPrimaryField.trim(),
+  );
   const [searchInput, setSearchInput] = useState(initialSearchQuery);
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -102,6 +118,8 @@ export function useDocumentFilters(initialSearchQuery = ''): UseDocumentFiltersR
     setReviewFilter('');
     setSummaryFilter('');
     setSteeringFilter('');
+    setSchulentwicklungFieldFilter('');
+    setSchulentwicklungPrimaryFieldFilter('');
     setSearchInput('');
     setSearchQuery('');
   };
@@ -121,6 +139,8 @@ export function useDocumentFilters(initialSearchQuery = ''): UseDocumentFiltersR
     reviewFilter, setReviewFilter,
     summaryFilter, setSummaryFilter,
     steeringFilter, setSteeringFilter,
+    schulentwicklungFieldFilter, setSchulentwicklungFieldFilter,
+    schulentwicklungPrimaryFieldFilter, setSchulentwicklungPrimaryFieldFilter,
     searchInput, setSearchInput, setSearchDirect, applySearch,
     searchQuery,
     showAdvancedFilters, setShowAdvancedFilters,

@@ -55,6 +55,12 @@ export function useDocumentList(
     if (filters.reviewFilter) params.set('review', filters.reviewFilter);
     if (filters.summaryFilter) params.set('summary', filters.summaryFilter);
     if (filters.steeringFilter) params.set('steering', filters.steeringFilter);
+    if (filters.schulentwicklungFieldFilter.trim()) {
+      params.set('auftragfeld', filters.schulentwicklungFieldFilter.trim());
+    }
+    if (filters.schulentwicklungPrimaryFieldFilter.trim()) {
+      params.set('sePrimary', filters.schulentwicklungPrimaryFieldFilter.trim());
+    }
     if (filters.searchQuery.trim()) params.set('search', filters.searchQuery.trim());
     if (archiveView) params.set('archive', '1');
     params.set('sort', sortField);
@@ -128,6 +134,8 @@ export function useDocumentList(
     filters.reviewFilter,
     filters.summaryFilter,
     filters.steeringFilter,
+    filters.schulentwicklungFieldFilter,
+    filters.schulentwicklungPrimaryFieldFilter,
     filters.searchQuery,
     archiveView,
     sortField,

@@ -10,6 +10,7 @@ import {
   NavIconDocuments,
   NavIconDrafts,
   NavIconHelp,
+  NavIconSeCockpit,
 } from './navLinkIcons';
 import { SuperAdminNavLink } from './SuperAdminNavLink';
 import { useHeaderAccess } from './HeaderAccessContext';
@@ -136,6 +137,7 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
     return (
       <nav className="flex flex-col gap-0.5" aria-label="Hauptnavigation">
         {sideItem('/', 'Dashboard', NavIconDashboard)}
+        {sideItem('/se-cockpit', 'SE-Cockpit', NavIconSeCockpit)}
         {sideItem('/documents', 'Dokumente', NavIconDocuments)}
         {!hideDraftsAssistant ? sideItem('/drafts', 'Entwurfsassistent', NavIconDrafts) : null}
         {sideItem(CONTEXT_HELP.einleitung, 'Hilfe', NavIconHelp)}
@@ -168,6 +170,10 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
           <NavIconDashboard className={navIconSm} />
           Dashboard
         </AppNavLink>
+        <AppNavLink href="/se-cockpit" className={pill}>
+          <NavIconSeCockpit className={navIconSm} />
+          SE-Cockpit
+        </AppNavLink>
         <AppNavLink href="/documents" className={pill}>
           <NavIconDocuments className={navIconSm} />
           Dokumente
@@ -193,6 +199,14 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
         <AppNavLink href="/" onClick={closeMore} className={`${pillCompact} text-zinc-700 dark:text-zinc-200`}>
           <NavIconDashboard className="size-3.5 opacity-90" />
           Dashboard
+        </AppNavLink>
+        <AppNavLink
+          href="/se-cockpit"
+          onClick={closeMore}
+          className={`${pillCompact} text-zinc-700 dark:text-zinc-200`}
+        >
+          <NavIconSeCockpit className="size-3.5 opacity-90" />
+          SE-Cockpit
         </AppNavLink>
         <AppNavLink
           href="/documents"
@@ -228,6 +242,10 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
               aria-labelledby="header-nav-more-button"
               className="absolute right-0 top-full z-50 mt-1 min-w-[13.5rem] max-w-[min(100vw-2rem,20rem)] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
             >
+              <AppNavLink href="/se-cockpit" role="menuitem" onClick={closeMore} className={moreMenuItem}>
+                <NavIconSeCockpit className="size-4 opacity-90" />
+                SE-Cockpit
+              </AppNavLink>
               {!hideDraftsAssistant ? (
                 <AppNavLink
                   href="/drafts"

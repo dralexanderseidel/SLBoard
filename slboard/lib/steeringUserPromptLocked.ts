@@ -47,10 +47,21 @@ Vorgehen:
 
 Bewerte das Dokument anhand eines strukturierten Scoring-Systems (0–100 Punkte pro Dimension).
 
-WICHTIG:
-- Bewerte ausschließlich auf Basis expliziter Informationen im Dokument.
-- Keine Annahmen oder Interpretationen.
-- Fehlende Regelungen führen zu Punktabzug (bis 0).
+WICHTIG (Belegbasis):
+- Primär an expliziten Formulierungen im Dokumenttext sowie an belegbaren Angaben aus Metadaten und Schulprofil orientieren.
+- Keine freien Inhaltserfindungen; keine Spekulation über nicht genannte Fakten außerhalb des Dokuments.
+- Wo eine Regelung im Text fehlt, aber aus dem vorliegenden Wortlaut oder Kontext plausibel impliziert ist (z. B. übliche Gremienlogik, Rollen ohne Widerspruch zum übrigen Text): nicht pauschal mit 0 bewerten, sondern für das betreffende Kriterium differenziert niedrig vergeben (Orientierung etwa 5–15 Punkte) und kurz begründen („implizit“, „nicht ausdrücklich geregelt“).
+- Wo etwas weder belegt noch plausibel impliziert ist: klarer Punktabzug bis hin zu sehr niedrigen Werten; nur klar defizitäre oder widersprüchliche Ausprägungen sollten Gesamtdimensionen unter 50 ziehen.
+
+Kalibriere deine Bewertung so, dass:
+- durchschnittliche schulische Konzepte im Bereich 60–75 liegen
+- gut strukturierte Dokumente über 75 liegen
+- nur klar defizitäre Dokumente unter 50 liegen
+
+Bewerte fehlende Informationen nicht automatisch mit 0,
+sondern differenziert (5–15 Punkte), wenn sie plausibel impliziert sind.
+
+Vermeide eine Konzentration der Scores im Bereich 45–65.
 
 ---
 
@@ -263,8 +274,8 @@ Antwortformat (MUSS exakt als JSON-Objekt eingehalten werden):
   ],
 
   "explainability": {
-    "scoring_principle": "Scores bewerten den Grad expliziter struktureller Klärung im Dokument.",
-    "missing_information_policy": "Nicht belegte Regelungen werden nicht angenommen und führen zu Punktabzug.",
+    "scoring_principle": "Scores bewerten strukturelle Klärung; Kalibrierung: typisch 60–75 für durchschnittliche schulische Konzepte, >75 für gut strukturierte, <50 nur bei klaren Defiziten; Scores nicht in 45–65 zusammendrücken.",
+    "missing_information_policy": "Fehlendes Explizites führt zu Abzug; plausibel Impliziertes differenziert niedrig (z. B. 5–15 pro Kriterium), nicht automatisch 0.",
     "confidence": "hoch | mittel | niedrig",
     "confidence_reason": "string"
   }

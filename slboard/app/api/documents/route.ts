@@ -4,7 +4,7 @@ import { supabaseServer } from '../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../lib/supabaseServerClient';
 import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../lib/documentAccess';
 import { apiError } from '../../../lib/apiError';
-import { steeringListChipFromAnalysis } from '../../../lib/steeringAnalysisV2';
+import { steeringListChipFromAnalysis, SCHULENTWICKLUNG_FIELDS } from '../../../lib/steeringAnalysisV2';
 
 const STEERING_GESAMT_BY_LEVEL: Record<'low' | 'medium' | 'high', string> = {
   low: 'niedriger Steuerungsbedarf',
@@ -80,6 +80,10 @@ function mapDocumentListRow(raw: Record<string, unknown>): Record<string, unknow
  * - review (overdue|set|empty)
  * - summary (has|missing)
  * - steering (has|missing|low|medium|high) — Steuerungsanalyse; low/medium/high = Ampel (Gesamtbewertung)
+ * - auftragfeld=<code> — nur Dokumente, die diesem Schulentwicklungs-Aufgabenfeld zugeordnet sind (Primär- oder
+ *   Mehrfachzuordnung in schulentwicklung_*; nur sinnvoll mit steering=has)
+ * - sePrimary=<code> — nur Dokumente mit gesetzter Steuerungsanalyse, deren primäres SE-Aufgabenfeld
+ *   (schulentwicklung_primary_field) diesem Code entspricht
  * - archive=1 — nur archivierte Dokumente; sonst nur aktive (archived_at IS NULL)
  * - status kann als einzelne Statuskennung oder als kommaseparierte Liste kommen
  * - sort=created_at|title|status|document_type_code|review_date (Standard: created_at)
@@ -116,6 +120,8 @@ export async function GET(req: NextRequest) {
     const reviewFilter = searchParams.get('review') ?? '';
     const summaryFilter = searchParams.get('summary') ?? '';
     const steeringFilter = searchParams.get('steering') ?? '';
+    const auftragfeldRaw = (searchParams.get('auftragfeld') ?? '').trim();
+    const sePrimaryRaw = (searchParams.get('sePrimary') ?? '').trim();
     const archiveParam = searchParams.get('archive') ?? '';
     const sortRaw = (searchParams.get('sort') ?? 'created_at').trim();
     const sortDirRaw = (searchParams.get('sortDir') ?? 'desc').trim().toLowerCase();
@@ -228,6 +234,20 @@ export async function GET(req: NextRequest) {
       query = query.not('summary', 'is', null);
     } else if (summaryFilter === 'missing') {
       query = query.is('summary', null);
+    }
+
+    const auftragfeldOk = (SCHULENTWICKLUNG_FIELDS as readonly string[]).includes(auftragfeldRaw);
+    if (auftragfeldOk) {
+      query = query
+        .not('steering_analysis', 'is', null)
+        .or(
+          `schulentwicklung_primary_field.eq.${auftragfeldRaw},schulentwicklung_fields.cs.{${auftragfeldRaw}}`,
+        );
+    }
+
+    const sePrimaryOk = (SCHULENTWICKLUNG_FIELDS as readonly string[]).includes(sePrimaryRaw);
+    if (sePrimaryOk) {
+      query = query.not('steering_analysis', 'is', null).eq('schulentwicklung_primary_field', sePrimaryRaw);
     }
 
     // Steering-Filter: has / low|medium|high (neues overall.rating oder Legacy-Score)

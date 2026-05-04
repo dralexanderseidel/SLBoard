@@ -8,6 +8,7 @@ import { METADATA_BROADCAST_CHANNEL } from '@/lib/metadataBroadcast';
 import { readApiJson } from '@/lib/readApiJson';
 import { LONG_RUNNING_EXPECTATION_HINT } from '@/lib/longRunningExpectationHint';
 import { useHeaderAccess } from '@/components/HeaderAccessContext';
+import { APP_PAGE_MAX_OUTER_CLASS } from '@/lib/appPageLayout';
 
 type DbDocType = {
   code: string;
@@ -328,7 +329,7 @@ export function DraftAssistantContent() {
   if (draftsDisabled) {
     return (
       <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-        <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
+        <div className={`${APP_PAGE_MAX_OUTER_CLASS} flex flex-col gap-6 py-6 sm:py-8`}>
           <header className="border-b border-zinc-200 pb-3 dark:border-zinc-800">
             <h1 className="text-xl font-semibold">Entwurfsassistent</h1>
           </header>
@@ -348,7 +349,7 @@ export function DraftAssistantContent() {
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
+      <div className={`${APP_PAGE_MAX_OUTER_CLASS} flex flex-col gap-6 py-6 sm:py-8`}>
         <header className="flex items-center justify-between gap-4 border-b border-zinc-200 pb-3 dark:border-zinc-800">
           <div>
             <h1 className="text-xl font-semibold">Entwurfsassistent</h1>

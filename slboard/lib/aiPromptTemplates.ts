@@ -69,13 +69,13 @@ Analyseprinzipien:
 Evidenz-Logik:
 - Für Tragfähigkeit: Schul-Steckbrief (falls vorhanden) einbeziehen.
 - Strukturelle Metadaten (Gremium, Status, Fristen, Zuständigkeit, Reichweite, Rechtsbezug, Kurzbeschreibung) dürfen einfließen, wenn sie belegbar sind.
-- Fehlende Belege explizit benennen und konservativ bewerten.
-- Keine freien Erfindungen: nur Schul-Steckbrief, Metadatenblock und Dokumenttext als Belegbasis.
+- Fehlende explizite Belege benennen; Kalibrierung im User-Prompt beachten (volle Skala, nicht alles in den mittleren Bereich drücken).
+- Keine freien Erfindungen: nur Schul-Steckbrief, Metadatenblock und Dokumenttext als Belegbasis; vorsichtige Implikationen nur wie im User-Prompt beschrieben.
 
 Das exakte JSON-Ausgabeformat steht im User-Prompt; halte Feldnamen und erlaubte Enum-Werte strikt ein.`,
     user_locked: STEERING_USER_LOCKED_TEMPLATE,
     system_editable_default:
-      'Bewerte streng anhand klarer Textindizien. Bei Unklarheit konservativ bleiben.',
+      'Nutze die Kalibrierungsvorgaben im User-Prompt (60–75 typisch, >75 gut strukturiert, <50 nur klar defizitär); bleibe evidenznah.',
     user_editable_default: '',
   },
   todos: {

@@ -9,19 +9,13 @@ import React, {
   useState,
 } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import {
+  type HeaderMeAccess,
+  type MeAccessApiPayload,
+  headerMeAccessFromApiPayload,
+} from '../lib/meAccessApi';
 
-export type HeaderMeAccess = {
-  schoolNumber: string | null;
-  schoolName: string | null;
-  orgUnit: string | null;
-  roles: string[];
-  superAdmin: boolean;
-  accountInactive: boolean;
-  featureAiEnabled: boolean;
-  featureDraftsEnabled: boolean;
-  /** Server-seitig begrenzt; für Client-Validierung von Uploads. */
-  effectiveMaxUploadBytes: number;
-};
+export type { HeaderMeAccess };
 
 type HeaderAccessValue = {
   userEmail: string | null;
@@ -32,11 +26,34 @@ type HeaderAccessValue = {
 
 const HeaderAccessContext = createContext<HeaderAccessValue | null>(null);
 
-export function HeaderAccessProvider({ children }: { children: React.ReactNode }) {
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [sessionLoading, setSessionLoading] = useState(true);
-  const [access, setAccess] = useState<HeaderMeAccess | null>(null);
-  const [accessLoading, setAccessLoading] = useState(false);
+type ProviderProps = {
+  children: React.ReactNode;
+  /**
+   * true: Root-Layout hat Session + Zugriff per RSC geladen — Header kann sofort Schulname zeigen.
+   * Dann entfällt der erste /api/me/access-Roundtrip, solange Browser-Session mit Server übereinstimmt.
+   */
+  accessPreloaded?: boolean;
+  initialUserEmail?: string | null;
+  initialAccess?: HeaderMeAccess | null;
+};
+
+export function HeaderAccessProvider({
+  children,
+  accessPreloaded = false,
+  initialUserEmail = null,
+  initialAccess = null,
+}: ProviderProps) {
+  const [userEmail, setUserEmail] = useState<string | null>(() =>
+    accessPreloaded ? initialUserEmail ?? null : null,
+  );
+  const [sessionLoading, setSessionLoading] = useState(() => !accessPreloaded);
+  const [access, setAccess] = useState<HeaderMeAccess | null>(() =>
+    accessPreloaded ? initialAccess ?? null : null,
+  );
+  const [accessLoading, setAccessLoading] = useState(() => {
+    if (!accessPreloaded) return false;
+    return initialUserEmail != null && initialAccess == null;
+  });
 
   const fetchAccess = useCallback(async (email: string | null) => {
     if (!email) {
@@ -51,32 +68,8 @@ export function HeaderAccessProvider({ children }: { children: React.ReactNode }
         setAccess(null);
         return;
       }
-      const data = (await res.json()) as {
-        schoolNumber?: string | null;
-        schoolName?: string | null;
-        orgUnit?: string | null;
-        roles?: string[];
-        superAdmin?: boolean;
-        accountInactive?: boolean;
-        featureAiEnabled?: boolean;
-        featureDraftsEnabled?: boolean;
-        effectiveMaxUploadBytes?: number;
-      };
-      const effBytes =
-        typeof data.effectiveMaxUploadBytes === 'number' && data.effectiveMaxUploadBytes > 0
-          ? data.effectiveMaxUploadBytes
-          : 20 * 1024 * 1024;
-      setAccess({
-        schoolNumber: data.schoolNumber ?? null,
-        schoolName: data.schoolName ?? null,
-        orgUnit: data.orgUnit ?? null,
-        roles: Array.isArray(data.roles) ? data.roles : [],
-        superAdmin: !!data.superAdmin,
-        accountInactive: !!data.accountInactive,
-        featureAiEnabled: data.featureAiEnabled !== false,
-        featureDraftsEnabled: data.featureDraftsEnabled !== false,
-        effectiveMaxUploadBytes: effBytes,
-      });
+      const data = (await res.json()) as MeAccessApiPayload;
+      setAccess(headerMeAccessFromApiPayload(data));
     } catch {
       setAccess(null);
     } finally {
@@ -85,30 +78,52 @@ export function HeaderAccessProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const sync = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
+      if (cancelled) return;
       const email = session?.user?.email ?? null;
       setUserEmail(email);
       setSessionLoading(false);
+
+      const sameAsServerPreload =
+        accessPreloaded &&
+        (email ?? null) === (initialUserEmail ?? null) &&
+        initialAccess != null &&
+        email != null;
+
+      if (sameAsServerPreload) {
+        return;
+      }
       await fetchAccess(email);
     };
     void sync();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       const email = session?.user?.email ?? null;
       setUserEmail(email);
       setSessionLoading(false);
+      if (
+        event === 'INITIAL_SESSION' &&
+        accessPreloaded &&
+        email &&
+        email === (initialUserEmail ?? '') &&
+        initialAccess != null
+      ) {
+        return;
+      }
       void fetchAccess(email);
     });
 
     return () => {
+      cancelled = true;
       subscription.unsubscribe();
     };
-  }, [fetchAccess]);
+  }, [fetchAccess, accessPreloaded, initialUserEmail, initialAccess]);
 
   const value = useMemo(
     () => ({ userEmail, sessionLoading, access, accessLoading }),

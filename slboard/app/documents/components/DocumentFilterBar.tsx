@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { SCHULENTWICKLUNG_FIELDS, schulentwicklungFieldLabelDe } from '@/lib/steeringAnalysisV2';
 import type { UseDocumentFiltersResult } from '../hooks/useDocumentFilters';
 
 const STATUS_CHIPS = [
@@ -44,6 +45,7 @@ type Props = Pick<
   | 'reviewFilter' | 'setReviewFilter'
   | 'summaryFilter' | 'setSummaryFilter'
   | 'steeringFilter' | 'setSteeringFilter'
+  | 'schulentwicklungPrimaryFieldFilter' | 'setSchulentwicklungPrimaryFieldFilter'
   | 'showAdvancedFilters' | 'setShowAdvancedFilters'
 > & {
   typeOptions: Array<{ code: string; label: string }>;
@@ -63,6 +65,7 @@ export function DocumentFilterBar({
   reviewFilter, setReviewFilter,
   summaryFilter, setSummaryFilter,
   steeringFilter, setSteeringFilter,
+  schulentwicklungPrimaryFieldFilter, setSchulentwicklungPrimaryFieldFilter,
   showAdvancedFilters, setShowAdvancedFilters,
   typeOptions, responsibleUnitOptions,
   onResetFilters,
@@ -257,6 +260,24 @@ export function DocumentFilterBar({
                 <option value="low">niedrig (Ampel grün)</option>
                 <option value="medium">mittel (Ampel gelb)</option>
                 <option value="high">hoch (Ampel rot)</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Primäres SE-Aufgabenfeld
+              </label>
+              <select
+                value={schulentwicklungPrimaryFieldFilter}
+                onChange={(e) => setSchulentwicklungPrimaryFieldFilter(e.target.value)}
+                className={`${selectClass} min-w-[240px]`}
+              >
+                <option value="">Alle</option>
+                {SCHULENTWICKLUNG_FIELDS.map((code) => (
+                  <option key={code} value={code}>
+                    {schulentwicklungFieldLabelDe(code)}
+                  </option>
+                ))}
               </select>
             </div>
 

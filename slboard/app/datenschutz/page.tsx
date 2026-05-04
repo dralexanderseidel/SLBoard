@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { createServerSupabaseClient } from '../../lib/supabaseServerClient';
+import { APP_PAGE_MAX_OUTER_CLASS } from '@/lib/appPageLayout';
 
 export const metadata: Metadata = {
   title: 'Datenschutz | log/os Edu Governance Pro',
@@ -22,7 +23,8 @@ export default async function DatenschutzPage() {
   const { data: { user } } = (await supabase?.auth.getUser()) ?? { data: { user: null } };
 
   return (
-    <article className="mx-auto max-w-3xl px-4 py-10 text-sm leading-relaxed text-zinc-800 dark:text-zinc-100">
+    <div className={`${APP_PAGE_MAX_OUTER_CLASS} py-10`}>
+      <article className="mx-auto w-full max-w-3xl text-sm leading-relaxed text-zinc-800 dark:text-zinc-100">
       <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
         Datenschutzhinweise
       </h1>
@@ -288,5 +290,6 @@ export default async function DatenschutzPage() {
         </Link>
       </p>
     </article>
+    </div>
   );
 }

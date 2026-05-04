@@ -11,6 +11,7 @@ import { MetadataPanel } from './panels/MetadataPanel';
 import { StatsPanel } from './panels/StatsPanel';
 import { useReindex } from './hooks/useReindex';
 import { CONTEXT_HELP } from '@/lib/contextHelpUrls';
+import { APP_PAGE_MAX_OUTER_CLASS } from '@/lib/appPageLayout';
 
 export function AdminPageClient() {
   const router = useRouter();
@@ -66,7 +67,7 @@ export function AdminPageClient() {
   if (adminAllowed === false) {
     return (
       <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-        <div className="mx-auto max-w-5xl px-6 py-8">
+        <div className={`${APP_PAGE_MAX_OUTER_CLASS} py-6 sm:py-8`}>
           <h1 className="text-xl font-semibold">Admin</h1>
           <p className="mt-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400">
             Kein Zugriff. Bitte melden Sie sich mit einem Admin-Konto an.
@@ -81,7 +82,7 @@ export function AdminPageClient() {
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
+      <div className={`${APP_PAGE_MAX_OUTER_CLASS} flex flex-col gap-6 py-6 sm:py-8`}>
 
         <header className="flex items-center justify-between gap-4 border-b border-zinc-200 pb-3 dark:border-zinc-800">
           <div>

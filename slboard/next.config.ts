@@ -14,6 +14,10 @@ const turbopackRoot = fs.existsSync(path.join(configDir, "node_modules", "next",
     : configDir;
 
 const nextConfig: NextConfig = {
+  /** Entwicklung: Next-Devtools-/Status-Shortcut unten rechts (Standard: unten links). */
+  devIndicators: {
+    position: "bottom-right",
+  },
   turbopack: {
     root: turbopackRoot,
   },

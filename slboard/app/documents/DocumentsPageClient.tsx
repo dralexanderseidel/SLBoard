@@ -20,6 +20,7 @@ import { DocumentCompactView } from './components/DocumentCompactView';
 import { DocumentListPagination } from './components/DocumentListPagination';
 import { ApiErrorCallout } from '@/components/ApiErrorCallout';
 import { useHeaderAccess } from '@/components/HeaderAccessContext';
+import { APP_PAGE_MAX_OUTER_CLASS } from '@/lib/appPageLayout';
 import type { SortField, SortDir } from './types';
 
 const DOCUMENT_LIST_PAGE_SIZE = 25;
@@ -32,9 +33,11 @@ export function DocumentsPageClient() {
   const searchParams = useSearchParams();
   const archiveView = searchParams.get('archive') === '1';
   const urlQ = searchParams.get('q') ?? '';
+  const urlAuftragfeld = searchParams.get('auftragfeld') ?? '';
+  const urlSePrimary = searchParams.get('sePrimary') ?? '';
 
   // ── Filter & view state ────────────────────────────────────────────────────
-  const filters = useDocumentFilters(urlQ);
+  const filters = useDocumentFilters(urlQ, urlAuftragfeld, urlSePrimary);
 
   // Sync URL ?q param to filters on subsequent client-side navigations
   // (e.g. from the global header search). Initial value is already handled
@@ -46,6 +49,22 @@ export function DocumentsPageClient() {
       filters.setSearchDirect(urlQ);
     }
   }, [urlQ, filters.setSearchDirect]);
+
+  const prevUrlAuftragfeld = useRef(urlAuftragfeld);
+  useEffect(() => {
+    if (urlAuftragfeld !== prevUrlAuftragfeld.current) {
+      prevUrlAuftragfeld.current = urlAuftragfeld;
+      filters.setSchulentwicklungFieldFilter(urlAuftragfeld.trim());
+    }
+  }, [urlAuftragfeld, filters.setSchulentwicklungFieldFilter]);
+
+  const prevUrlSePrimary = useRef(urlSePrimary);
+  useEffect(() => {
+    if (urlSePrimary !== prevUrlSePrimary.current) {
+      prevUrlSePrimary.current = urlSePrimary;
+      filters.setSchulentwicklungPrimaryFieldFilter(urlSePrimary.trim());
+    }
+  }, [urlSePrimary, filters.setSchulentwicklungPrimaryFieldFilter]);
   const [viewMode, setViewMode] = useViewMode();
   const [sortField, setSortField] = useState<SortField>('created_at');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -74,6 +93,8 @@ export function DocumentsPageClient() {
         filters.reviewFilter,
         filters.summaryFilter,
         filters.steeringFilter,
+        filters.schulentwicklungFieldFilter,
+        filters.schulentwicklungPrimaryFieldFilter,
         filters.searchQuery,
         archiveView,
         sortField,
@@ -90,6 +111,8 @@ export function DocumentsPageClient() {
       filters.reviewFilter,
       filters.summaryFilter,
       filters.steeringFilter,
+      filters.schulentwicklungFieldFilter,
+      filters.schulentwicklungPrimaryFieldFilter,
       filters.searchQuery,
       archiveView,
       sortField,
@@ -189,12 +212,14 @@ export function DocumentsPageClient() {
     filters.gremiumFilter ||
     filters.reviewFilter ||
     filters.summaryFilter ||
-    filters.steeringFilter
+    filters.steeringFilter ||
+    filters.schulentwicklungFieldFilter ||
+    filters.schulentwicklungPrimaryFieldFilter
   );
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
+      <div className={`${APP_PAGE_MAX_OUTER_CLASS} flex flex-col gap-6 py-6 sm:py-8`}>
 
         {/* Header */}
         <header className="flex flex-col gap-3 border-b border-zinc-200 pb-3 sm:flex-row sm:items-start sm:justify-between dark:border-zinc-800">

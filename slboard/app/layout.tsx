@@ -5,6 +5,7 @@ import { HeaderAccessProvider } from '../components/HeaderAccessContext';
 import { AppChrome } from '../components/AppChrome';
 import { ScrollToTop } from '../components/ScrollToTop';
 import { AppToaster } from '../components/AppToaster';
+import { getHeaderAccessBootstrap } from '../lib/meAccessServer';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -24,11 +25,13 @@ export const metadata: Metadata = {
 /** Kein CDN-/RSC-Caching der Shell: Session kommt aus Cookies (Vercel vs. lokal). */
 export const dynamic = 'force-dynamic';
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headerBoot = await getHeaderAccessBootstrap();
+
   return (
     <html lang="de">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
@@ -38,7 +41,11 @@ export default function RootLayout({
         >
           Zum Inhalt springen
         </a>
-        <HeaderAccessProvider>
+        <HeaderAccessProvider
+          accessPreloaded={headerBoot.accessPreloaded}
+          initialUserEmail={headerBoot.initialUserEmail}
+          initialAccess={headerBoot.initialAccess}
+        >
           <AppChrome>{children}</AppChrome>
         </HeaderAccessProvider>
         <ScrollToTop />

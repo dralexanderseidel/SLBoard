@@ -3,6 +3,7 @@
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { MIN_APP_PASSWORD_LENGTH } from '@/lib/authPasswordConstants';
+import { APP_PAGE_MAX_OUTER_CLASS } from '@/lib/appPageLayout';
 
 type SchoolUsage = {
   userCount: number;
@@ -555,7 +556,9 @@ export default function SuperAdminPage() {
 
   if (forbidden) {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
+        <div className={`${APP_PAGE_MAX_OUTER_CLASS} py-6 sm:py-10`}>
+          <div className="max-w-3xl">
         <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Super-Admin</h1>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
           Sie haben keine Super-Admin-Berechtigung. Zugriff erhalten Sie über die Umgebungsvariable{' '}
@@ -566,12 +569,15 @@ export default function SuperAdminPage() {
         <Link href="/" className="mt-4 inline-block text-sm text-blue-600 hover:underline dark:text-blue-400">
           Zurück zur Startseite
         </Link>
+          </div>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-8">
+    <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
+      <div className={`${APP_PAGE_MAX_OUTER_CLASS} py-6 sm:py-8`}>
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Super-Admin</h1>
@@ -786,6 +792,8 @@ export default function SuperAdminPage() {
           )}
         </div>
       </section>
+
+      </div>
 
       {pwResetSchool && (
         <div

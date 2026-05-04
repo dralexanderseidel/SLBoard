@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ContextHelpLink } from '../../components/ContextHelpLink';
 import { CONTEXT_HELP } from '../../lib/contextHelpUrls';
+import { APP_PAGE_MAX_OUTER_CLASS } from '@/lib/appPageLayout';
 
 export default function RegisterSchoolPage() {
   const router = useRouter();
@@ -57,7 +58,8 @@ export default function RegisterSchoolPage() {
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-      <div className="mx-auto flex max-w-md flex-col gap-6 px-6 py-12">
+      <div className={`${APP_PAGE_MAX_OUTER_CLASS} flex justify-center py-12`}>
+        <div className="w-full max-w-md flex flex-col gap-6">
         <header className="flex flex-col gap-2 border-b border-zinc-200 pb-3 sm:flex-row sm:items-start sm:justify-between dark:border-zinc-800">
           <div>
             <h1 className="text-xl font-semibold">Schule registrieren</h1>
@@ -169,6 +171,7 @@ export default function RegisterSchoolPage() {
             {loading ? 'Registriere…' : 'Schule registrieren'}
           </button>
         </form>
+        </div>
       </div>
     </main>
   );

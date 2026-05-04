@@ -7,6 +7,7 @@ import { readApiJson } from '@/lib/readApiJson';
 import { LONG_RUNNING_EXPECTATION_HINT } from '@/lib/longRunningExpectationHint';
 import { CONTEXT_HELP } from '@/lib/contextHelpUrls';
 import { ContextHelpLink } from '@/components/ContextHelpLink';
+import { APP_PAGE_MAX_OUTER_CLASS } from '@/lib/appPageLayout';
 
 type Status = 'ENTWURF' | 'FREIGEGEBEN' | 'BESCHLUSS' | 'VEROEFFENTLICHT';
 type ReachScope = 'intern' | 'extern';
@@ -212,7 +213,8 @@ export default function UploadPage() {
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-      <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
+      <div className={`${APP_PAGE_MAX_OUTER_CLASS} flex flex-col gap-6 py-6 sm:py-8`}>
+        <div className="flex w-full max-w-3xl flex-col gap-6">
         <header className="flex items-center justify-between gap-4 border-b border-zinc-200 pb-3 dark:border-zinc-800">
           <div>
             <h1 className="text-xl font-semibold">Dokument hochladen</h1>
@@ -572,6 +574,7 @@ export default function UploadPage() {
           {error && <p className="text-xs text-red-600">{error}</p>}
           {message && <p className="text-xs text-green-600">{message}</p>}
         </form>
+        </div>
       </div>
     </main>
   );

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { APP_PAGE_MAX_OUTER_CLASS } from '@/lib/appPageLayout';
 
 /** Cross-Page-Links: `<a href>` (voller Ladevorgang), damit die Zielseite oben startet. */
 const helpClassName = 'text-blue-600 underline-offset-2 hover:underline dark:text-blue-400';
@@ -27,7 +28,8 @@ const toc = [
 
 export default function HilfePage() {
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className={`${APP_PAGE_MAX_OUTER_CLASS} py-6 sm:py-10`}>
+      <div className="mx-auto w-full max-w-3xl">
       <header className="mb-10 border-b border-zinc-200 pb-6 dark:border-zinc-800">
         <p className="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
           Endnutzer-Dokumentation
@@ -609,6 +611,7 @@ export default function HilfePage() {
           </p>
         </footer>
       </article>
+      </div>
     </div>
   );
 }

@@ -11,6 +11,7 @@ import { LONG_RUNNING_EXPECTATION_HINT } from '../lib/longRunningExpectationHint
 import { supabase } from '../lib/supabaseClient';
 import { useHeaderAccess } from '../components/HeaderAccessContext';
 import { parseDashboardDocsQueryParam } from '../lib/dashboardDocSelection';
+import { APP_PAGE_MAX_OUTER_CLASS } from '../lib/appPageLayout';
 
 type RecentQuery = {
   id: number | string;
@@ -339,7 +340,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-      <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10">
+      <div className={`${APP_PAGE_MAX_OUTER_CLASS} flex flex-col gap-8 py-6 sm:py-8`}>
         <header className="flex flex-col gap-2 border-b border-zinc-200 pb-4 dark:border-zinc-800">
           <h1 className="text-2xl font-semibold">Schulische Dokumentenverwaltung</h1>
           <p className="max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
