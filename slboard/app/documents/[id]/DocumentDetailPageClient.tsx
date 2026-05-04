@@ -37,6 +37,7 @@ import type { SteeringAnalysis } from '@/lib/steeringAnalysisV2';
 import { CONTEXT_HELP } from '@/lib/contextHelpUrls';
 import { ContextHelpLink } from '@/components/ContextHelpLink';
 import { useHeaderAccess } from '@/components/HeaderAccessContext';
+import { CollapsibleSection } from '@/app/admin/panels/CollapsibleSection';
 import type { AuditEntry, DocumentDetail } from './types';
 
 // ── Reine Hilfsfunktionen (kein Component-State) ─────────────────────────────
@@ -239,11 +240,16 @@ export function DocumentDetailPageClient() {
   // ── Audit-Filter ────────────────────────────────────────────────────────────
   const [auditImportantOnly, setAuditImportantOnly] = useState(false);
 
+  const [kiSummarySectionOpen, setKiSummarySectionOpen] = useState(true);
+  const [kiActionsSectionOpen, setKiActionsSectionOpen] = useState(true);
+
   // ── Scroll-to-section via ?focus= ──────────────────────────────────────────
   const focusParam = searchParams.get('focus');
   useEffect(() => {
     if (focusParam !== 'summary' && focusParam !== 'steering') return;
     if (!doc) return;
+    if (focusParam === 'summary') setKiSummarySectionOpen(true);
+    if (focusParam === 'steering') setKiActionsSectionOpen(true);
     const t = window.setTimeout(() => {
       const el = document.getElementById(focusParam === 'steering' ? 'steering-section' : 'summary-section');
       el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -706,14 +712,18 @@ export function DocumentDetailPageClient() {
                 .
               </div>
 
-              <div
-                id="summary-section"
-                tabIndex={-1}
-                className="mt-3 rounded border border-zinc-200 bg-white p-3 text-xs shadow-sm dark:border-zinc-700 dark:bg-zinc-950"
-              >
-                <h3 className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
-                  KI-Kurz­zusammenfassung
-                </h3>
+              <div id="summary-section" tabIndex={-1} className="mt-3 scroll-mt-4">
+                <CollapsibleSection
+                  title="KI-Kurz­zusammenfassung"
+                  description={
+                    featureAiEnabled
+                      ? 'Wird für KI-Suche und KI-Antworten als bevorzugter Kontext genutzt.'
+                      : 'Kurzfassung des Dokuments; KI-Erzeugung ist für diese Schule deaktiviert.'
+                  }
+                  open={kiSummarySectionOpen}
+                  onToggle={setKiSummarySectionOpen}
+                >
+                  <div className="text-xs">
                 {!featureAiEnabled && (
                   <p className="mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[11px] text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100">
                     KI-Funktionen sind für diese Schule deaktiviert. Eine vorhandene Kurzfassung wird weiter angezeigt.
@@ -721,9 +731,6 @@ export function DocumentDetailPageClient() {
                 )}
                 {featureAiEnabled && (
                   <>
-                    <p className="mb-2 text-[11px] text-zinc-600 dark:text-zinc-300">
-                      Wird für KI-Suche und KI-Antworten als bevorzugter Kontext genutzt.
-                    </p>
                     <button
                       type="button"
                       onClick={handleSummarize}
@@ -768,12 +775,22 @@ export function DocumentDetailPageClient() {
                 {!featureAiEnabled && !summary && !summaryError && (
                   <p className="text-zinc-600 dark:text-zinc-300">Keine Kurz-Zusammenfassung gespeichert.</p>
                 )}
+                  </div>
+                </CollapsibleSection>
               </div>
 
-              <div className="mt-3 rounded border border-zinc-200 bg-white p-3 text-xs shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
-                <h3 className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
-                  KI-Aktionen
-                </h3>
+              <div className="mt-3">
+                <CollapsibleSection
+                  title="KI-Aktionen"
+                  description={
+                    featureAiEnabled
+                      ? 'Fragen zum Dokument, Steuerungsanalyse und ToDos.'
+                      : 'KI-Funktionen sind für diese Schule deaktiviert; bestehende Inhalte bleiben sichtbar.'
+                  }
+                  open={kiActionsSectionOpen}
+                  onToggle={setKiActionsSectionOpen}
+                >
+                  <div className="text-xs">
                 {featureAiEnabled ? (
                 <>
                 <div className="mb-2">
@@ -966,6 +983,8 @@ export function DocumentDetailPageClient() {
                     werden weiterhin angezeigt.
                   </p>
                 )}
+                  </div>
+                </CollapsibleSection>
               </div>
 
               {featureDraftsEnabled ? (
