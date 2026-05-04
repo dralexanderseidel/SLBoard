@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import type { SerializedApiError } from '@/lib/apiUserError';
 import { ApiUserError, serializeApiError } from '@/lib/apiUserError';
 import { readApiJsonOk } from '@/lib/readApiJson';
-import type { DocumentDetail, SteeringAnalysis, SteeringTodosResult } from '../types';
+import type { DocumentDetail, SteeringTodosResult } from '../types';
+import { parseSteeringAnalysisV2, type SteeringAnalysis } from '@/lib/steeringAnalysisV2';
 
 type UseDocumentSteeringResult = {
   steeringAnalysis: SteeringAnalysis | null;
@@ -35,9 +36,15 @@ export function useDocumentSteering(
   const [todosLoading, setTodosLoading] = useState(false);
   const [todosError, setTodosError] = useState<SerializedApiError | null>(null);
 
-  // Initialisierung aus dem geladenen Dokument
+  // steering_analysis aus der DB parsen, damit Ampel/Rating aus Scores (z. B. ≥70 grün) konsistent sind
   useEffect(() => {
-    setSteeringAnalysis((doc?.steering_analysis as SteeringAnalysis | null) ?? null);
+    const raw = doc?.steering_analysis;
+    if (raw == null || typeof raw !== 'object') {
+      setSteeringAnalysis(null);
+    } else {
+      const parsed = parseSteeringAnalysisV2(raw, doc?.id ?? '');
+      setSteeringAnalysis(parsed.ok ? parsed.value : (raw as SteeringAnalysis));
+    }
     setSteeringUpdatedAt(doc?.steering_analysis_updated_at ?? null);
     setSteeringTodos((doc?.steering_todos as SteeringTodosResult | null) ?? null);
     setSteeringTodosUpdatedAt(doc?.steering_todos_updated_at ?? null);

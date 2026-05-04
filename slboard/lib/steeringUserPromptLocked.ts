@@ -1,5 +1,5 @@
 /**
- * Gesperrter User-Prompt Steuerungsanalyse (SE-Cockpit / Matrix + Scoring).
+ * Gesperrter User-Prompt Steuerungsanalyse (Schulentwicklungs-Cockpit / Matrix + Scoring).
  * Platzhalter: document_id, analysis_date, document_status_json, document_title,
  * document_metadata_block, school_profile_block, document_text
  */

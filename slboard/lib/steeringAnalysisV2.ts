@@ -1,5 +1,5 @@
 /**
- * Steuerungsanalyse SE-Cockpit: Schulentwicklungs-Matrix + Scoring (0–100).
+ * Steuerungsanalyse Schulentwicklungs-Cockpit: Schulentwicklungs-Matrix + Scoring (0–100).
  * JSON-Schema gemäß Produktvorgabe; Validierung für API und Admin-Prompt-Preview.
  */
 
@@ -208,7 +208,8 @@ function parseDimension(
   if (Math.abs(sum - total) > 25) {
     errors.push(`${path}.total: Summe der Kriterien (${sum}) weicht sehr stark von total (${total}) ab (>25).`);
   }
-  return { total, rating: ratingRaw, criteria };
+  /** Ampelfarbe immer aus dem numerischen Total (≥70 grün), damit UI konsistent zum SE-Cockpit bleibt. */
+  return { total, rating: ratingFromNumericScore(total), criteria };
 }
 
 export function mapDbStatusToSteeringDocumentStatus(
@@ -321,7 +322,7 @@ export function buildSchulentwicklungDenorm(classification: SteeringClassificati
   return { primary, fields: [...set] };
 }
 
-/** Rating aus 0–100-Gesamtscore ( konservativ ). */
+/** Rating aus 0–100-Gesamtscore: ≥70 robust (grün), ≥40 instabil, sonst kritisch — einheitlich für Matrix und UI. */
 export function ratingFromNumericScore(total: number): SteeringDimensionRating {
   if (total >= 70) return 'robust';
   if (total >= 40) return 'instabil';
@@ -411,7 +412,7 @@ export function parseSteeringAnalysisV2(
     if (os !== null && rt && isDimensionRating(rt)) {
       const derived = ratingFromNumericScore(os);
       if (rt !== derived) {
-        /* weich: nur Hinweis, nicht hart fehlschlagen */
+        /* LLM-rating kann vom numerischen Band abweichen; Anzeige folgt derived (siehe value-Assembly). */
       }
     }
   }
@@ -499,9 +500,10 @@ export function parseSteeringAnalysisV2(
   };
 
   const ov = o.overall as Record<string, unknown>;
+  const overallScore = Number(ov.score);
   const overall = {
-    score: Number(ov.score),
-    rating: ov.rating as SteeringDimensionRating,
+    score: overallScore,
+    rating: ratingFromNumericScore(overallScore),
     weakest_dimension: ov.weakest_dimension as SteeringAnalysis['overall']['weakest_dimension'],
     main_structural_gap: String(ov.main_structural_gap ?? '').trim(),
     summary: String(ov.summary ?? '').trim(),
@@ -563,6 +565,16 @@ export function steeringListChipFromAnalysis(steering_analysis: unknown): {
   if (!steering_analysis || typeof steering_analysis !== 'object') return {};
   const o = steering_analysis as Record<string, unknown>;
   const overall = o.overall as Record<string, unknown> | undefined;
+  const sc = overall?.score;
+  if (typeof sc === 'number' && Number.isFinite(sc)) {
+    return { overallRating: ratingFromNumericScore(sc) };
+  }
+  if (typeof sc === 'string') {
+    const n = Number(sc);
+    if (Number.isFinite(n)) {
+      return { overallRating: ratingFromNumericScore(n) };
+    }
+  }
   const r = overall?.rating;
   if (r === 'robust' || r === 'instabil' || r === 'kritisch') {
     return { overallRating: r };

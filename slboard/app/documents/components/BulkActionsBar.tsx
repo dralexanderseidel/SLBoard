@@ -47,6 +47,16 @@ export function BulkActionsBar({
 
   return (
     <section className="space-y-3 rounded-lg border border-zinc-200 bg-white px-4 py-3 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="border-b border-zinc-100 pb-2 dark:border-zinc-800">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-700 dark:text-zinc-200">
+          Mehrfachänderung
+        </p>
+        <p className="mt-0.5 text-[10px] leading-snug text-zinc-500 dark:text-zinc-400">
+          Die folgenden Aktionen gelten gleichzeitig für alle ausgewählten Dokumente, die Sie ändern dürfen
+          (Massenänderung).
+        </p>
+      </div>
+
       {/* Auswahl-Übersicht */}
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-zinc-600 dark:text-zinc-300">

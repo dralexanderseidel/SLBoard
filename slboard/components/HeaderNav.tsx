@@ -137,7 +137,7 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
     return (
       <nav className="flex flex-col gap-0.5" aria-label="Hauptnavigation">
         {sideItem('/', 'Dashboard', NavIconDashboard)}
-        {sideItem('/se-cockpit', 'SE-Cockpit', NavIconSeCockpit)}
+        {sideItem('/se-cockpit', 'Schulentwicklungs-Cockpit', NavIconSeCockpit)}
         {sideItem('/documents', 'Dokumente', NavIconDocuments)}
         {!hideDraftsAssistant ? sideItem('/drafts', 'Entwurfsassistent', NavIconDrafts) : null}
         {sideItem(CONTEXT_HELP.einleitung, 'Hilfe', NavIconHelp)}
@@ -172,7 +172,7 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
         </AppNavLink>
         <AppNavLink href="/se-cockpit" className={pill}>
           <NavIconSeCockpit className={navIconSm} />
-          SE-Cockpit
+          Schulentwicklungs-Cockpit
         </AppNavLink>
         <AppNavLink href="/documents" className={pill}>
           <NavIconDocuments className={navIconSm} />
@@ -206,7 +206,7 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
           className={`${pillCompact} text-zinc-700 dark:text-zinc-200`}
         >
           <NavIconSeCockpit className="size-3.5 opacity-90" />
-          SE-Cockpit
+          Schulentwicklungs-Cockpit
         </AppNavLink>
         <AppNavLink
           href="/documents"
@@ -244,7 +244,7 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
             >
               <AppNavLink href="/se-cockpit" role="menuitem" onClick={closeMore} className={moreMenuItem}>
                 <NavIconSeCockpit className="size-4 opacity-90" />
-                SE-Cockpit
+                Schulentwicklungs-Cockpit
               </AppNavLink>
               {!hideDraftsAssistant ? (
                 <AppNavLink

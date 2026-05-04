@@ -134,11 +134,11 @@ export function SeCockpitPageClient() {
     setError(null);
     try {
       const res = await fetch('/api/se-cockpit', { credentials: 'include', cache: 'no-store' });
-      const json = await readApiJsonOk<ApiSeCockpit>(res, 'SE-Cockpit konnte nicht geladen werden.');
+      const json = await readApiJsonOk<ApiSeCockpit>(res, 'Schulentwicklungs-Cockpit konnte nicht geladen werden.');
       setData(json);
     } catch (e) {
       setData(null);
-      setError(serializeApiError(e, 'SE-Cockpit konnte nicht geladen werden.'));
+      setError(serializeApiError(e, 'Schulentwicklungs-Cockpit konnte nicht geladen werden.'));
     } finally {
       setLoading(false);
     }
@@ -170,7 +170,7 @@ export function SeCockpitPageClient() {
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            SE-Cockpit
+            Schulentwicklungs-Cockpit
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
             Auswertung aller nicht archivierten Dokumente mit gültiger Steuerungsanalyse (Matrix V2).

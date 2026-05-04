@@ -45,7 +45,7 @@ export function NavIconDocuments(props: IconProps) {
   );
 }
 
-/** Matrix / SE-Cockpit */
+/** Matrix / Schulentwicklungs-Cockpit */
 export function NavIconSeCockpit(props: IconProps) {
   const { className, ...rest } = props;
   return (

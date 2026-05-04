@@ -56,7 +56,7 @@ export function AppChrome({ children }: Props) {
               />
             </AppNavLink>
             <p className="mt-2 text-[11px] leading-snug text-slate-400">
-              Dokumentenbasis, Schulentwicklung und Suche mit KI.
+              Dokumentenbasis und Schulentwicklung mit KI-Assistenz.
             </p>
           </div>
 
