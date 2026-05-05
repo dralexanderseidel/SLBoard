@@ -656,7 +656,11 @@ export default function Home() {
         )}
 
         {/* Navigation */}
-        <section className={`grid gap-3 ${showDraftsHomeCard ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+        <section
+          className={`grid gap-3 grid-cols-1 ${
+            showDraftsHomeCard ? 'md:grid-cols-2 xl:grid-cols-4' : 'md:grid-cols-3'
+          }`}
+        >
           <Link
             href="/documents"
             className="group flex min-h-[150px] flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-blue-700"
@@ -702,6 +706,28 @@ export default function Home() {
             </div>
             <span className="mt-auto inline-flex w-full items-center justify-center rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
               Dokumente hochladen
+            </span>
+          </Link>
+
+          <Link
+            href="/se-cockpit"
+            className="group flex min-h-[150px] flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-cyan-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-cyan-700"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Steuerungs-Cockpit</h2>
+                <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
+                  Schulweite Schulentwicklungs-Matrix und Kennzahlen aus den Steuerungsanalysen.
+                </p>
+              </div>
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-50 text-cyan-800 ring-1 ring-cyan-100 transition group-hover:bg-cyan-100 dark:bg-cyan-950/40 dark:text-cyan-200 dark:ring-cyan-900/50">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path d="M4 5h5v5H4V5zM15 5h5v5h-5V5zM4 14h5v5H4v-5zM15 14h5v5h-5v-5z" strokeLinejoin="round" />
+                </svg>
+              </span>
+            </div>
+            <span className="mt-auto inline-flex w-full items-center justify-center rounded border border-cyan-300 bg-cyan-50 px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm transition hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-950/50 dark:text-zinc-50 dark:hover:bg-cyan-950">
+              Zum Steuerungs-Cockpit
             </span>
           </Link>
 
