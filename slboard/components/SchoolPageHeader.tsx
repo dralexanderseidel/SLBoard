@@ -4,7 +4,7 @@ import { useHeaderAccess } from './HeaderAccessContext';
 import { APP_PAGE_MAX_OUTER_CLASS } from '@/lib/appPageLayout';
 
 /**
- * Schul-Kontext oben im Inhaltsbereich (alle Seiten): Schulname + Schulnummer wie im Cockpit-Mockup.
+ * Schul-Kontext oben im Inhaltsbereich (alle Seiten): Schulname + Schulnummer (einheitlich mit Steuerungs-Cockpit).
  */
 export function SchoolPageHeader() {
   const { access, accessLoading, userEmail } = useHeaderAccess();

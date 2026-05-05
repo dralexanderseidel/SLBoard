@@ -8,7 +8,7 @@ import { buildSeCockpitPayload } from '../../../lib/seCockpitAggregates';
 const MAX_DOCS = 3000;
 
 /**
- * GET: Aggregierte Steuerungsdaten für das Schulentwicklungs-Cockpit (Schule, nicht archivierte Dokumente mit gültiger V2-Analyse).
+ * GET: Aggregierte Steuerungsdaten für das Steuerungs-Cockpit (Schule, nicht archivierte Dokumente mit gültiger V2-Analyse).
  */
 export async function GET() {
   try {

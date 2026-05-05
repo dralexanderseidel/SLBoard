@@ -7,13 +7,14 @@ const helpClassName = 'text-blue-600 underline-offset-2 hover:underline dark:tex
 export const metadata: Metadata = {
   title: 'Hilfe und Dokumentation | log/os Edu Governance Pro',
   description:
-    'Ausführliche Anleitung für Schulen: Anmeldung, Dokumente, KI-Funktionen, Entwurfsassistent und häufige Fragen.',
+    'Ausführliche Anleitung für Schulen: Anmeldung, Startseite, Steuerungs-Cockpit, Dokumente, KI-Funktionen, Entwurfsassistent und häufige Fragen.',
 };
 
 const toc = [
   { id: 'einleitung', label: 'Über diese Hilfe' },
   { id: 'anmeldung', label: 'Anmeldung und Konto' },
-  { id: 'dashboard', label: 'Dashboard (Startseite)' },
+  { id: 'dashboard', label: 'Startseite' },
+  { id: 'steuerungs-cockpit', label: 'Steuerungs-Cockpit' },
   { id: 'dokumente', label: 'Dokumentenliste' },
   { id: 'hochladen', label: 'Dokument hochladen' },
   { id: 'dokument-detail', label: 'Dokument einzeln ansehen und bearbeiten' },
@@ -73,7 +74,7 @@ export default function HilfePage() {
           </p>
           <p>
             Die Oberfläche ist in der Regel über die Kopfzeile erreichbar:{' '}
-            <strong>Dashboard</strong>, <strong>Dokumente</strong>, <strong>Entwurfsassistent</strong>,{' '}
+            <strong>Startseite</strong>, <strong>Dokumente</strong>, <strong>Entwurfsassistent</strong>,{' '}
             <strong>Hilfe</strong> (diese Seite) und bei entsprechender Rolle <strong>Admin</strong>. Über das
             Profilmenü rechts oben melden Sie sich ab, wechseln bei Bedarf die <strong>Schulnummer</strong> (wenn Ihre
             E-Mail mehreren Schulen zugeordnet ist), ändern das Passwort, laden einen{' '}
@@ -143,9 +144,9 @@ export default function HilfePage() {
         </section>
 
         <section id="dashboard" className="space-y-3">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Dashboard (Startseite)</h2>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Startseite</h2>
           <p>
-            Nach der Anmeldung sehen Sie das <strong>Dashboard</strong>. Dort können Sie eine{' '}
+            Nach der Anmeldung sehen Sie die <strong>Startseite</strong>. Dort können Sie eine{' '}
             <strong>Frage an die gesamte Dokumentenbasis Ihrer Schule</strong> stellen – ähnlich einer Suche mit
             Antworttext, der von der KI aus den hinterlegten Dokumenten begründet wird.
           </p>
@@ -191,8 +192,49 @@ export default function HilfePage() {
             diese Funktion nutzt.
           </p>
           <p>
-            Weitere Kacheln oder Hinweise auf dem Dashboard informieren z.&nbsp;B. über kürzlich veröffentlichte
+            Weitere Kacheln oder Hinweise auf der Startseite informieren z.&nbsp;B. über kürzlich veröffentlichte
             Dokumente oder überfällige Prüftermine – jeweils abhängig von den Daten Ihrer Schule.
+          </p>
+        </section>
+
+        <section id="steuerungs-cockpit" className="space-y-3">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Steuerungs-Cockpit</h2>
+          <p>
+            Unter{' '}
+            <a href="/se-cockpit" className={helpClassName}>
+              Steuerungs-Cockpit
+            </a>{' '}
+            (Navigation in der Kopfzeile bzw. in der Seitenleiste) sehen Sie eine <strong>schulweite Auswertung</strong>{' '}
+            gespeicherter <strong>Steuerungsanalysen</strong> (Format „Matrix&nbsp;V2“). Eingeschlossen sind nur{' '}
+            <strong>nicht archivierte</strong> Dokumente, für die bereits eine gültige Analyse vorliegt und die Ihren
+            Berechtigungen entsprechend berücksichtigt werden können.
+          </p>
+          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Kennzahlen und Matrix</h3>
+          <p>
+            Oben zeigt die Seite für die drei Steuerungsdimensionen (u.&nbsp;a. Tragfähigkeit, Entscheidungslogik,
+            Verbindlichkeit) jeweils einen <strong>schulweiten Mittelwert</strong> auf der Skala 0–100, inklusive
+            Ampel-Einordnung. Darunter folgt die <strong>Schulentwicklungs-Matrix</strong>: Zeilen entsprechen den
+            sieben Aufgabenfeldern der Schulentwicklung, Spalten den drei Dimensionen. Jede Zelle bildet den Mittelwert
+            nur über Dokumente ab, die diesem Aufgabenfeld zugeordnet sind; in Klammern steht die Anzahl der
+            einbezogenen Dokumente.
+          </p>
+          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Zeile wählen und Dokumente</h3>
+          <p>
+            Wenn Sie eine <strong>Matrix-Zeile</strong> anklicken, erscheint darunter eine Tabelle mit den zugehörigen
+            Dokumenten und deren Dimensionsscores (nicht der Zeilenmittelwert). Über den Link zur{' '}
+            <a href="/documents" className={helpClassName}>
+              Dokumentenliste
+            </a>{' '}
+            können Sie dieselbe Teilmenge mit vorgegebenem Filter öffnen, sofern weitere Einträge existieren.
+          </p>
+          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Voraussetzungen und Hinweise</h3>
+          <p>
+            Ohne auswertbare Analysen bleibt die Matrix leer oder zeigt nur wenige Zellen – die Auswertung entsteht auf
+            den <strong>Dokumentdetailseiten</strong> über die KI-Funktion „Steuerungsanalyse“ (siehe Abschnitt{' '}
+            <a href="#ki-funktionen" className={helpClassName}>
+              KI-Funktionen im Überblick
+            </a>
+            ). Mit <strong>Aktualisieren</strong> laden Sie die Daten neu.
           </p>
         </section>
 
@@ -321,9 +363,9 @@ export default function HilfePage() {
             fehlerhaft sein – bitte immer mit dem Originaldokument und Ihrer Fachkompetenz abgleichen.
           </p>
 
-          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Dashboard: Frage an die Dokumentenbasis</h3>
+          <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Startseite: Frage an die Dokumentenbasis</h3>
           <p>
-            Siehe Abschnitt <a href="#dashboard" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">Dashboard</a>.
+            Siehe Abschnitt <a href="#dashboard" className="text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">Startseite</a>.
             Nutzen Sie Textbelege, um Aussagen der KI nachzuvollziehen.
           </p>
 
@@ -606,7 +648,7 @@ export default function HilfePage() {
           </p>
           <p className="mt-2">
             <a href="/" className={helpClassName}>
-              Zurück zum Dashboard
+              Zurück zur Startseite
             </a>
           </p>
         </footer>

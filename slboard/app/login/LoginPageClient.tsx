@@ -8,8 +8,6 @@ import { CONTEXT_HELP } from '../../lib/contextHelpUrls';
 import { supabase } from '../../lib/supabaseClient';
 import { SCHOOL_INACTIVE_BODY, SCHOOL_INACTIVE_TITLE } from '../../lib/schoolInactiveMessages';
 import { ACCOUNT_INACTIVE_BODY, ACCOUNT_INACTIVE_TITLE } from '../../lib/accountInactiveMessages';
-import { APP_PAGE_MAX_OUTER_CLASS } from '@/lib/appPageLayout';
-
 export function LoginPageClient() {
   const searchParams = useSearchParams();
   const [schoolNumber, setSchoolNumber] = useState('');
@@ -95,9 +93,7 @@ export function LoginPageClient() {
   };
 
   return (
-    <main className="min-h-screen bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
-      <div className={`${APP_PAGE_MAX_OUTER_CLASS} flex justify-center py-12`}>
-        <div className="w-full max-w-md flex flex-col gap-6">
+    <div className="flex w-full max-w-md flex-col gap-6">
         <header className="flex flex-col gap-2 border-b border-zinc-200 pb-3 sm:flex-row sm:items-start sm:justify-between dark:border-zinc-800">
           <div>
             <h1 className="text-xl font-semibold">Anmeldung</h1>
@@ -215,8 +211,6 @@ export function LoginPageClient() {
             Impressum
           </Link>
         </p>
-        </div>
-      </div>
-    </main>
+    </div>
   );
 }

@@ -1,9 +1,11 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { AppNavLink } from './AppNavLink';
 import { GlobalSearch } from './GlobalSearch';
 import { HeaderNav } from './HeaderNav';
+import { LogOsBrandTagline } from './LogOsBrandTagline';
 import { LogOsLogo } from './LogOsLogo';
 import { SchoolPageHeader } from './SchoolPageHeader';
 import { UserMenu } from './UserMenu';
@@ -16,16 +18,29 @@ type Props = {
  * App-Shell: mobil weiterhin horizontale Kopfzeile; ab md linke Sidebar (Navigation, Suche, Konto).
  */
 export function AppChrome({ children }: Props) {
+  const pathname = usePathname();
+  const isLoginRoute = pathname === '/login';
+  /** Auf /login: Marke serverseitig im Seiteninhalt; mobil kein doppeltes Logo in der Kopfzeile. */
+  const showMobileHeaderBrand = !isLoginRoute;
+
   return (
     <div className="flex min-h-screen flex-col bg-zinc-100 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 md:h-svh md:max-h-svh md:flex-row md:overflow-hidden">
       {/* Mobil: bisherige Kopfzeile */}
       <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90 md:hidden">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-3 sm:px-6 md:flex-row md:items-center md:gap-3 lg:gap-4">
-          <div className="flex min-w-0 w-full flex-1 items-center gap-2 sm:gap-3 md:gap-3 lg:gap-4">
-            <AppNavLink href="/" className="flex shrink-0 items-center self-center">
-              <LogOsLogo />
-            </AppNavLink>
-            <HeaderNav layout="horizontal" />
+          <div className="flex min-w-0 w-full flex-1 items-start gap-2 sm:gap-3 md:gap-3 lg:gap-4">
+            {showMobileHeaderBrand ? (
+              <AppNavLink
+                href="/"
+                className="flex min-w-0 shrink-0 flex-col items-start self-start"
+              >
+                <LogOsLogo />
+                <LogOsBrandTagline variant="onLight" />
+              </AppNavLink>
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <HeaderNav layout="horizontal" />
+            </div>
           </div>
           <div className="flex w-full min-w-0 items-center justify-end gap-2 border-t border-zinc-200 pt-2 dark:border-zinc-800 md:w-auto md:shrink-0 md:border-0 md:pt-0">
             <div className="min-w-0 flex-1 md:flex-none">
@@ -52,12 +67,12 @@ export function AppChrome({ children }: Props) {
                 width={260}
                 height={96}
                 decoding="async"
+                loading={isLoginRoute ? 'eager' : undefined}
+                fetchPriority={isLoginRoute ? 'high' : undefined}
                 className="h-[4.75rem] w-auto max-w-full object-contain object-left md:h-[6rem]"
               />
             </AppNavLink>
-            <p className="mt-2 text-[11px] leading-snug text-slate-400">
-              Dokumentenbasis und Schulentwicklung mit KI-Assistenz.
-            </p>
+            <LogOsBrandTagline variant="onDark" />
           </div>
 
           <div className="min-h-0 flex-1 overflow-hidden px-2 py-3">

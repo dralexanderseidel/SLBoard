@@ -5,6 +5,7 @@ export const CONTEXT_HELP = {
   einleitung: '/hilfe#einleitung',
   anmeldung: '/hilfe#anmeldung',
   dashboard: '/hilfe#dashboard',
+  steuerungsCockpit: '/hilfe#steuerungs-cockpit',
   dokumente: '/hilfe#dokumente',
   hochladen: '/hilfe#hochladen',
   dokumentDetail: '/hilfe#dokument-detail',

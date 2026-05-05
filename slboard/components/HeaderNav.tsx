@@ -136,8 +136,8 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
 
     return (
       <nav className="flex flex-col gap-0.5" aria-label="Hauptnavigation">
-        {sideItem('/', 'Dashboard', NavIconDashboard)}
-        {sideItem('/se-cockpit', 'Schulentwicklungs-Cockpit', NavIconSeCockpit)}
+        {sideItem('/', 'Startseite', NavIconDashboard)}
+        {sideItem('/se-cockpit', 'Steuerungs-Cockpit', NavIconSeCockpit)}
         {sideItem('/documents', 'Dokumente', NavIconDocuments)}
         {!hideDraftsAssistant ? sideItem('/drafts', 'Entwurfsassistent', NavIconDrafts) : null}
         {sideItem(CONTEXT_HELP.einleitung, 'Hilfe', NavIconHelp)}
@@ -168,11 +168,11 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
       >
         <AppNavLink href="/" className={pill}>
           <NavIconDashboard className={navIconSm} />
-          Dashboard
+          Startseite
         </AppNavLink>
         <AppNavLink href="/se-cockpit" className={pill}>
           <NavIconSeCockpit className={navIconSm} />
-          Schulentwicklungs-Cockpit
+          Steuerungs-Cockpit
         </AppNavLink>
         <AppNavLink href="/documents" className={pill}>
           <NavIconDocuments className={navIconSm} />
@@ -198,7 +198,7 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
       <div className="relative flex min-h-[2.5rem] min-w-0 flex-1 items-center gap-1.5 pl-0.5 md:hidden">
         <AppNavLink href="/" onClick={closeMore} className={`${pillCompact} text-zinc-700 dark:text-zinc-200`}>
           <NavIconDashboard className="size-3.5 opacity-90" />
-          Dashboard
+          Startseite
         </AppNavLink>
         <AppNavLink
           href="/se-cockpit"
@@ -206,7 +206,7 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
           className={`${pillCompact} text-zinc-700 dark:text-zinc-200`}
         >
           <NavIconSeCockpit className="size-3.5 opacity-90" />
-          Schulentwicklungs-Cockpit
+          Steuerungs-Cockpit
         </AppNavLink>
         <AppNavLink
           href="/documents"
@@ -244,7 +244,7 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
             >
               <AppNavLink href="/se-cockpit" role="menuitem" onClick={closeMore} className={moreMenuItem}>
                 <NavIconSeCockpit className="size-4 opacity-90" />
-                Schulentwicklungs-Cockpit
+                Steuerungs-Cockpit
               </AppNavLink>
               {!hideDraftsAssistant ? (
                 <AppNavLink

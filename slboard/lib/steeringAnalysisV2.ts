@@ -1,5 +1,5 @@
 /**
- * Steuerungsanalyse Schulentwicklungs-Cockpit: Schulentwicklungs-Matrix + Scoring (0–100).
+ * Steuerungsanalyse Steuerungs-Cockpit: Schulentwicklungs-Matrix + Scoring (0–100).
  * JSON-Schema gemäß Produktvorgabe; Validierung für API und Admin-Prompt-Preview.
  */
 

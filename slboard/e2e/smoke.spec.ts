@@ -14,10 +14,10 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/$/);
 }
 
-test('smoke: login and dashboard loads', async ({ page }) => {
+test('smoke: login and startseite loads', async ({ page }) => {
   await login(page);
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
-  await expect(page.getByText('Navigation')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Schulische Dokumentenverwaltung' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Hauptnavigation' }).getByRole('link', { name: 'Startseite' })).toBeVisible();
 });
 
 test('smoke: documents list and steering analysis UI', async ({ page }) => {

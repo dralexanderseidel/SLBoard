@@ -339,7 +339,7 @@ export function DocumentsPageClient() {
                   href={buildDashboardDocsHref(selection.selectedIds)}
                   className="inline-flex h-8 items-center rounded-md border border-blue-300 bg-blue-50 px-3 text-xs font-medium text-blue-950 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-50 dark:hover:bg-blue-950/70"
                 >
-                  Im Dashboard fragen
+                  Auf der Startseite fragen
                 </Link>
               )}
             </div>

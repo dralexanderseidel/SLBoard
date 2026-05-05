@@ -193,7 +193,7 @@ export function StatsPanel({ open, onToggle }: Props) {
 
           <div className="mt-6 border-t border-zinc-200 pt-4 dark:border-zinc-700">
             <p className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">
-              Dashboard: gespeicherte KI-Anfragen (Verlauf)
+              Startseite: gespeicherte KI-Anfragen (Verlauf)
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded border border-zinc-200 p-3 dark:border-zinc-800">

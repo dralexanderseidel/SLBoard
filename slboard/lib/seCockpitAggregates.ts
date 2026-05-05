@@ -95,7 +95,7 @@ type DocAggScratch = {
 };
 
 /**
- * Aggregiert Steuerungsanalysen für das Schulentwicklungs-Cockpit (nur gültiges V2-JSON pro Dokument).
+ * Aggregiert Steuerungsanalysen für das Steuerungs-Cockpit (nur gültiges V2-JSON pro Dokument).
  */
 export function buildSeCockpitPayload(rows: DocAggRow[]): SeCockpitPayload {
   const heatmap = emptyHeatmap();
