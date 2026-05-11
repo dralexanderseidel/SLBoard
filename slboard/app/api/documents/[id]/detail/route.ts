@@ -3,6 +3,7 @@ import { supabaseServer } from '../../../../../lib/supabaseServer';
 import { createServerSupabaseClient } from '../../../../../lib/supabaseServerClient';
 import { canAccessSchool, canReadDocument, resolveUserAccess } from '../../../../../lib/documentAccess';
 import { apiError } from '../../../../../lib/apiError';
+import { fetchActiveCommentsForDocument, serializeCommentForApi } from '../../../../../lib/documentCommentsServer';
 
 /**
  * GET: Dokument + Versionshistorie + Audit-Log in einer einzigen Anfrage.
@@ -90,10 +91,16 @@ export async function GET(
       .limit(50);
     if (docSchool) auditQuery = auditQuery.eq('school_number', docSchool);
 
-    const [currentVersionResult, versionsResult, auditResult] = await Promise.all([
+    const commentsPromise =
+      docSchool != null
+        ? fetchActiveCommentsForDocument(supabase, documentId, docSchool)
+        : fetchActiveCommentsForDocument(supabase, documentId, null);
+
+    const [currentVersionResult, versionsResult, auditResult, commentRows] = await Promise.all([
       currentVersionQuery,
       versionsQuery,
       auditQuery,
+      commentsPromise,
     ]);
 
     // ── Antwort zusammenstellen ───────────────────────────────────────────────
@@ -112,7 +119,9 @@ export async function GET(
 
     const auditLog = auditResult.error ? [] : (auditResult.data ?? []);
 
-    return NextResponse.json({ document, currentVersion, versions, auditLog });
+    const comments = (commentRows ?? []).map((r) => serializeCommentForApi(r));
+
+    return NextResponse.json({ document, currentVersion, versions, auditLog, comments });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return apiError(500, 'INTERNAL_ERROR', message);

@@ -10,6 +10,10 @@ import {
   steeringRiskTypeLabelDe,
 } from '@/lib/steeringAnalysisV2';
 
+/** Feste Nutzer-Erklärung zur Nachvollziehbarkeit der Bewertung (unabhängig von KI-Feldern scoring_principle / missing_information_policy). */
+const STEERING_EXPLAINABILITY_DESCRIPTION =
+  'Die Bewertung orientiert sich an der strukturellen Klarheit und inneren Konsistenz des Dokuments. Gut ausgearbeitete Konzepte erzielen entsprechend höhere Werte, während erkennbare Unklarheiten oder Lücken zu Abzügen führen. Auch implizite Regelungen werden berücksichtigt, jedoch differenziert gewichtet.';
+
 function ratingDotClass(rating: string) {
   if (rating === 'robust') return 'bg-emerald-500';
   if (rating === 'instabil') return 'bg-amber-400';
@@ -124,8 +128,7 @@ export function SteeringAnalysisPanel({ analysis }: { analysis: SteeringAnalysis
 
       <div className="rounded border border-dashed border-zinc-300 p-2 text-[10px] text-zinc-500 dark:border-zinc-600 dark:text-zinc-400">
         <p className="font-medium text-zinc-600 dark:text-zinc-300">Nachvollziehbarkeit</p>
-        <p className="mt-0.5">{explainability.scoring_principle}</p>
-        <p className="mt-0.5">{explainability.missing_information_policy}</p>
+        <p className="mt-0.5 text-zinc-600 dark:text-zinc-300">{STEERING_EXPLAINABILITY_DESCRIPTION}</p>
         <p className="mt-0.5">
           Verlässlichkeit KI: {steeringLevelLabelDe(explainability.confidence)} — {explainability.confidence_reason}
         </p>

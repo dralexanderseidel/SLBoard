@@ -1,28 +1,34 @@
 # log/os Edu Governance Pro – Funktionsübersicht
 
-Detaillierte Beschreibung der bisherigen Funktionsweise der Anwendung (Stand: Projektfortschritt).
+Detaillierte Beschreibung der Funktionsweise der Anwendung (**Stand: Abgleich mit dem Code in `slboard/`**, Next.js App Router).
 
 ---
 
 ## 1. Technologie und Architektur
 
 - **Frontend:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS
-- **Backend:** Next.js API Routes (Server-seitig)
+- **Backend:** Next.js API Routes (serverseitig)
 - **Datenbank & Auth:** Supabase (PostgreSQL, Auth, Storage)
-- **KI:** LLM-Anbindung über Umgebungsvariablen (z. B. OpenAI-kompatible API); Aufrufe in `lib/llmClient.ts`
-- **Text-Extraktion:** PDF (pdf-parse), Word (mammoth) in `lib/documentText.ts`
+- **Multi-Tenant:** Mandant über `school_number` (6 Ziffern); Daten und Storage-Pfade sind schulbezogen
+- **KI:** LLM-Anbindung über Umgebungsvariablen (OpenAI-kompatible API); Aufrufe in `lib/llmClient.ts`
+- **Text-Extraktion:** PDF (`pdf-parse`), Word (`mammoth`) in `lib/documentText.ts`
 
-Die App läuft als klassische Web-App: Nutzer melden sich an, arbeiten im Browser; alle API-Aufrufe laufen über die gleiche Domain (kein separates Backend).
+Die App läuft als klassische Web-App: Nutzer arbeiten im Browser; API-Aufrufe laufen über dieselbe Origin. Serverseitige DB-/Storage-Zugriffe nutzen typischerweise den **Service-Role-Client** (`lib/supabaseServer.ts`); direkte Client-Zugriffe werden durch **RLS** in Supabase abgesichert.
+
+**Hinweis Routing-Schutz:** In `slboard/proxy.ts` liegt eine vollständige **Middleware-Logik** (Session, öffentliche Pfade, Schul-/Kontostatus, Passwortänderungspflicht, `matcher`). Für deren Aktivierung ist in Next.js üblicherweise ein `middleware.ts` nötig, das diese Funktion exportiert — unabhängig davon prüfen die **API-Routen** Session und Rechte eigenständig.
 
 ---
 
-## 2. Authentifizierung
+## 2. Authentifizierung und Schul-Kontext
 
-- **Supabase Auth:** Login/Logout über E-Mail/Passwort (oder konfigurierte Auth-Provider).
-- **Seiten:** `/login` für Anmeldung; geschützte Bereiche prüfen die Session (API nutzt `createServerSupabaseClient()` und `getUser()`).
-- **Nutzerverwaltung in der App:** Zusätzlich zu Supabase Auth gibt es die App-Tabellen `app_users` und `user_roles`. Die E-Mail aus Auth sollte mit `app_users.email` übereinstimmen – sie steuert Berechtigungen und Anzeige (z. B. UserMenu).
+- **Supabase Auth:** Anmeldung mit E-Mail/Passwort (weitere Provider je Supabase-Konfiguration).
+- **Seiten:** `/login`; geschützte Bereiche erwarten eine Session (`createServerSupabaseClient()`, `getUser()`).
+- **App-Nutzerverwaltung:** Tabellen `app_users` und `user_roles`. Die Auth-E-Mail entspricht `app_users.email` (normalisiert, z. B. kleingeschrieben). **E dieselbe E-Mail kann mehrere Zeilen in `app_users` haben** (eine pro `school_number`).
+- **Aktiver Schul-Kontext:** HTTP-only-Cookie (z. B. `slb_active_school`, siehe `lib/schoolSession.ts`) und Abgleich mit `auth.users.user_metadata.school_number`. Setzen und Validierung über **`POST /api/auth/set-school-context`** (Existenz der `app_users`-Zeile, Schule aktiv, Konto aktiv).
+- **Abmeldung:** u. a. `DELETE /api/auth/set-school-context` (Cookie löschen) und Supabase `signOut` (`UserMenu`).
+- **Passwort ändern:** Seite `/change-password`, API **`POST /api/auth/change-password`**. Ist `app_users.password_change_required` gesetzt, kann die App weitere Routen sperren (siehe Middleware-Logik in `proxy.ts`).
 
-Ohne Login können viele APIs mit 401 antworten; die UI leitet ggf. zur Anmeldung.
+Öffentlich ohne Login u. a.: `/login`, `/register-school`, `/hilfe`, `/datenschutz`, `/impressum`.
 
 ---
 
@@ -30,58 +36,68 @@ Ohne Login können viele APIs mit 401 antworten; die UI leitet ggf. zur Anmeldun
 
 | Route | Beschreibung |
 |-------|--------------|
-| **/** | Dashboard: KI-Suche (Zwei-Schritt: Dokumente vorschlagen → auswählen → beantworten), „Neu veröffentlicht“, „Aktuelle Anfragen“, Links zu Upload/Entwurf/Dokumenten |
-| **/documents** | Dokumentenliste mit Filter (Typ, Status, Schutzklasse, Volltextsuche); Zugriff gefiltert nach Organisationseinheit/Rolle |
-| **/documents/[id]** | Dokumentdetail: Metadaten, Versionen-Historie, Vorschau/Download, Workflow (Freigeben/Veröffentlichen), Bearbeiten, Rechtsbezug, KI-Zusammenfassung, „Entwurf erstellen“, neue Version hochladen, Löschen, Änderungsverlauf |
-| **/upload** | Einzelnes Dokument hochladen (PDF/Word): Titel, Typ, Datum, Status, Schutzklasse, Gremium, Organisationseinheit |
-| **/drafts** | Entwurfsassistent: Betreff, Zielgruppe, Kontext, Entwurfstext; KI-Vorschlag für Elternbrief; Quellen auswählen; „Entwurf als Dokument speichern“ (mit erster Version als .txt) |
-| **/admin** | Nutzerverwaltung: `app_users` anzeigen/anlegen/bearbeiten, Rollen in `user_roles` zuweisen (nur für Nutzer mit Rolle SCHULLEITUNG oder ADMIN) |
-| **/login** | Anmeldeseite |
-| **/supabase-test** | Einfacher Verbindungstest zur Supabase-Datenbank (optional) |
+| **/** | **Startseite:** KI-Suche (Dokumente vorschlagen → auswählen → Frage beantworten), Verlauf „Aktuelle Anfragen“, Hinweise „Neu veröffentlicht“ / überfällige Review-Termine (über **`GET /api/notifications`** o. ä.), Kacheln u. a. zu Dokumente, Upload, Entwürfe, Steuerungs-Cockpit |
+| **/se-cockpit** | **Steuerungs-Cockpit:** aggregierte Darstellung aus gespeicherten Steuerungsanalysen der Schule (**`GET /api/se-cockpit`**) |
+| **/documents** | Dokumentenliste: Filter (u. a. Typ, Status, Schutzklasse, Reichweite (`reach_scope`), Beteiligungsgruppen, Gremium, Review (`review`-Parameter), Suche); **Archiv** über Query `?archive=1`; Mehrfachauswahl und **Bulk-Aktionen** (Workflow, Löschen, Archiv, ggf. KI-Batch) |
+| **/documents/[id]** | Dokumentdetail: Metadaten, Workflow (inkl. Zwischenstatus **Beschluss**), Versionen, Vorschau/Download, Bearbeiten, Rechtsbezug, KI-Zusammenfassung, Entwurfs-Hilfen, **Steuerungsanalyse** / **To-dos** (KI), Schulentwicklungs-/Matrix-Felder (je nach Migration), Änderungsverlauf (`audit_log`), Löschen |
+| **/upload** | Neues Dokument aus Datei (PDF/Word): Titel, Typ, Datum, Status, Schutzklasse, Reichweite, Gremium, Zuständige Organisationseinheit, Beteiligungsgruppen |
+| **/drafts** | Entwurfsassistent: u. a. Elternbrief (**`/api/ai/drafts/parent-letter`**) und **dokumenttypbezogene KI-Entwürfe** (**`/api/ai/drafts/document`**); Speichern über **`/api/drafts/save`**. Bei `feature_drafts_enabled = false` entfällt die Navigation |
+| **/admin** | Schul-Admin: Nutzer/Rollen, Metadatenlisten, KI-Einstellungen, **KI-Prompt-Vorlagen**, Statistiken, Reindex, **Löschanfragen** (DSGVO) — nur **SCHULLEITUNG** oder **ADMIN** im aktuellen Schul-Kontext |
+| **/super-admin** | Super-Admin: Schulverwaltung (nur sichtbar mit Super-Admin-Recht: Rolle **SUPER_ADMIN** in `user_roles` und/oder E-Mail in **`SUPER_ADMIN_EMAILS`**) |
+| **/register-school** | Öffentliche **Selbstregistrierung** einer Schule inkl. erstem Schuladmin (**`/api/onboarding/register-school`**) |
+| **/change-password** | Passwortwechsel (u. a. bei erzwungener Änderung) |
+| **/login** | Anmeldung |
+| **/hilfe** | Hilfe/Dokumentation (Inhaltsverzeichnis, u. a. Steuerungs-Cockpit) |
+| **/datenschutz** | Datenschutzhinweise |
+| **/impressum** | Impressum |
 
-Gemeinsamer Header mit log/os-Logo, Links (Dashboard, Dokumente, Entwurfsassistent, Admin) und UserMenu.
+**Navigation:** Gemeinsame Shell (`AppChrome`): mobil oben, ab Desktop linke Sidebar mit u. a. Startseite, Steuerungs-Cockpit, Dokumente, Entwurfsassistent (optional), Hilfe, Admin, Super-Admin (bedingt). Logo/Marke **log/os**.
 
 ---
 
 ## 4. Dokumentenmodell und Workflow
 
-### 4.1 Dokument (documents)
+### 4.1 Dokument (`documents`)
 
-- **Kernfelder:** id, title, document_type_code, created_at, status, protection_class_id, responsible_unit, gremium, participation_groups, reach_scope, legal_reference, summary, current_version_id (und ggf. created_by_id, responsible_person_id).
-- **Metadaten-Anzeige in der UI:** „Verantwortlich“ (= responsible_unit), „Beschlussgremium“ (= gremium), „Beteiligung“ (= participation_groups), „Reichweite“ (= reach_scope: intern|extern).
-- **Dokumenttypen:** werden mandantenspezifisch (pro Schule) gepflegt; Standardwerte werden initial befüllt (siehe Admin/Metadaten).
-- **Status-Workflow (nur diese Übergänge):**
-  - **ENTWURF** → **FREIGEGEBEN** (Button „Freigeben“)
-  - **FREIGEGEBEN** → **VEROEFFENTLICHT** (Button „Veröffentlichen“)
-  - **VEROEFFENTLICHT:** Endstatus, keine weiteren Statusänderungen.
-- Status wird nur über die Workflow-Buttons geändert, nicht mehr per freiem Dropdown.
+- **Kernfelder (Auszug):** `id`, `title`, `document_type_code`, `created_at`, `status`, `protection_class_id`, `responsible_unit`, `gremium`, `participation_groups`, `reach_scope`, `legal_reference`, `summary`, `school_number`, `current_version_id`, `created_by_id`, `responsible_person_id`, `review_date`, `archived_at`, KI-/Steuerungsfelder (`steering_analysis`, `steering_todos`, `steering_analysis_updated_at`, …), ggf. schulentwicklungsbezogene Spalten (siehe Migrationen ab `20260503…`).
+- **Anzeige in der UI:** „Verantwortlich“ = `responsible_unit`, „Beschlussgremium“ = `gremium`, „Beteiligung“ = `participation_groups`, „Reichweite“ = `reach_scope` (`intern` \| `extern`).
+- **Dokumenttypen:** mandantenspezifisch in `school_document_type_options`; globale Referenz `document_types`.
+- **Status-Workflow (nur jeweils ein Schritt vorwärts, vgl. `lib/documentWorkflow.ts`):**
+  - **ENTWURF** → **FREIGEGEBEN** („Freigeben“)
+  - **FREIGEGEBEN** → **BESCHLUSS** („Beschluss fassen“)
+  - **BESCHLUSS** → **VEROEFFENTLICHT** („Veröffentlichen“)
+  - **VEROEFFENTLICHT:** Endstatus für weitere Workflow-Schritte
+- Status wird über die vorgesehenen Aktionen/API-Validierung gesetzt, nicht beliebig per Freitext.
 
-### 4.2 Versionen (document_versions)
+**Archiv:** `archived_at` gesetzt → Dokument erscheint im Archiv-Modus der Liste; Logik und KI-Pool entsprechend eingeschränkt (siehe API-Kommentare und Migrationen).
 
-- Pro Dokument mehrere Versionen (version_number, created_at, comment, file_uri, mime_type, is_published).
-- **Versionen-Historie:** Alle Versionen werden geladen (`GET /api/documents/[id]/versions`); Nutzer kann eine Version wählen, Vorschau/Download bezieht sich auf diese Version (`GET /api/documents/[id]/file?versionId=...`).
-- **Neue Version:** Hochladen einer neuen Datei (PDF/Word) über Dokumentdetailseite; Version wird im Storage abgelegt und in `document_versions` eingetragen; `documents.current_version_id` wird aktualisiert.
+### 4.2 Versionen (`document_versions`)
 
-### 4.3 Speicherung von Dateien
+- Mehrere Versionen pro Dokument (`version_number`, `created_at`, `comment`, `file_uri`, `mime_type`, …).
+- **Historie:** `GET /api/documents/[id]/versions`
+- **Download/Vorschau:** `GET /api/documents/[id]/file?versionId=…`
+- **Neue Version:** `POST /api/documents/[id]/version` → Storage + Eintrag in `document_versions`, Aktualisierung `current_version_id`, Audit **version.upload**
 
-- Supabase Storage, Bucket `documents`; Pfadformat enthält `school_number` (Multi-Tenant).
-- Zugriff nur über signierte URLs; Berechtigung anhand `app_users`/`user_roles` und `documents.responsible_unit` (Policy „documents_select_by_unit“).
+### 4.3 Dateispeicher
+
+- Supabase Storage, Bucket `documents`; Pfade enthält `school_number`.
+- Auslieferung über signierte URLs / File-Route; Berechtigung über App-Logik (`documentAccess`) und Storage-Policies (u. a. „documents_select_by_unit“ in Migrationen).
 
 ---
 
 ## 5. Berechtigungen und Zugriffsfilter
 
-- **Schutzklassenmodell (`protection_class_id`):**
-  - **1:** Öffentlich (alle angemeldeten Lehrkräfte/Nutzer)
-  - **2:** Nur Verwaltung/Sekretariat + Schulleitung
-  - **3:** Nur Schulleitung
-- **Dokumentenliste (GET /api/documents):** serverseitige Filterung nach Schutzklasse/Rolle.
-- **Dokumentdetail, Datei, Versionen, Audit:** Zugriff ebenfalls nach Schutzklasse/Rolle.
-- **Bearbeiten/Löschen/Neue Version:** zusätzlich organisationsbezogen (`responsible_unit` / `org_unit`) und rollenbasiert.
-- **Admin:** Nur Nutzer mit Rolle **SCHULLEITUNG** oder **ADMIN** (`lib/adminAuth.ts`).
-- **Storage:** Policies nutzen `app_users` und `user_roles`, um Lesezugriff auf Dateien nur für berechtigte Nutzer zu erlauben.
+- **Schutzklassen (`protection_class_id`):** wie in `canReadDocument` (`lib/documentAccess.ts`):
+  - **1:** Lehrkräfte sowie rollen mit erweitertem Zugriff (Schulleitung, Sekretariat, Verwaltung, Koordination)
+  - **2:** Schulleitung, Sekretariat, Verwaltung, Koordination
+  - **3:** nur Schulleitung
+- **Mandant:** Zugriff nur auf Zeilen der eigenen `school_number`, sobald der Schul-Kontext aufgelöst ist.
+- **Bearbeiten / Löschen / Version / Bulk:** zusätzlich organisationsbezogen (u. a. Schulleitung, Sekretariat oder `org_unit` = `responsible_unit`); Vorauswahl der bearbeitbaren IDs über **`POST /api/documents/bulk-capabilities`**.
+- **Schul-Admin (`/admin`, `/api/admin/*`):** Rollen **SCHULLEITUNG** oder **ADMIN** (`lib/adminAuth.ts`).
+- **Super-Admin:** `lib/superAdminAuth.ts` (E-Mail-Whitelist + Rolle `SUPER_ADMIN`).
+- **Feature-Flags pro Schule:** u. a. `feature_ai_enabled`, `feature_drafts_enabled`, `max_upload_file_mb` auf `schools` — wirken auf KI-, Entwurfs- und Upload-Pfade (`lib/schoolFeatureFlags.ts`, `GET /api/me/access`).
 
-Details und Tabellendefinitionen: `docs/Berechtigungen-und-Zugriff.md`.
+Details: `docs/Berechtigungen-und-Zugriff.md`.
 
 ---
 
@@ -91,134 +107,161 @@ Details und Tabellendefinitionen: `docs/Berechtigungen-und-Zugriff.md`.
 
 | Methode | Route | Funktion |
 |---------|--------|----------|
-| GET | `/api/documents` | Liste mit Filter (type, responsibleUnit, status, protectionClass, search); Berechtigung nach org_unit/Rolle; **Volltextsuche** in title, document_type_code, gremium, **summary**, **legal_reference**, **search_text** |
-| PATCH | `/api/documents/[id]` | Metadaten/Status aktualisieren (inkl. Beteiligung/Reichweite); **Workflow-Validierung** (nur erlaubte Statusübergänge); **Audit-Eintrag** (document.update) |
-| DELETE | `/api/documents/[id]` | Dokument löschen inkl. alle Versionen und zugehörige Storage-Dateien |
-| GET | `/api/documents/[id]/file` | Signierte URL für aktuelle oder angegebene Version (`?versionId=`) |
-| GET | `/api/documents/[id]/versions` | Alle Versionen des Dokuments (id, version_number, created_at, comment, mime_type, is_current) |
-| POST | `/api/documents/[id]/version` | Neue Version hochladen (PDF/Word); **Audit-Eintrag** (version.upload) |
-| GET | `/api/documents/[id]/audit` | Änderungsverlauf (audit_log) für dieses Dokument |
-| GET | `/api/documents/[id]/extract-text` | Diagnose: Text-Extraktion aus der aktuellen Version prüfen (hasText, textLength, optional debug) |
-| POST | `/api/documents/[id]/steering-analysis` | KI-Aktion „Analyse des Steuerungsbedarfs“ (mit Cache pro Dokument) |
+| GET | `/api/documents` | Liste mit Filtern (u. a. `type`, `responsibleUnit`, `status`, `protectionClass`, `search`, `reachScope`, `participation`, `gremium`, `review`, Archiv-Flag); Berechtigungsfilter; gekürzte Summary für Liste |
+| GET | `/api/documents/[id]/detail` | aggregierte Detaildaten (Parallel-Load von Metadaten, Versionen, Audit, …) |
+| PATCH | `/api/documents/[id]` | Metadaten/Status; Workflow nur erlaubte Übergänge; Audit `document.update` |
+| DELETE | `/api/documents/[id]` | Dokument inkl. Versionen, Storage, Audit-Einträge (inkl. Legacy-Tabelle `audit_logs` best-effort), bereinigende RPCs für KI-Historie |
+| GET | `/api/documents/[id]/file` | Datei (aktuelle oder angegebene Version) |
+| GET | `/api/documents/[id]/versions` | Versionsliste |
+| POST | `/api/documents/[id]/version` | neue Version; Audit `version.upload` |
+| GET | `/api/documents/[id]/audit` | Änderungsverlauf (`audit_log`) |
+| GET | `/api/documents/[id]/extract-text` | Textextraktion / Diagnose (`hasText`, Länge, ggf. Debug) |
+| POST | `/api/documents/[id]/steering-analysis` | KI „Analyse des Steuerungsbedarfs“, Persistenz in `steering_analysis` |
+| POST | `/api/documents/[id]/steering-todos` | KI-Vorschläge für To-dos, Persistenz in `steering_todos` |
+| POST | `/api/documents/bulk-capabilities` | liefert für ID-Liste, welche Dokumente im aktuellen Kontext bulk-bearbeitet werden dürfen |
 
-### 6.2 Upload und Entwurf
-
-| Methode | Route | Funktion |
-|---------|--------|----------|
-| POST | `/api/upload` | Neues Dokument mit hochgeladener Datei anlegen (Titel, Typ, Datum, Status, Beteiligung, Reichweite, etc.) |
-| POST | `/api/drafts/save` | **Entwurf als echtes Dokument:** Dokument anlegen, Entwurfstext als erste Version (.txt) im Storage, `current_version_id` setzen; Rückgabe documentId |
-
-### 6.3 KI
+### 6.2 Upload, Entwurf, Zusammenfassung
 
 | Methode | Route | Funktion |
 |---------|--------|----------|
-| POST | `/api/ai/suggest-documents` | Zu einer Frage **relevante Dokumente vorschlagen** (Keyword-Suche, Relevanz-Score); **kein LLM**; Rückgabe suggestedDocuments (id, title, snippet, score) |
-| POST | `/api/ai/query` | **KI-Antwort** auf Frage: optional **documentIds**; wenn angegeben, nur diese Dokumente als Kontext, sonst automatisch Vorschlagsliste (getSuggestedDocuments) → Kontext aus summary/Volltext/legal_reference → LLM; Rückgabe answer + sources |
-| POST | `/api/ai/drafts/parent-letter` | KI-Vorschlag für Elternbrief-Entwurf (Thema, Zielgruppe, Quellen-Dokumente); nutzt freigegebene/veröffentlichte Dokumente |
-| POST | `/api/summarize` | KI-Zusammenfassung für ein Dokument (documentId oder text/title/type); speichert Ergebnis in `documents.summary` |
-| POST | `/api/summarize-batch` | Batch-Zusammenfassung für mehrere Dokumente; optionales Debug-Logging |
+| POST | `/api/upload` | neues Dokument mit Datei; Metadaten inkl. Reichweite/Beteiligung; optional KI/Index |
+| POST | `/api/drafts/save` | Entwurf als Dokument mit erster Version (u. a. `.txt` im Storage) |
+| POST | `/api/summarize` | KI-Kurzfassung → `documents.summary` |
+| POST | `/api/summarize-batch` | Batch-Zusammenfassung mehrerer Dokumente |
 
-### 6.4 Metadaten, Benachrichtigungen und Admin
+### 6.3 KI und Steuerung
 
 | Methode | Route | Funktion |
 |---------|--------|----------|
-| GET | `/api/metadata/options` | Tenant-spezifische Optionen für Auswahlfelder (Dokumenttypen, Verantwortlich) |
-| GET/PUT | `/api/admin/metadata` | Metadaten-Optionen pro Schule pflegen (Admin-only) |
-| GET/PUT | `/api/admin/ai-settings` | KI-Konfiguration pro Schule (Admin-only) inkl. Schul-Steckbrief |
-| POST | `/api/admin/reindex` | Search-Index für Dokumente neu erzeugen (Admin-only) |
-| GET | `/api/notifications/recently-published` | Kürzlich veröffentlichte Dokumente (aus audit_log: Statuswechsel auf VEROEFFENTLICHT); gefiltert nach Berechtigung |
-| GET | `/api/admin/users` | Liste app_users mit Rollen (nur Admin) |
-| POST | `/api/admin/users` | Nutzer anlegen (nur Admin) |
-| PATCH | `/api/admin/users/[id]` | Nutzer bearbeiten (nur Admin) |
-| PATCH | `/api/admin/users/[id]/roles` | Rollen setzen (nur Admin) |
+| POST | `/api/ai/suggest-documents` | Dokumentvorschläge ohne LLM (Scores/Snippets) |
+| POST | `/api/ai/query` | KI-Antwort mit optionalen `documentIds` |
+| POST | `/api/ai/drafts/parent-letter` | KI-Entwurf Elternbrief |
+| POST | `/api/ai/drafts/document` | KI-Entwurf entlang dokumenttypbezogener Vorlage |
+| GET | `/api/se-cockpit` | Aggregation gültiger Steuerungsanalysen für die Schule |
+
+### 6.4 Auth, Profil, DSGVO
+
+| Methode | Route | Funktion |
+|---------|--------|----------|
+| POST | `/api/auth/set-school-context` | Schulnummer setzen (Cookie + `user_metadata`) |
+| DELETE | `/api/auth/set-school-context` | Kontext-Cookie löschen |
+| POST | `/api/auth/change-password` | Passwort ändern |
+| GET | `/api/me/access` | Schulname, Rollen, Super-Admin, Feature-Flags, Kontingente-Hinweise |
+| GET | `/api/me/export` | Datenexport (JSON) |
+| POST | `/api/me/delete-request` | Löschanfrage anlegen (`account_delete_requests`) |
+| POST | `/api/onboarding/register-school` | neue Schule + Initial-Admin |
+
+### 6.5 Metadaten, Benachrichtigungen
+
+| Methode | Route | Funktion |
+|---------|--------|----------|
+| GET | `/api/metadata/options` | Dropdown-Optionen (Dokumenttypen, Zuständigkeiten) für die Schule |
+| GET | `/api/notifications` | bündelt u. a. „kürzlich veröffentlicht“ (über `audit_log`) und überfällige `review_date` |
+| GET | `/api/notifications/recently-published` | Teilliste (optional direkt nutzbar) |
+| GET | `/api/notifications/review-overdue` | Teilliste überfälliger Reviews |
+
+### 6.6 Schul-Admin
+
+| Methode | Route | Funktion |
+|---------|--------|----------|
+| GET | `/api/admin/users` | Nutzerliste |
+| POST | `/api/admin/users` | Nutzer anlegen |
+| PATCH | `/api/admin/users/[id]` | Nutzer bearbeiten |
+| DELETE | `/api/admin/users/[id]` | Nutzer löschen |
+| PATCH | `/api/admin/users/[id]/roles` | Rollen setzen |
+| GET | `/api/admin/metadata` | Metadaten-Optionen lesen |
+| PUT | `/api/admin/metadata` | Metadaten-Optionen schreiben |
+| GET | `/api/admin/ai-settings` | KI-Einstellungen / Schulprofil |
+| PUT | `/api/admin/ai-settings` | KI-Einstellungen schreiben |
+| GET | `/api/admin/ai-prompts` | Prompt-Vorlagen |
+| PUT | `/api/admin/ai-prompts` | Prompt-Vorlagen speichern |
+| DELETE | `/api/admin/ai-prompts` | Prompt-Vorlage löschen |
+| POST | `/api/admin/ai-prompts/preview` | Vorschau gerenderter Prompts |
+| GET | `/api/admin/stats` | Statistiken |
+| POST | `/api/admin/reindex` | Suchindex/Indexierung |
+| GET | `/api/admin/delete-requests` | Löschanfragen der Schule |
+| PATCH | `/api/admin/delete-requests/[id]` | Status/Bearbeitung Löschanfrage |
+
+### 6.7 Super-Admin
+
+| Methode | Route | Funktion (kurz) |
+|---------|--------|------------------|
+| GET | `/api/super-admin/check` | Berechtigung für Super-Admin-UI |
+| GET/POST | `/api/super-admin/schools` | Schulen auflisten/anlegen |
+| GET/PATCH/DELETE | `/api/super-admin/schools/[schoolNumber]` | Schule bearbeiten/löschen |
+| POST | `/api/super-admin/schools/[schoolNumber]/reset-initial-admin-password` | Initial-Admin-Passwort zurücksetzen |
 
 ---
 
 ## 7. KI-Funktionen im Detail
 
-### 7.1 Dashboard-KI-Suche (Zwei-Schritt)
+### 7.1 Startseite – KI-Suche (Zwei-Schritt)
 
-1. **Schritt 1 – Relevante Dokumente finden:**  
-   Nutzer gibt Frage ein → Klick „Relevante Dokumente finden“ → **POST /api/ai/suggest-documents** (Keyword-Extraktion, Suche in title, legal_reference, responsible_unit, document_type_code, gremium, summary; Relevanz-Sortierung) → Anzeige einer Liste mit Checkboxen (alle vorausgewählt) und Kurzsnippet.
+1. **Schritt 1:** Frage eingeben → **`POST /api/ai/suggest-documents`** → Liste mit Checkboxen und Snippets.
+2. **Schritt 2:** Auswahl → **`POST /api/ai/query`** mit `question` und `documentIds` (oder ohne IDs → serverseitige Kontextwahl).
 
-2. **Schritt 2 – Frage beantworten:**  
-   Nutzer wählt Dokumente (Checkboxen) → Klick „Frage mit ausgewählten Dokumenten beantworten“ → **POST /api/ai/query** mit `question` und `documentIds` → Kontext nur aus gewählten Dokumenten (summary → Volltext aus Datei → legal_reference), dann LLM → Anzeige Antwort + verwendete Quellen.
+KI kann pro Schule über **`feature_ai_enabled`** abgeschaltet werden.
 
-- **„Ohne Auswahl direkt beantworten“:** Ruft dieselbe Query-API **ohne** documentIds auf; Server wählt automatisch die Top-Dokumente und antwortet (Verhalten wie frühere Ein-Schritt-Suche).
+### 7.2 Kontextbildung
 
-### 7.2 Kontextbildung für die KI (query/summarize)
-
-Pro Dokument wird Text in dieser Priorität verwendet:  
-1. **summary** (wenn vorhanden und ausreichend lang),  
-2. sonst **Volltext** aus Storage-Datei (PDF/Word über getDocumentText),  
-3. sonst **legal_reference**.  
-Text wird pro Dokument auf MAX_TEXT_PER_DOC Zeichen begrenzt.
-
-Für lange Dokumente wird zusätzlich **Chunking-on-the-fly** eingesetzt, um relevanten Kontext auszuwählen.
+Priorität u. a.: `summary` → Volltext aus Datei → `legal_reference`; Chunking für lange Texte (`lib/chunkingOnTheFly.ts` u. a.).
 
 ### 7.3 Entwurfsassistent
 
-- Nutzer gibt Betreff, Zielgruppe, Kontext ein und wählt optional Quellen (freigegebene/veröffentlichte Dokumente).
-- **KI-Vorschlag:** POST /api/ai/drafts/parent-letter erzeugt einen Entwurfstext auf Basis von Thema und Quelleninhalten.
-- **Speichern:** POST /api/drafts/save legt ein neues Dokument (Typ ELTERNBRIEF, Status ENTWURF) an und speichert den Entwurfstext als **erste Version** (.txt) im Storage; Link „Dokument öffnen“ führt zur neuen Dokumentdetailseite.
+- Elternbrief: **`/api/ai/drafts/parent-letter`**
+- Dokumenttypbezogen: **`/api/ai/drafts/document`**
+- Persistenz: **`/api/drafts/save`**
 
-### 7.4 KI-Zusammenfassung auf der Dokumentdetailseite
+### 7.4 Dokumentdetail – Zusammenfassung & Steuerung
 
-- Button „Zusammenfassung erzeugen“ → **POST /api/summarize** (documentId, ggf. Titel/Typ/Datum); Text aus Datei oder Metadaten → LLM erzeugt Kurzfassung → wird in `documents.summary` gespeichert und angezeigt.
-- summary wird für die Dashboard-KI-Suche und für bessere Kontextqualität genutzt.
+- **Zusammenfassung:** **`POST /api/summarize`**
+- **Steuerungsanalyse / To-dos:** siehe **`steering-analysis`** / **`steering-todos`**
+- **Steuerungs-Cockpit:** Auswertung gespeicherter Analysen über **`GET /api/se-cockpit`**
 
 ---
 
 ## 8. Audit-Log
 
-- **Tabelle:** `audit_log` (id, user_email, action, entity_type, entity_id, old_values, new_values, created_at).
-- **Einträge werden erzeugt bei:**
-  - **document.update:** PATCH Dokument (Metadaten/Status); old_values/new_values enthalten geänderte Felder.
-  - **version.upload:** Hochladen einer neuen Version; new_values enthält version_id, version_number, comment.
-- **Anzeige:** Auf der Dokumentdetailseite Block „Änderungsverlauf“ (Datumszeit, E-Mail, Aktion, ggf. geänderte Felder).
-- **Nutzen:** „Neu veröffentlicht“-Liste auf dem Dashboard nutzt Einträge mit action document.update und Statuswechsel auf VEROEFFENTLICHT.
+- **Tabelle:** `audit_log` (u. a. `user_email`, `action`, `entity_type`, `entity_id`, `old_values`, `new_values`, `created_at`, `school_number`).
+- **Ereignisse:** u. a. **`document.update`** (PATCH), **`version.upload`** (neue Version).
+- **UI:** Block „Änderungsverlauf“ auf der Dokumentdetailseite.
+- **Benachrichtigung „Neu veröffentlicht“:** Ableitung aus `audit_log`, wenn `status` auf **VEROEFFENTLICHT** wechselt.
+
+**Hinweis:** In manchen Datenbanken existiert zusätzlich eine Legacy-Tabelle **`audit_logs`**; beim Löschen eines Dokuments wird deren Bereinigung best-effort versucht.
 
 ---
 
-## 9. Datenbank und Migrationen (Supabase)
+## 9. Datenbank und Migrationen (Kurzüberblick)
 
-- **documents:** Kern-Tabelle für Dokumente (inkl. summary, legal_reference, current_version_id).
-- **document_versions:** Versionen mit file_uri, mime_type, version_number, comment.
-- **app_users:** Nutzer mit email, org_unit (für Zugriffsfilter).
-- **user_roles:** user_id, role_code (SCHULLEITUNG, SEKRETARIAT, LEHRKRAFT, etc.).
-- **audit_log:** Änderungsprotokoll (s. o.).
-- **ai_queries:** Optional gespeicherte KI-Anfragen (question, answer_excerpt, used_document_ids) für „Aktuelle Anfragen“ auf dem Dashboard.
-- **ai_settings:** KI-Konfiguration pro Schule.
-- **school_document_type_options / school_responsible_unit_options:** Metadaten-Optionen pro Schule.
+Wesentliche Tabellen/Strukturen (Auszug):
 
-Migrationen in `supabase/migrations/`:
-- app_users und user_roles
-- document summary (Spalte summary)
-- legal_reference als Text
-- Storage-Policies (Zugriff nach responsible_unit)
-- audit_log
-- Multi-Tenant (schools + school_number + RLS)
-- Search-Index-Felder (search_text/keywords)
-- Beteiligung (participation_groups) und Reichweite (reach_scope)
-- Metadaten-Optionen pro Schule (Dokumenttypen/Verantwortlich)
+- **`schools`:** Stammdaten, Aktiv-Flag, Quotas, Feature-Flags, Profiltext, Datenschutz-Zeitstempel …
+- **`documents`**, **`document_versions`:** Kerngeschäftsobjekte
+- **`app_users`**, **`user_roles`:** Nutzer pro Schule und Rollen
+- **`audit_log`:** Änderungsprotokoll
+- **`ai_queries`:** gespeicherte KI-Fragen für Verlauf/„Aktuelle Anfragen“
+- **`ai_settings`**, **`school_ai_prompt_templates`:** KI-Konfiguration und Prompts pro Schule
+- **`school_document_type_options`**, **`school_responsible_unit_options`:** Admin-Metadaten
+- **`account_delete_requests`:** DSGVO-Löschanfragen (Bearbeitung durch Admin)
+- **`ai_llm_calls`:** optional Logging von LLM-Aufrufen
 
-Storage: Bucket `documents` für Dokumentdateien; Zugriff über signierte URLs und Berechtigungsprüfung.
+Migrationen unter `supabase/migrations/` (Multi-Tenant, RLS, Archiv, Workflow-Status **BESCHLUSS**, DSGVO, Feature-Flags, SchulRLS-Policies u. a. in `20260426120000_…`).
 
 ---
 
 ## 10. UI-Besonderheiten
 
-- **Rechtsbezug** in der Dokumentdetailseite: In der Leseansicht nach drei Zeilen mit „[…]“ abgekürzt; vollständig im Bearbeiten-Modus und im Entwurfstext-Block (wenn keine Dateivorschau).
-- **Versionen:** Links in der Dokumentdetailseite Liste „Versionen“ mit Auswahl; gewählte Version bestimmt Vorschau und Download-Link.
-- **Hintergrund:** Heller Grauton (z. B. bg-zinc-100) hinter den weißen Inhaltsboxen für bessere Abgrenzung.
-- **log/os-Logo** in der Topzeile (SVG-Markenzeile), verlinkt zur Startseite.
-- **Admin-Bereich:** verwaltet Benutzer/Rollen, KI-Konfiguration und Metadatenlisten pro Schule.
+- **Shell:** Responsive Navigation (mobil oben, Desktop Sidebar), Globale Suche (`GlobalSearch`), `UserMenu` mit Rollenanzeige, Export, Löschanfrage, Passwort ändern.
+- **Rechtsbezug** und **Versionen:** wie zuvor; Bearbeitungsmodus für Langtext.
+- **Hintergrund:** helles Zinc-Schema mit kontrastierenden Karten.
+- **Marke:** log/os-Logo und PNG-Varianten in der Sidebar (`/log-os-logo-dark.png`).
 
 ---
 
 ## 11. Abhängigkeiten (Umgebung)
 
-- **Supabase:** URL, anon key, service role key (für Server-seitige DB/Storage-Zugriffe).
-- **LLM:** Konfiguration über Umgebungsvariablen (z. B. API-URL, Key) für KI-Anfragen, Zusammenfassung und Entwurfsvorschläge.
+- **Supabase:** Projekt-URL, **anon key** (Client), **service role key** (nur Server)
+- **LLM:** URL, Key, Modell — siehe `lib/llmClient.ts` / `ai_settings`
+- **Super-Admin-Whitelist:** `SUPER_ADMIN_EMAILS` (kommagetrennt, optional)
 
-Ohne LLM-Konfiguration schlagen die entsprechenden API-Aufrufe mit einer Fehlermeldung fehl; Dokumentenverwaltung und Berechtigungen funktionieren unabhängig davon.
+Ohne LLM schlagen KI-Endpunkte fehl; Dokumentenverwaltung und Rechte funktionieren unabhängig davon.

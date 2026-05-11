@@ -39,6 +39,7 @@ import { ContextHelpLink } from '@/components/ContextHelpLink';
 import { useHeaderAccess } from '@/components/HeaderAccessContext';
 import { CollapsibleSection } from '@/app/admin/panels/CollapsibleSection';
 import type { AuditEntry, DocumentDetail } from './types';
+import { DocumentCommentsPanel } from './DocumentCommentsPanel';
 
 // ── Reine Hilfsfunktionen (kein Component-State) ─────────────────────────────
 
@@ -166,6 +167,7 @@ export function DocumentDetailPageClient() {
     allVersions,
     selectedVersionId, setSelectedVersionId,
     auditLog, setAuditLog,
+    comments,
     reload,
   } = useDocumentDetail(params?.id);
 
@@ -206,7 +208,7 @@ export function DocumentDetailPageClient() {
     handleAskAboutThisDocument,
   } = useDocumentAsk(params?.id, doc);
 
-  const { access } = useHeaderAccess();
+  const { access, userEmail } = useHeaderAccess();
   const featureAiEnabled = access?.featureAiEnabled !== false;
   const featureDraftsEnabled = access?.featureDraftsEnabled !== false;
   const maxVersionUploadBytes = access?.effectiveMaxUploadBytes ?? 20 * 1024 * 1024;
@@ -1547,6 +1549,15 @@ export function DocumentDetailPageClient() {
                   )}
                 </div>
               )}
+
+              {doc && params?.id ? (
+                <DocumentCommentsPanel
+                  documentId={params.id}
+                  userEmail={userEmail}
+                  comments={comments}
+                  onRefresh={reload}
+                />
+              ) : null}
 
               <div className="mt-4 border-t border-zinc-200 pt-3 text-xs dark:border-zinc-800">
                 <h3 className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">

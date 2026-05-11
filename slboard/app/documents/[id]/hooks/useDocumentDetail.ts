@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiUserError, type SerializedApiError } from '@/lib/apiUserError';
-import type { AuditEntry, DocumentDetail, VersionInfo, VersionRow } from '../types';
+import type { AuditEntry, DocumentComment, DocumentDetail, VersionInfo, VersionRow } from '../types';
 
 type UseDocumentDetailResult = {
   doc: DocumentDetail | null;
@@ -14,6 +14,8 @@ type UseDocumentDetailResult = {
   setSelectedVersionId: React.Dispatch<React.SetStateAction<string | null>>;
   auditLog: AuditEntry[];
   setAuditLog: React.Dispatch<React.SetStateAction<AuditEntry[]>>;
+  comments: DocumentComment[];
+  setComments: React.Dispatch<React.SetStateAction<DocumentComment[]>>;
   reload: () => void;
 };
 
@@ -25,6 +27,7 @@ export function useDocumentDetail(id: string | undefined): UseDocumentDetailResu
   const [allVersions, setAllVersions] = useState<VersionRow[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
   const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [comments, setComments] = useState<DocumentComment[]>([]);
   const [reloadKey, setReloadKey] = useState(0);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
@@ -54,6 +57,7 @@ export function useDocumentDetail(id: string | undefined): UseDocumentDetailResu
             currentVersion?: VersionInfo | null;
             versions?: VersionRow[];
             auditLog?: AuditEntry[];
+            comments?: DocumentComment[];
           };
           try {
             json = JSON.parse(text) as typeof json;
@@ -78,6 +82,7 @@ export function useDocumentDetail(id: string | undefined): UseDocumentDetailResu
             setSelectedVersionId(typed.current_version_id ?? null);
             setAllVersions(json.versions ?? []);
             setAuditLog(json.auditLog ?? []);
+            setComments(Array.isArray(json.comments) ? json.comments : []);
           }
         }
       } catch {
@@ -102,6 +107,8 @@ export function useDocumentDetail(id: string | undefined): UseDocumentDetailResu
     setSelectedVersionId,
     auditLog,
     setAuditLog,
+    comments,
+    setComments,
     reload,
   };
 }

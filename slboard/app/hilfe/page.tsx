@@ -7,7 +7,7 @@ const helpClassName = 'text-blue-600 underline-offset-2 hover:underline dark:tex
 export const metadata: Metadata = {
   title: 'Hilfe und Dokumentation | log/os Edu Governance Pro',
   description:
-    'Ausführliche Anleitung für Schulen: Anmeldung, Startseite, Steuerungs-Cockpit, Dokumente, KI-Funktionen, Entwurfsassistent und häufige Fragen.',
+    'Ausführliche Anleitung für Schulen: Anmeldung, Startseite, Steuerungs-Cockpit, Dokumente, Kommentare, KI-Funktionen, Entwurfsassistent und häufige Fragen.',
 };
 
 const toc = [
@@ -18,6 +18,7 @@ const toc = [
   { id: 'dokumente', label: 'Dokumentenliste' },
   { id: 'hochladen', label: 'Dokument hochladen' },
   { id: 'dokument-detail', label: 'Dokument einzeln ansehen und bearbeiten' },
+  { id: 'dokument-kommentare', label: 'Kommentare am Dokument' },
   { id: 'workflow', label: 'Status und Freigabe (Workflow)' },
   { id: 'ki-funktionen', label: 'KI-Funktionen im Überblick' },
   { id: 'entwurfsassistent', label: 'Entwurfsassistent' },
@@ -73,13 +74,18 @@ export default function HilfePage() {
             Kontingente.
           </p>
           <p>
-            Die Oberfläche ist in der Regel über die Kopfzeile erreichbar:{' '}
-            <strong>Startseite</strong>, <strong>Dokumente</strong>, <strong>Entwurfsassistent</strong>,{' '}
-            <strong>Hilfe</strong> (diese Seite) und bei entsprechender Rolle <strong>Admin</strong>. Über das
-            Profilmenü rechts oben melden Sie sich ab, wechseln bei Bedarf die <strong>Schulnummer</strong> (wenn Ihre
-            E-Mail mehreren Schulen zugeordnet ist), ändern das Passwort, laden einen{' '}
-            <strong>Datenexport</strong> herunter oder stellen eine <strong>Löschanfrage</strong> (siehe unten unter
-            Anmeldung und FAQ).
+            Die wichtigsten Bereiche erreichen Sie über die <strong>Navigation</strong>: Auf größeren Bildschirmen
+            (Tablet, Desktop) liegt sie als <strong>Seitenleiste links</strong>, auf schmalen Bildschirmen entsprechend
+            in der <strong>Kopfzeile</strong>. Dort finden Sie u. a. <strong>Startseite</strong>,{' '}
+            <strong>Steuerungs-Cockpit</strong> (schulweite Übersicht aus gespeicherten Steuerungsanalysen),{' '}
+            <strong>Dokumente</strong>, den <strong>Entwurfsassistent</strong> (sofern für Ihre Schule freigeschaltet),{' '}
+            <strong>Hilfe</strong> (diese Seite) sowie bei entsprechender Berechtigung <strong>Admin</strong> und ggf.{' '}
+            <strong>Super-Admin</strong>. Über das <strong>Kontomenü</strong> (
+            <strong>Konto &amp; Abmeldung</strong>) melden Sie sich ab, wechseln bei Bedarf die{' '}
+            <strong>Schulnummer</strong> (wenn Ihre E-Mail mehreren Schulen zugeordnet ist), ändern das Passwort, laden
+            einen <strong>Datenexport</strong> herunter oder stellen eine <strong>Löschanfrage</strong> (siehe unten
+            unter Anmeldung und FAQ). Auf dem Desktop sitzt das Kontomenü unten in der Seitenleiste, auf dem Smartphone
+            oben rechts in der Kopfzeile.
           </p>
         </section>
 
@@ -108,18 +114,19 @@ export default function HilfePage() {
           </p>
           <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Abmelden</h3>
           <p>
-            Nutzen Sie im Menü oben rechts die Abmeldung, wenn Sie die Anwendung verlassen, insbesondere an gemeinsam
-            genutzten Rechnern. So kann niemand Unbefugtes unter Ihrer Sitzung weiterarbeiten.
+            Nutzen Sie im <strong>Kontomenü</strong> die Abmeldung (auf dem Smartphone oben rechts in der Kopfzeile,
+            auf größeren Bildschirmen unten in der Seitenleiste), wenn Sie die Anwendung verlassen, insbesondere an
+            gemeinsam genutzten Rechnern. So kann niemand Unbefugtes unter Ihrer Sitzung weiterarbeiten.
           </p>
           <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Mehrere Schulen unter einer E-Mail</h3>
           <p>
             Ist dieselbe E-Mail-Adresse für <strong>mehrere Schulnummern</strong> registriert, müssen Sie bei der
             Anmeldung (oder danach) die passende Schule wählen. Die Anwendung merkt sich die Schulzuordnung für die
-            Sitzung. Wechseln Sie die Schule über das Profilmenü, wenn Sie eine andere Einrichtung bearbeiten möchten.
+            Sitzung. Wechseln Sie die Schule über das Kontomenü, wenn Sie eine andere Einrichtung bearbeiten möchten.
           </p>
           <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Datenexport und Löschanfrage</h3>
           <p>
-            Im Profilmenü steht ein <strong>Export Ihrer personenbezogenen Daten</strong> als JSON-Datei zur
+            Im Kontomenü steht ein <strong>Export Ihrer personenbezogenen Daten</strong> als JSON-Datei zur
             Verfügung (sofern Sie einen gültigen Schul-Kontext haben). Über{' '}
             <strong>Löschanfrage stellen</strong> können Sie beantragen, dass Ihr Zugang für diese Schule datenschutzmäßig
             abgewickelt wird: Es wird ein <strong>Protokolleintrag für die Schul-Administration</strong> angelegt; es
@@ -318,6 +325,13 @@ export default function HilfePage() {
               Verknüpfung zum <strong>Entwurfsassistenten</strong>, um auf Basis dieses Dokuments einen neuen Text zu
               beginnen
             </li>
+            <li>
+              <strong>Kommentare</strong> zum Abstimmen und zur Rückmeldung (siehe{' '}
+              <a href="#dokument-kommentare" className={helpClassName}>
+                Kommentare am Dokument
+              </a>
+              )
+            </li>
           </ul>
           <p>
             Ob Sie Inhalte ändern oder nur lesen dürfen, hängt von Ihrer Rolle, der Organisationseinheit und der
@@ -325,6 +339,37 @@ export default function HilfePage() {
             inhaltlich veränderbar; Änderungen erfolgen dann über neue Versionen oder Folgedokumente – je nach
             Regeln Ihrer Schule.
           </p>
+        </section>
+
+        <section id="dokument-kommentare" className="space-y-3">
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Kommentare am Dokument</h2>
+          <p>
+            Auf der <strong>Dokumentdetailseite</strong> gibt es den Bereich <strong>Kommentare</strong> in der
+            rechten Spalte (unter anderem neben Prüfverlauf und Archiv). Damit können Sie{' '}
+            <strong>diskutieren, abstimmen oder Notizen für Kollegium und Verwaltung</strong> festhalten – unabhängig von
+            der <strong>Versionshistorie</strong> (dort steht pro Dateifassung ein kurzer Versionshinweis, z.&nbsp;B. warum
+            etwas ersetzt wurde).
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              <strong>Wer sieht was:</strong> Kommentare sind für <strong>alle sichtbar, die das Dokument lesen</strong>{' '}
+              dürfen – gleiche Schulnummer, passende Rolle und Schutzstufe wie beim Dokument selbst.
+            </li>
+            <li>
+              <strong>Neuen Kommentar schreiben:</strong> Text eingeben und <strong>Kommentar hinzufügen</strong>. Pro
+              Kommentar sind bis zu <strong>8.000 Zeichen</strong> möglich (einschließlich Leerzeilen).
+            </li>
+            <li>
+              <strong>Bearbeiten und entfernen:</strong> Nur der <strong>jeweilige Verfasser</strong> kann einen eigenen
+              Kommentar nachträglich ändern oder <strong>entfernen</strong>. Entfernen blendet den Eintrag für alle
+              Leser aus; es handelt sich nicht um einen personenbezogenen „Nur für mich“-Notizzettel.
+            </li>
+            <li>
+              <strong>Hinweis zum Inhalt:</strong> Tragen Sie keine vertraulichen Daten ein, die über das Dokument hinaus
+              nicht freigegeben werden sollen – die Kommentarspalte folgt denselben Sichtbarkeitsregeln wie die
+              Detailseite.
+            </li>
+          </ul>
         </section>
 
         <section id="workflow" className="space-y-3">
@@ -452,7 +497,7 @@ export default function HilfePage() {
           </ul>
           <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Löschanfragen</h3>
           <p>
-            Wenn Endnutzerinnen oder Endnutzer im Profilmenü eine <strong>Löschanfrage</strong> stellen, erscheint diese
+            Wenn Endnutzerinnen oder Endnutzer im <strong>Kontomenü</strong> eine <strong>Löschanfrage</strong> stellen, erscheint diese
             im Admin-Bereich unter <strong>Löschanfragen</strong>. Offene Anfragen werden oben auf der Admin-Seite
             hervorgehoben. Administratoren setzen einen <strong>Status</strong> (z.&nbsp;B. offen, zur Kenntnis genommen,
             erledigt, abgelehnt), optional eine <strong>interne Notiz</strong> und dokumentieren damit den Bearbeitungsstand.
@@ -543,6 +588,13 @@ export default function HilfePage() {
               </dd>
             </div>
             <div>
+              <dt className="font-medium text-zinc-900 dark:text-zinc-100">Kommentar (Diskussion am Dokument)</dt>
+              <dd className="mt-0.5 text-zinc-700 dark:text-zinc-300">
+                Freitext unter der Dokumentdetailseite; sichtbar für alle mit Leserecht auf dieses Dokument. Nicht zu
+                verwechseln mit dem <strong>Versionshinweis</strong> an einzelnen Dateifassungen in der Historie.
+              </dd>
+            </div>
+            <div>
               <dt className="font-medium text-zinc-900 dark:text-zinc-100">Steuerungsanalyse</dt>
               <dd className="mt-0.5 text-zinc-700 dark:text-zinc-300">
                 Strukturelle Bewertung des Dokuments aus Organisationssicht (nicht: pädagogische Qualität des Inhalts).
@@ -585,6 +637,23 @@ export default function HilfePage() {
           </div>
 
           <div className="space-y-1">
+            <p className="font-medium text-zinc-900 dark:text-zinc-100">
+              Wer kann meine Kommentare zu einem Dokument lesen?
+            </p>
+            <p className="text-zinc-700 dark:text-zinc-300">
+              <strong>Alle Kolleginnen und Kollegen, die dieses Dokument bereits einsehen dürfen</strong> – also dieselbe
+              Schulnummer, passende Rolle und Schutzstufe wie auf der Detailseite. Kommentare sind{' '}
+              <strong>keine privaten Notizen</strong>; sie erscheinen für dieselbe Leserschaft wie das Dokument. Ihre
+              eigenen Kommentare können Sie nachträglich bearbeiten oder entfernen, andere jedoch nicht. Ausführlicher
+              Hinweis im Abschnitt{' '}
+              <a href="#dokument-kommentare" className={helpClassName}>
+                Kommentare am Dokument
+              </a>
+              .
+            </p>
+          </div>
+
+          <div className="space-y-1">
             <p className="font-medium text-zinc-900 dark:text-zinc-100">Die KI-Antwort ist leer oder es gibt einen Fehler.</p>
             <p className="text-zinc-700 dark:text-zinc-300">
               Oft fehlt auslesbarer Text im Dokument, das Kontingent ist erschöpft, oder die Verbindung zum
@@ -611,8 +680,9 @@ export default function HilfePage() {
           <div className="space-y-1">
             <p className="font-medium text-zinc-900 dark:text-zinc-100">Wie stelle ich eine Löschanfrage?</p>
             <p className="text-zinc-700 dark:text-zinc-300">
-              Öffnen Sie das Profilmenü oben rechts und wählen Sie <strong>Löschanfrage stellen</strong>. Bestätigen Sie
-              den Hinweis. Es wird ein Eintrag für Ihre Schul-Administration erzeugt; Ihr Konto wird dadurch{' '}
+              Öffnen Sie das <strong>Kontomenü</strong> (oben rechts auf dem Smartphone, unten in der Seitenleiste auf
+              Desktop) und wählen Sie <strong>Löschanfrage stellen</strong>. Bestätigen Sie den Hinweis. Es wird ein
+              Eintrag für Ihre Schul-Administration erzeugt; Ihr Konto wird dadurch{' '}
               <strong>nicht automatisch gelöscht</strong>. Liegt bereits eine offene Anfrage vor, ist eine zweite nicht
               möglich – warten Sie auf die Bearbeitung oder sprechen Sie die Administration an.
             </p>
@@ -643,7 +713,7 @@ export default function HilfePage() {
         <footer className="border-t border-zinc-200 pt-8 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
           <p>
             Stand der Dokumentation: Anpassung u.&nbsp;a. an Löschanfragen, Konten-Deaktivierung durch Schul-Admins,
-            Profilmenü (Export) und erweiterte Admin-Bereiche. Einzelne Funktionen können je nach Schule oder Version
+            <strong>Kontomenü</strong> (Datenexport) und erweiterte Admin-Bereiche. Einzelne Funktionen können je nach Schule oder Version
             abweichen.
           </p>
           <p className="mt-2">

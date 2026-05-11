@@ -1,128 +1,145 @@
 # Berechtigungen und Zugriffsfilter
 
-## Übersicht
-
-- Zugriff erfolgt über **Schutzklasse (`protection_class_id`)** und **Rolle**.
-- Zusätzlich bleibt `responsible_unit` für Bearbeitungs- und Organisationsbezug relevant.
-
-### Schutzklassenmodell
-
-| Schutzklasse | Bedeutung | Wer darf lesen |
-|---|---|---|
-| **1** | Öffentlich | alle angemeldeten Lehrkräfte/Nutzer |
-| **2** | Verwaltung intern | nur **SEKRETARIAT** + **SCHULLEITUNG** |
-| **3** | Streng vertraulich | nur **SCHULLEITUNG** |
-
-### Technische Voraussetzung (Lookup-Tabelle)
-
-`documents.protection_class_id` ist per Foreign Key mit `public.protection_classes(id)` verknüpft.  
-Damit Schutzklasse **3** gespeichert werden kann, muss in `protection_classes` ein Eintrag mit `id = 3` vorhanden sein.
-
-Beispiel (idempotent):
-
-```sql
-insert into public.protection_classes (id, name, description)
-values (3, 'Nur Schulleitung', 'Zugriff nur für Schulleitung (SL).')
-on conflict (id) do update
-set
-  name = excluded.name,
-  description = excluded.description;
-```
-
-## Tabellen anlegen (SQL)
-
-Die Tabellen können mit der Migration **`supabase/migrations/20250309_app_users_and_roles.sql`** angelegt werden.
-
-**Option A – Supabase CLI (empfohlen):**
-
-```bash
-cd slboard
-npx supabase db push
-# bzw. supabase migration up
-```
-
-**Option B – SQL im Supabase Dashboard ausführen:**
-
-Im Supabase-Projekt: **SQL Editor** → neues Query → Inhalt von `supabase/migrations/20250309_app_users_and_roles.sql` einfügen → Run.
-
-**Inhalt der Migration (Auszug):**
-
-- Erstellt `app_users` (id, username, full_name, email, org_unit, created_at) mit `email` unique.
-- Erstellt `user_roles` (user_id, role_code) mit FK auf `app_users(id)` und Primary Key (user_id, role_code).
-- Legt Indizes auf email, user_id, role_code an.
-
-Danach Nutzer und Rollen über die **Admin-Oberfläche** (`/admin`) pflegen oder per SQL einfügen.
+**Stand:** Abgleich mit `lib/documentAccess.ts`, `lib/adminAuth.ts`, `lib/superAdminAuth.ts` und den RLS-Migrationen in `supabase/migrations/`.
 
 ---
 
-## Benötigte Tabellen in Supabase (Referenz)
+## Übersicht
 
-### `app_users`
+Zugriff auf Dokumente und Aktionen hängt zusammen aus:
 
-Jeder angemeldete Nutzer, der in der App erscheinen soll, braucht einen Eintrag. Die **E-Mail** sollte mit dem Supabase-Auth-Account übereinstimmen.
+1. **Angemeldeter Supabase-User** (Session) und passender Zeile in **`app_users`** (gleiche E-Mail, passende **`school_number`** zum aktuellen Schul-Kontext).
+2. **Mandant:** Datenzeilen der eigenen Schule (`school_number`) — serverseitig u. a. `canAccessSchool()`; in Postgres zusätzlich **RLS** für direkte Client-Zugriffe.
+3. **Schutzklasse** (`documents.protection_class_id`) und **Rollen** in `user_roles` — Lesen über `canReadDocument()`.
+4. **Bearbeiten / Version / Löschen / Bulk:** zusätzlich **Organisationsbezug** (`org_unit` des Nutzers vs. `responsible_unit` des Dokuments) und **Sonderrollen** Schulleitung/Sekretariat — vgl. u. a. `POST /api/documents/bulk-capabilities` und die jeweiligen API-Routen.
 
-| Spalte        | Typ    | Beschreibung                          |
-|---------------|--------|--------------------------------------|
-| `id`          | uuid   | Primärschlüssel (z. B. `gen_random_uuid()`) |
-| `username`    | text   | Anzeigename / Login-Name              |
-| `full_name`   | text   | Vollständiger Name                    |
-| `email`       | text   | E-Mail (wie in Supabase Auth)        |
-| `org_unit`    | text   | Organisationseinheit (s. u.)         |
-| `created_at`  | timestamptz | optional, z. B. `now()`          |
+---
+
+## Schul-Kontext (Multi-Tenant)
+
+- Pro **E-Mail** kann es **mehrere** `app_users`-Zeilen geben (eine pro **`school_number`**).
+- Der **aktive Mandant** kommt aus dem **HTTP-only-Cookie** (`slb_active_school`, siehe `lib/schoolSession.ts`) und wird mit **`auth.users.user_metadata.school_number`** abgestimmt (`POST /api/auth/set-school-context`).
+- Ohne gültigen Kontext bei mehreren Schulen: `needsSchoolContext` — Nutzer muss den Kontext setzen (erneute Schulwahl / Anmeldung).
+
+---
+
+## Schutzklassenmodell (Lesen)
+
+Implementierung: **`canReadDocument()`** in `lib/documentAccess.ts`.
+
+| Schutzklasse | Bedeutung (Kurz) | Wer darf lesen |
+|--------------|------------------|----------------|
+| **1** | für Lehrkräfte sichtbar | Rolle **LEHRKRAFT** *oder* erweiterter Zugriff (siehe unten) |
+| **2** | intern / eingeschränkt | **SCHULLEITUNG**, **SEKRETARIAT**, **VERWALTUNG**, **KOORDINATION** |
+| **3** | streng | nur **SCHULLEITUNG** |
+
+**Erweiterter Zugriff** (wie in Code für Stufe 2 genutzt): `isSchulleitung || isSekretariat || VERWALTUNG || KOORDINATION`.
+
+**Fallback** für unbekannte oder fehlende Schutzklassen-Werte: restriktiv — u. a. Schulleitung, Sekretariat oder Übereinstimmung **`org_unit` === `responsible_unit`**.
+
+### Technische Voraussetzung (Lookup-Tabelle)
+
+`documents.protection_class_id` ist mit **`public.protection_classes(id)`** verknüpft. Für Stufe **3** muss ein Eintrag mit `id = 3` existieren (Migrationen / `20260319_protection_class_level3.sql`).
+
+---
+
+## Rollencodes (Referenz)
+
+In der UI werden u. a. angezeigt: **SCHULLEITUNG**, **SEKRETARIAT**, **VERWALTUNG**, **KOORDINATION**, **LEHRKRAFT**, **FACHVORSITZ**, **STEUERGRUPPE**, **ADMIN**, **SUPER_ADMIN** (`UserMenu`, Seeds).
+
+Für **Lesen** sind im Kern die in `canReadDocument` genannten Rollen maßgeblich; weitere Codes können für spätere Erweiterungen oder Anzeige genutzt werden.
+
+### Schul-Admin (`/admin`, `/api/admin/*`)
+
+- **`lib/adminAuth.ts`:** Rollen **SCHULLEITUNG** oder **ADMIN** im **aktuellen** Schul-Kontext (eindeutige `app_users`-Zeile zu E-Mail + `school_number`).
+- Konto **`app_users.active === false`** → kein Admin-Zugriff.
+
+### Super-Admin
+
+- **`lib/superAdminAuth.ts`:** E-Mail in **`SUPER_ADMIN_EMAILS`** (Env, kommagetrennt) **oder** Rolle **`SUPER_ADMIN`** in `user_roles` (über `app_users` der E-Mail).
+- Super-Admin-Routen: `/super-admin`, `/api/super-admin/*` (zusätzliche Prüfung in den Routes).
+
+---
+
+## Feature-Flags und Kontingente (pro Schule)
+
+Auf **`schools`** u. a.:
+
+- **`feature_ai_enabled`**, **`feature_drafts_enabled`** — KI- und Entwurfs-Endpunkte reagieren mit Sperre/Hinweis, wenn deaktiviert (`lib/schoolFeatureFlags.ts`).
+- **`max_upload_file_mb`** — effektive Upload-Obergrenze (`effectiveMaxUploadBytes`); mit Plattform-Default, wenn `NULL`.
+- **`active`** — `false` sperrt Nutzung der Schule (Redirect/Fehlercodes, siehe `proxy.ts` wenn als Middleware aktiv).
+
+---
+
+## Organisationseinheiten (`org_unit` / `responsible_unit`)
+
+- **`documents.responsible_unit`:** zuständige Einheit des Dokuments (Filter, Anzeige „Verantwortlich“).
+- **`app_users.org_unit`:** Einheit des Nutzers.
+- Für **Bearbeitung** (u. a. Bulk): Schulleitung, Sekretariat **oder** `org_unit` === `responsible_unit` (siehe `bulk-capabilities/route.ts`).
+
+Standardwerte für Auswahllisten kommen aus **`school_responsible_unit_options`** (Admin); historische Listen in Doku/Seeds können abweichen.
+
+---
+
+## Tabellen `app_users` und `user_roles`
+
+### Wichtige Spalten `app_users` (aktueller Stand)
+
+Neben `username`, `full_name`, `email`, `org_unit`, `created_at` u. a.:
+
+- **`school_number`** — Mandant (FK `schools`).
+- **`active`** — Konto deaktiviert: kein Zugriff wie ohne Zeile.
+- **`password_change_required`** — erzwingt Passwortwechsel (`/change-password`), bis zurückgesetzt.
+
+**Eindeutigkeit:** `(email, school_number)` — nicht mehr „eine E-Mail global“ (`20260410_app_users_email_school_unique_and_rls.sql`).
 
 ### `user_roles`
 
-Rollen pro Nutzer.
+`(user_id, role_code)` mit FK auf `app_users.id`.
 
-| Spalte    | Typ  | Beschreibung        |
-|-----------|------|---------------------|
-| `user_id` | uuid | FK auf `app_users.id` |
-| `role_code` | text | z. B. `SCHULLEITUNG`, `SEKRETARIAT`, `LEHRKRAFT` |
-
-**Für den Zugriffsfilter relevant:**
-- `SCHULLEITUNG` sieht Schutzklasse 1/2/3
-- `SEKRETARIAT` sieht Schutzklasse 1/2
-- andere Rollen sehen Schutzklasse 1
-
-## Organisationseinheiten (org_unit / responsible_unit)
-
-Die Werte müssen **identisch** sein, damit die Filterung greift. In der App werden u. a. verwendet:
-
-- Schulleitung  
-- Sekretariat  
-- Fachschaft Deutsch  
-- Fachschaft Mathematik  
-- Fachschaft Englisch  
-- Steuergruppe  
-- Lehrkräfte  
-
-Beim Anlegen von **Dokumenten** wird `responsible_unit` gesetzt; beim Anlegen/Bearbeiten von **Nutzer:innen** in der Admin-Oberfläche wird `org_unit` gesetzt.  
-`responsible_unit` wird weiterhin für Organisationszuordnung und Bearbeitungslogik genutzt.
+---
 
 ## Wo Nutzer und Rollen pflegen?
 
-- **Admin-Oberfläche:** `/admin`  
-  Dort können Sie Nutzer in `app_users` anlegen/bearbeiten und Rollen in `user_roles` zuweisen.  
-- Die E-Mail der Nutzer sollte mit dem Supabase-Auth-Account übereinstimmen (gleiche E-Mail wie beim Login).
+- **`/admin`** — CRUD Nutzer, Rollen (`PATCH …/roles`), sofern Schul-Admin.
+- Supabase SQL nur in Ausnahmefällen; Migrationen für Schema.
+
+---
 
 ## Kurz-Check: Warum sehe ich keine / wenige Dokumente?
 
-1. **Eintrag in `app_users`?**  
-   Für die eingeloggte E-Mail muss ein Zeile in `app_users` existieren (E-Mail exakt gleich).
+1. **`app_users`:** Existiert eine Zeile für **E-Mail + aktuelle `school_number`** (Cookie/JWT)?
+2. **`schools.active`:** Schule nicht deaktiviert?
+3. **Schutzklasse und Rollen:** Entspricht Ihre Rolle der Tabelle oben (inkl. LEHRKRAFT für Stufe 1)?
+4. **`responsible_unit` / Fallback:** Bei exotischen `protection_class_id`-Werten greift die restriktive Fallback-Regel (Org-Match oder SL/Sek).
+5. **Archiv:** Dokumente mit **`archived_at`** erscheinen nur in der Archiv-Ansicht (`?archive=1`).
 
-2. **Passende Rolle für Schutzklasse?**  
-   - Schutzklasse 1: alle  
-   - Schutzklasse 2: nur **SEKRETARIAT** oder **SCHULLEITUNG**  
-   - Schutzklasse 3: nur **SCHULLEITUNG**
+---
 
-3. **Rollen zuweisen:**  
-   Unter `/admin` bei dem Nutzer die Rolle(n) setzen.
+## Audit-Log
 
-## Audit-Log (Änderungsverlauf)
+- Tabelle **`audit_log`** (inkl. **`school_number`** in Multi-Tenant).
+- Anzeige: Dokumentdetail „Änderungsverlauf“ (`GET /api/documents/[id]/audit`).
+- Optional Legacy-Tabelle **`audit_logs`** — Bereinigung beim Dokument-Löschen best-effort.
 
-Die Tabelle **`audit_log`** protokolliert, wer wann was geändert hat (z. B. Status, Metadaten, neue Versionen). Migration: `supabase/migrations/20250309_audit_log.sql`. In der Dokumentdetailseite wird der Änderungsverlauf angezeigt, sofern Einträge vorhanden sind.
+---
 
-## Rechtsbezug (legal_reference)
+## DSGVO / Kontodaten
 
-- In der **Dokumentdetailseite** kann der Rechtsbezug bearbeitet werden: **„Bearbeiten“** klicken, Feld **„Rechtsbezug“** anpassen, **„Speichern“**.  
-- Der Wert wird in `documents.legal_reference` gespeichert und in der Detailansicht (Leseansicht) angezeigt.
+- **Datenexport:** `GET /api/me/export` (aggregiert personenbezogene/app-bezogene Daten, serverseitig).
+- **Löschanfrage:** `POST /api/me/delete-request` → **`account_delete_requests`**; Bearbeitung nur durch Admin über Service-Role / Admin-APIs. **Kein automatisches Löschen** durch diese Anfrage allein.
+
+---
+
+## RLS (Row Level Security) — Kurz
+
+- Kern-Tabellen (`documents`, `document_versions`, `app_users`, `user_roles`, `audit_log`, `ai_queries`, …) haben Mandanten-Policies (`current_school_number()`, Admin-Varianten), siehe `20260320_multitenant_rls.sql` und Folgemigrationen.
+- **`schools`:** Lesen für Mitglieder der Schule und Super-Admin-Rolle in DB — `20260426120000_rls_schools_audit_logs_account_delete_requests.sql`.
+- **`account_delete_requests`:** kein direkter `authenticated`-Zugriff; nur Backend **`service_role`** (RLS + REVOKE/GRANT in Migration).
+- **Service-Role-Client** in API-Routen **umgeht RLS** — deshalb sind die expliziten Prüfungen in `documentAccess` / den Routes weiterhin Pflicht.
+
+---
+
+## Rechtsbezug (`legal_reference`)
+
+Wie in der Funktionsübersicht: Bearbeiten auf der Dokumentdetailseite, Speicherung in `documents.legal_reference`.

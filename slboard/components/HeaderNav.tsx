@@ -195,7 +195,7 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
         <SuperAdminNavLink />
       </nav>
 
-      <div className="relative flex min-h-[2.5rem] min-w-0 flex-1 items-center gap-1.5 pl-0.5 md:hidden">
+      <div className="relative flex min-h-[2.5rem] min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1 pl-0.5 md:hidden">
         <AppNavLink href="/" onClick={closeMore} className={`${pillCompact} text-zinc-700 dark:text-zinc-200`}>
           <NavIconDashboard className="size-3.5 opacity-90" />
           Startseite
@@ -208,17 +208,6 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
           <NavIconSeCockpit className="size-3.5 opacity-90" />
           Steuerungs-Cockpit
         </AppNavLink>
-        <AppNavLink
-          href="/documents"
-          onClick={closeMore}
-          className={`${pillCompact} text-zinc-700 dark:text-zinc-200`}
-        >
-          <NavIconDocuments className="size-3.5 opacity-90" />
-          Dokumente
-        </AppNavLink>
-        {showSuperOnMobile ? (
-          <SuperAdminNavLink onClick={closeMore} className={pillSuperCompact} />
-        ) : null}
         <div className="relative shrink-0" ref={moreWrapRef}>
           <button
             ref={moreBtnRef}
@@ -227,7 +216,11 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
             aria-expanded={moreOpen}
             aria-haspopup="menu"
             aria-controls="header-nav-more-menu"
-            title={moreOpen ? 'Menü schließen' : 'Weitere Seiten: Entwurfsassistent, Hilfe, Admin …'}
+            title={
+              moreOpen
+                ? 'Menü schließen'
+                : 'Weitere Seiten: Dokumente, Entwurfsassistent, Hilfe, Admin …'
+            }
             onClick={() => setMoreOpen((o) => !o)}
             className="inline-flex items-center gap-1 rounded-full border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-zinc-800 shadow-sm outline-none transition hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
           >
@@ -242,9 +235,9 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
               aria-labelledby="header-nav-more-button"
               className="absolute right-0 top-full z-50 mt-1 min-w-[13.5rem] max-w-[min(100vw-2rem,20rem)] rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
             >
-              <AppNavLink href="/se-cockpit" role="menuitem" onClick={closeMore} className={moreMenuItem}>
-                <NavIconSeCockpit className="size-4 opacity-90" />
-                Steuerungs-Cockpit
+              <AppNavLink href="/documents" role="menuitem" onClick={closeMore} className={moreMenuItem}>
+                <NavIconDocuments className="size-4 opacity-90" />
+                Dokumente
               </AppNavLink>
               {!hideDraftsAssistant ? (
                 <AppNavLink
@@ -275,6 +268,9 @@ export function HeaderNav({ layout = 'horizontal' }: { layout?: HeaderNavLayout 
             </div>
           ) : null}
         </div>
+        {showSuperOnMobile ? (
+          <SuperAdminNavLink onClick={closeMore} className={pillSuperCompact} />
+        ) : null}
       </div>
     </>
   );

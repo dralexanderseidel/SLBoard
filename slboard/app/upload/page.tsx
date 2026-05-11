@@ -572,7 +572,17 @@ export default function UploadPage() {
           </div>
 
           {error && <p className="text-xs text-red-600">{error}</p>}
-          {message && <p className="text-xs text-green-600">{message}</p>}
+          {message && (
+            <div className="space-y-1.5 rounded border border-green-200 bg-green-50/80 px-3 py-2 dark:border-green-900/50 dark:bg-green-950/30">
+              <p className="text-xs font-medium text-green-800 dark:text-green-200">{message}</p>
+              <Link
+                href="/documents"
+                className="inline-flex text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+              >
+                Zur Dokumentenliste →
+              </Link>
+            </div>
+          )}
         </form>
         </div>
       </div>

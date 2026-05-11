@@ -21,7 +21,18 @@ function withAuthAwareHeaders(res: NextResponse) {
 }
 
 export async function proxy(request: NextRequest) {
-  const response = withAuthAwareHeaders(NextResponse.next({ request }))
+  const pathname = request.nextUrl.pathname;
+
+  /** Dateien aus `public/` (Root-URL) und Build-Assets — nicht hinter Auth, sonst <img src="/…png"> → 302 Login → kaputtes Logo */
+  if (
+    pathname.startsWith('/_next/') ||
+    pathname === '/favicon.ico' ||
+    /\.(?:png|jpe?g|gif|webp|svg|ico|woff2?|ttf|eot|map|webmanifest)$/i.test(pathname)
+  ) {
+    return NextResponse.next();
+  }
+
+  const response = withAuthAwareHeaders(NextResponse.next({ request }));
 
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? '').trim()
   const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '').trim()
@@ -45,10 +56,9 @@ export async function proxy(request: NextRequest) {
   })
 
   // Session aktualisieren, damit Cookies für API-Routes verfügbar sind
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser();
 
-  const { pathname } = request.nextUrl
-  const isApi = pathname.startsWith('/api/')
+  const isApi = pathname.startsWith('/api/');
   const isPublicPath =
     pathname === '/login' ||
     pathname === '/register-school' ||

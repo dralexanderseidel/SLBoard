@@ -51,6 +51,17 @@ export type AuditEntry = {
   created_at: string;
 };
 
+/** API-Shape von /api/documents/[id]/comments und detail.comments */
+export type DocumentComment = {
+  id: string;
+  authorEmail: string;
+  authorLabel: string | null;
+  authorAppUserId: string | null;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type SteeringTodoItem = {
   titel: string;
   beschreibung?: string;

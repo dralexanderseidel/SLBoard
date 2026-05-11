@@ -711,7 +711,7 @@ export default function Home() {
 
           <Link
             href="/se-cockpit"
-            className="group flex min-h-[150px] flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-cyan-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-cyan-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-cyan-700"
+            className="group flex min-h-[150px] flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-blue-700"
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -726,7 +726,7 @@ export default function Home() {
                 </svg>
               </span>
             </div>
-            <span className="mt-auto inline-flex w-full items-center justify-center rounded border border-cyan-300 bg-cyan-50 px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm transition hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-950/50 dark:text-zinc-50 dark:hover:bg-cyan-950">
+            <span className="mt-auto inline-flex w-full items-center justify-center rounded border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-semibold text-zinc-900 shadow-sm transition hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/50 dark:text-zinc-50 dark:hover:bg-blue-950">
               Zum Steuerungs-Cockpit
             </span>
           </Link>
