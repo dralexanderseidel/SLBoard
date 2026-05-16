@@ -12,7 +12,11 @@ import {
   type DocRow,
 } from '../../../../lib/aiSearch';
 import { resolveUserAccess } from '../../../../lib/documentAccess';
-import { buildPromptSnippetFromChunks, pickTopChunksForQuestion } from '../../../../lib/chunkingOnTheFly';
+import {
+  buildPromptSnippetFromChunks,
+  pickTopChunksForQuestion,
+  resolveSourceEvidenceExcerpt,
+} from '../../../../lib/chunkingOnTheFly';
 import {
   appendAiQueryDebugLog,
   isAiQueryDebugEnabledEffective,
@@ -32,15 +36,6 @@ const DEFAULT_MAX_TEXT_PER_DOC = 4500;
 const DEFAULT_CHUNK_CHARS = 2500;
 const DEFAULT_CHUNK_OVERLAP_CHARS = 300;
 const DEFAULT_MAX_CHUNKS_PER_DOC = 3;
-
-/** Kurzer Auszug aus der gespeicherten Dokument-Zusammenfassung für die Quellenliste (kein Chunk-Text). */
-const SOURCE_SUMMARY_MAX_CHARS = 220;
-
-function formatSourceSummaryExcerpt(summary: string | null | undefined): string {
-  const t = (summary ?? '').trim().replace(/\s+/g, ' ');
-  if (t.length <= 30) return '';
-  return t.length > SOURCE_SUMMARY_MAX_CHARS ? `${t.slice(0, SOURCE_SUMMARY_MAX_CHARS)}…` : t;
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -102,8 +97,8 @@ export async function POST(req: NextRequest) {
       title: string;
       metadataBlock: string;
       promptSnippet: string;
-      /** Nur Dokument-Zusammenfassung (UI), kein Keyword-Chunk. */
-      sourceSummaryExcerpt: string;
+      /** Fragebezogener Textbeleg für die UI (Keyword-Chunk, sonst Summary/Rechtsgrundlage). */
+      sourceEvidenceExcerpt: string;
     }[] = [];
     const keywords = extractKeywords(trimmed);
     const debugDocEntries: AiQueryDebugDocEntry[] = [];
@@ -168,7 +163,17 @@ export async function POST(req: NextRequest) {
         title: doc.title,
         metadataBlock,
         promptSnippet,
-        sourceSummaryExcerpt: formatSourceSummaryExcerpt(doc.summary),
+        sourceEvidenceExcerpt: resolveSourceEvidenceExcerpt({
+          textForChunking: text,
+          keywords,
+          chunkParams,
+          promptChunks: selectedChunksForDebug,
+          promptSnippet,
+          fallbacks: {
+            summary: doc.summary,
+            legalReference: legalText,
+          },
+        }),
       });
       if (debugEnabled && selectedChunksForDebug.length > 0) {
         debugDocEntries.push({
@@ -228,7 +233,7 @@ export async function POST(req: NextRequest) {
     const sourcesPayload = sourceTexts.map((s) => ({
       documentId: s.id,
       title: s.title,
-      snippet: s.sourceSummaryExcerpt,
+      snippet: s.sourceEvidenceExcerpt,
     }));
 
     // Aufbewahrung: Einträge in ai_queries dienen dem Verlauf; Löschung bei Dokument-Endlöschung siehe RPC delete_ai_queries_referencing_document.

@@ -49,17 +49,35 @@ type SuggestedDoc = {
 };
 
 function normalizeQuerySources(raw: unknown): QuerySource[] {
+  if (typeof raw === 'string') {
+    try {
+      return normalizeQuerySources(JSON.parse(raw) as unknown);
+    } catch {
+      return [];
+    }
+  }
   if (!Array.isArray(raw)) return [];
   const out: QuerySource[] = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const o = item as Record<string, unknown>;
-    const documentId = typeof o.documentId === 'string' ? o.documentId : '';
+    const documentId =
+      typeof o.documentId === 'string'
+        ? o.documentId
+        : typeof o.document_id === 'string'
+          ? o.document_id
+          : '';
     if (!documentId) continue;
+    const snippet =
+      typeof o.snippet === 'string'
+        ? o.snippet.trim()
+        : typeof o.excerpt === 'string'
+          ? o.excerpt.trim()
+          : '';
     out.push({
       documentId,
       title: typeof o.title === 'string' ? o.title : '',
-      snippet: typeof o.snippet === 'string' ? o.snippet : '',
+      snippet,
     });
   }
   return out;
@@ -81,6 +99,7 @@ export default function Home() {
   /** Nach Klick unter „Aktuelle Anfragen“: bis `answer_text` nachgeladen ist. */
   const [historyAnswerLoading, setHistoryAnswerLoading] = useState(false);
   const [queryAnswer, setQueryAnswer] = useState<string | null>(null);
+  const [queryAnswerOpen, setQueryAnswerOpen] = useState(true);
   const [querySources, setQuerySources] = useState<QuerySource[]>([]);
   const [queryError, setQueryError] = useState<SerializedApiError | null>(null);
   const [suggestLoading, setSuggestLoading] = useState(false);
@@ -106,6 +125,12 @@ export default function Home() {
       }
     } catch { /* localStorage not available */ }
   }, []);
+
+  useEffect(() => {
+    if (queryAnswer || historyAnswerLoading) {
+      setQueryAnswerOpen(true);
+    }
+  }, [queryAnswer, historyAnswerLoading]);
 
   useEffect(() => {
     if (!question.trim()) {
@@ -533,21 +558,59 @@ export default function Home() {
           )}
           {(queryAnswer || historyAnswerLoading) && (
             <div
-              className="mt-4 rounded border border-zinc-200 bg-zinc-50 p-4 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              className="mt-4 rounded border border-zinc-200 bg-zinc-50 text-sm dark:border-zinc-700 dark:bg-zinc-950"
               aria-busy={historyAnswerLoading}
             >
-              <h3 className="mb-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
-                Antwort
-              </h3>
+              <button
+                type="button"
+                onClick={() => setQueryAnswerOpen((open) => !open)}
+                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                aria-expanded={queryAnswerOpen}
+                aria-controls="dashboard-query-answer-panel"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">
+                    Antwort
+                  </span>
+                  {historyAnswerLoading && (
+                    <span
+                      className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-zinc-600 dark:border-t-zinc-300"
+                      aria-hidden
+                    />
+                  )}
+                </span>
+                <span
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-zinc-300 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+                  aria-hidden
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    className={`transition-transform ${queryAnswerOpen ? 'rotate-180' : ''}`}
+                  >
+                    <path
+                      d="M6 9L12 15L18 9"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+              </button>
+              {queryAnswerOpen && (
+                <div
+                  id="dashboard-query-answer-panel"
+                  className="border-t border-zinc-200 px-4 pb-4 pt-3 dark:border-zinc-700"
+                >
               {historyAnswerLoading && (
                 <p
-                  className={`flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-400 ${queryAnswer ? 'mb-2' : 'mb-0'}`}
+                  className={`text-xs text-zinc-600 dark:text-zinc-400 ${queryAnswer ? 'mb-2' : 'mb-0'}`}
                   aria-live="polite"
                 >
-                  <span
-                    className="inline-block size-3.5 shrink-0 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-600 dark:border-zinc-600 dark:border-t-zinc-300"
-                    aria-hidden
-                  />
                   {queryAnswer
                     ? 'Vollständige Antwort wird geladen…'
                     : 'Antwort wird geladen…'}
@@ -570,9 +633,16 @@ export default function Home() {
                         >
                           {s.title}
                         </Link>
+                        {s.snippet.length > 0 && s.snippet !== '—' && (
+                          <p className="mt-0.5 text-[11px] italic text-zinc-500 line-clamp-3 dark:text-zinc-400">
+                            „{s.snippet}“
+                          </p>
+                        )}
                       </li>
                     ))}
                   </ul>
+                </div>
+              )}
                 </div>
               )}
             </div>

@@ -170,6 +170,102 @@ export function pickTopChunksForQuestion(text: string, keywords: string[], opts:
   return selectedByScore.map((s) => s.chunk);
 }
 
+/** Max. Länge für UI-Textbelege unter „Verwendete Dokumente“. */
+export const SOURCE_EVIDENCE_MAX_CHARS = 220;
+
+/** Mindestlänge nach Normalisierung; darunter kein Anzeige-Beleg. */
+export const SOURCE_EVIDENCE_MIN_CHARS = 12;
+
+export function formatSourceEvidenceExcerpt(text: string | null | undefined): string {
+  const t = (text ?? '').trim().replace(/\s+/g, ' ');
+  if (t.length < SOURCE_EVIDENCE_MIN_CHARS) return '';
+  return t.length > SOURCE_EVIDENCE_MAX_CHARS
+    ? `${t.slice(0, SOURCE_EVIDENCE_MAX_CHARS)}…`
+    : t;
+}
+
+/** Bester Beleg aus bereits für die KI gewählten Chunks (gleiche Textbasis wie der Prompt). */
+export function pickBestEvidenceFromChunks(chunks: string[], keywords: string[]): string | null {
+  if (chunks.length === 0) return null;
+  const kw = keywords.map((k) => k.trim().toLowerCase()).filter(Boolean);
+  if (kw.length === 0) return chunks[0] ?? null;
+
+  let bestIdx = 0;
+  let bestScore = -1;
+  for (let i = 0; i < chunks.length; i++) {
+    const s = scoreChunkForKeywords(chunks[i]!, kw);
+    if (s > bestScore) {
+      bestScore = s;
+      bestIdx = i;
+    }
+  }
+  return chunks[bestIdx] ?? chunks[0] ?? null;
+}
+
+/**
+ * Fragebezogener Auszug für die Quellenliste: bester Keyword-Chunk, sonst Summary/Rechtsgrundlage.
+ */
+export function buildSourceEvidenceSnippet(
+  textForChunking: string | null | undefined,
+  keywords: string[],
+  opts: ChunkingOptions,
+  fallbacks?: { summary?: string | null; legalReference?: string | null },
+): string {
+  const cleaned = (textForChunking ?? '').trim();
+  if (cleaned.length > SOURCE_EVIDENCE_MIN_CHARS) {
+    const chunk = pickBestEvidenceChunkForQuestion(cleaned, keywords, opts);
+    const excerpt = formatSourceEvidenceExcerpt(chunk);
+    if (excerpt) return excerpt;
+    const head = formatSourceEvidenceExcerpt(
+      cleaned.slice(0, SOURCE_EVIDENCE_MAX_CHARS + 80),
+    );
+    if (head) return head;
+  }
+  const fromSummary = formatSourceEvidenceExcerpt((fallbacks?.summary ?? '').trim());
+  if (fromSummary) return fromSummary;
+  return formatSourceEvidenceExcerpt((fallbacks?.legalReference ?? '').trim());
+}
+
+export type ResolveSourceEvidenceInput = {
+  textForChunking: string | null | undefined;
+  keywords: string[];
+  chunkParams: ChunkingOptions;
+  /** Chunks, die in den KI-Prompt eingeflossen sind. */
+  promptChunks: string[];
+  /** Fertiger Prompt-Auszug (Fallback). */
+  promptSnippet: string;
+  fallbacks?: { summary?: string | null; legalReference?: string | null };
+};
+
+/**
+ * UI-Textbeleg: zuerst aus Prompt-Chunks (sicher belegbar), dann Volltext/Summary, zuletzt Prompt-Auszug.
+ */
+export function resolveSourceEvidenceExcerpt(input: ResolveSourceEvidenceInput): string {
+  const { keywords, chunkParams, promptChunks, promptSnippet, fallbacks } = input;
+
+  if (promptChunks.length > 0) {
+    const fromPromptChunks = formatSourceEvidenceExcerpt(
+      pickBestEvidenceFromChunks(promptChunks, keywords),
+    );
+    if (fromPromptChunks) return fromPromptChunks;
+  }
+
+  const fromText = buildSourceEvidenceSnippet(
+    input.textForChunking,
+    keywords,
+    chunkParams,
+    fallbacks,
+  );
+  if (fromText) return fromText;
+
+  const snippet = (promptSnippet ?? '').trim();
+  if (snippet.length > SOURCE_EVIDENCE_MIN_CHARS && !snippet.startsWith('(Kein')) {
+    return formatSourceEvidenceExcerpt(snippet);
+  }
+
+  return '';
+}
+
 export function buildPromptSnippetFromChunks(chunks: string[], maxChars: number): string {
   const limit = Math.max(200, Math.floor(maxChars));
   let out = '';
