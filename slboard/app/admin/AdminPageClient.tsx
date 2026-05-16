@@ -73,7 +73,7 @@ export function AdminPageClient() {
             Kein Zugriff. Bitte melden Sie sich mit einem Admin-Konto an.
           </p>
           <Link href="/" className="mt-4 inline-block text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
-            ← Zurück
+            ← Zur Startseite
           </Link>
         </div>
       </main>
@@ -104,7 +104,7 @@ export function AdminPageClient() {
               </button>
             )}
             <Link href="/" className="text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400">
-              ← Zurück
+              ← Zur Startseite
             </Link>
           </div>
         </header>

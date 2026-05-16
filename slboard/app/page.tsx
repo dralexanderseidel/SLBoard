@@ -11,6 +11,7 @@ import { LONG_RUNNING_EXPECTATION_HINT } from '../lib/longRunningExpectationHint
 import { supabase } from '../lib/supabaseClient';
 import { useHeaderAccess } from '../components/HeaderAccessContext';
 import { parseDashboardDocsQueryParam } from '../lib/dashboardDocSelection';
+import { CONTEXT_HELP } from '../lib/contextHelpUrls';
 import { APP_PAGE_MAX_OUTER_CLASS } from '../lib/appPageLayout';
 
 type RecentQuery = {
@@ -354,6 +355,16 @@ export default function Home() {
           <h2 className="mb-3 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
             Was gilt bei uns zu diesem Thema?
           </h2>
+          <p className="mb-3 text-xs text-zinc-600 dark:text-zinc-400">
+            Ausführliche Erläuterungen und Hinweise:{' '}
+            <Link
+              href={CONTEXT_HELP.dashboard}
+              className="font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
+            >
+              Hilfe → Startseite
+            </Link>
+            .
+          </p>
           {suggestedDocuments.length > 0 && !question.trim() && (
             <p className="mb-3 rounded border border-blue-200 bg-blue-50/80 px-3 py-2 text-xs text-blue-950 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-100">
               Dokumente aus der Liste wurden als KI-Kontext übernommen. Stellen Sie unten Ihre Frage — dann{' '}
@@ -552,18 +563,13 @@ export default function Home() {
                   </h4>
                   <ul className="space-y-2">
                     {querySources.map((s) => (
-                      <li key={s.documentId} className="flex flex-col">
+                      <li key={s.documentId}>
                         <Link
                           href={`/documents/${s.documentId}`}
                           className="text-xs font-medium text-blue-600 underline-offset-2 hover:underline dark:text-blue-400"
                         >
                           {s.title}
                         </Link>
-                        {s.snippet && s.snippet !== '—' && (
-                          <span className="mt-0.5 text-[11px] text-zinc-500 line-clamp-2 dark:text-zinc-400">
-                            {s.snippet}
-                          </span>
-                        )}
                       </li>
                     ))}
                   </ul>
