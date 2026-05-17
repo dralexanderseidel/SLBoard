@@ -63,7 +63,7 @@ Die App läuft als klassische Web-App: Nutzer arbeiten im Browser; API-Aufrufe l
 - **Anzeige in der UI:** „Verantwortlich“ = `responsible_unit`, „Beschlussgremium“ = `gremium`, „Beteiligung“ = `participation_groups`, „Reichweite“ = `reach_scope` (`intern` \| `extern`).
 - **Dokumenttypen:** mandantenspezifisch in `school_document_type_options`; globale Referenz `document_types`.
 - **Status-Workflow (nur jeweils ein Schritt vorwärts, vgl. `lib/documentWorkflow.ts`):**
-  - **ENTWURF** → **FREIGEGEBEN** („Freigeben“)
+  - **ENTWURF** → **FREIGEGEBEN** (Anzeige: „In Abstimmung“, Aktion: „Zur Abstimmung freigeben“)
   - **FREIGEGEBEN** → **BESCHLUSS** („Beschluss fassen“)
   - **BESCHLUSS** → **VEROEFFENTLICHT** („Veröffentlichen“)
   - **VEROEFFENTLICHT:** Endstatus für weitere Workflow-Schritte

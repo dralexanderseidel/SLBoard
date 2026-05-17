@@ -19,7 +19,7 @@ const toc = [
   { id: 'hochladen', label: 'Dokument hochladen' },
   { id: 'dokument-detail', label: 'Dokument einzeln ansehen und bearbeiten' },
   { id: 'dokument-kommentare', label: 'Kommentare am Dokument' },
-  { id: 'workflow', label: 'Status und Freigabe (Workflow)' },
+  { id: 'workflow', label: 'Status und Workflow' },
   { id: 'ki-funktionen', label: 'KI-Funktionen im Überblick' },
   { id: 'entwurfsassistent', label: 'Entwurfsassistent' },
   { id: 'admin', label: 'Bereich Admin' },
@@ -373,16 +373,16 @@ export default function HilfePage() {
         </section>
 
         <section id="workflow" className="space-y-3">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Status und Freigabe (Workflow)</h2>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Status und Workflow</h2>
           <p>
             Viele Dokumente durchlaufen einen festen <strong>Bearbeitungsstand</strong>, unabhängig vom Dokumenttyp:
           </p>
           <ol className="list-decimal space-y-1 pl-5">
             <li>
-              <strong>Entwurf</strong> – in Bearbeitung, noch nicht freigegeben
+              <strong>Entwurf</strong> – in Bearbeitung, noch nicht zur Abstimmung freigegeben
             </li>
             <li>
-              <strong>Freigegeben</strong> – zur weiteren Bearbeitung oder zum Beschluss vorgesehen
+              <strong>In Abstimmung</strong> – zur weiteren Bearbeitung oder zum Beschluss vorgesehen
             </li>
             <li>
               <strong>Beschluss</strong> – formal beschlossen oder in der Beschlusslogik angekommen
@@ -393,10 +393,10 @@ export default function HilfePage() {
             </li>
           </ol>
           <p>
-            Auf der Dokumentdetailseite und in der Liste stehen Ihnen – sofern berechtigt – Schaltflächen zur
-            <strong> Freigabe</strong>, zum <strong>Beschluss</strong> oder zur <strong>Veröffentlichung</strong> zur
-            Verfügung. Jeder Schritt sollte inhaltlich und organisatorisch zu Ihren schulischen Abläufen passen; die
-            Software erzwingt nur die technische Reihenfolge der Status.
+            Auf der Dokumentdetailseite und in der Liste stehen Ihnen – sofern berechtigt – Schaltflächen wie{' '}
+            <strong>„Zur Abstimmung freigeben“</strong>, <strong>„Beschluss fassen“</strong> oder{' '}
+            <strong>„Veröffentlichen“</strong> zur Verfügung. Jeder Schritt sollte inhaltlich und organisatorisch zu
+            Ihren schulischen Abläufen passen; die Software erzwingt nur die technische Reihenfolge der Status.
           </p>
         </section>
 

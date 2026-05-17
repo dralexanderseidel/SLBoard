@@ -1,16 +1,21 @@
 /**
- * Dokument-Workflow: Entwurf → Freigegeben → Beschluss → Veröffentlicht
- * (Status-Spalte `documents.status`, nicht Dokumenttyp.)
+ * Dokument-Workflow: Entwurf → In Abstimmung → Beschluss → Veröffentlicht
+ * (Status-Spalte `documents.status`, DB-Wert FREIGEGEBEN = „In Abstimmung“.)
  */
 export const WORKFLOW_STATUS_ORDER = ['ENTWURF', 'FREIGEGEBEN', 'BESCHLUSS', 'VEROEFFENTLICHT'] as const;
 export type WorkflowStatus = (typeof WORKFLOW_STATUS_ORDER)[number];
 
 export const WORKFLOW_STATUS_LABEL_DE: Record<string, string> = {
   ENTWURF: 'Entwurf',
-  FREIGEGEBEN: 'Freigegeben',
+  FREIGEGEBEN: 'In Abstimmung',
   BESCHLUSS: 'Beschluss',
   VEROEFFENTLICHT: 'Veröffentlicht',
 };
+
+/** Lesbare Workflow-Kette für Hilfetexte (z. B. Dokumentdetail). */
+export function workflowOrderDescriptionDe(): string {
+  return WORKFLOW_STATUS_ORDER.map((s) => statusLabelDe(s)).join(' → ');
+}
 
 export function statusLabelDe(s: string): string {
   return WORKFLOW_STATUS_LABEL_DE[s] ?? s;
@@ -29,7 +34,7 @@ export function getNextWorkflowTransition(current: string): { next: string; labe
   if (allowed.length === 0) return null;
   const next = allowed[0]!;
   const arrowLabels: Record<string, string> = {
-    FREIGEGEBEN: '→ Freigeben',
+    FREIGEGEBEN: '→ Zur Abstimmung freigeben',
     BESCHLUSS: '→ Beschluss',
     VEROEFFENTLICHT: '→ Veröffentlichen',
   };
@@ -41,7 +46,7 @@ export function workflowPrimaryButtonLabel(current: string): string | null {
   const t = getNextWorkflowTransition(current);
   if (!t) return null;
   const labels: Record<string, string> = {
-    FREIGEGEBEN: 'Freigeben',
+    FREIGEGEBEN: 'Zur Abstimmung freigeben',
     BESCHLUSS: 'Beschluss fassen',
     VEROEFFENTLICHT: 'Veröffentlichen',
   };

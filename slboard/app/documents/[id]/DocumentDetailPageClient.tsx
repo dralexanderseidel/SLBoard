@@ -7,6 +7,7 @@ import {
   WORKFLOW_STATUS_ORDER,
   getNextWorkflowTransition,
   statusLabelDe,
+  workflowOrderDescriptionDe,
   workflowPrimaryButtonLabel,
   workflowStatusBadgeClass,
   type WorkflowStatus,
@@ -1035,7 +1036,7 @@ export function DocumentDetailPageClient() {
                 )}
               </div>
               {saveError && <ApiErrorCallout error={saveError} className="mb-2 text-xs" />}
-              {/* Status & Workflow: Entwurf → Freigegeben → Beschluss → Veröffentlicht */}
+              {/* Status & Workflow: Entwurf → In Abstimmung → Beschluss → Veröffentlicht */}
               {doc && (
                 <div className="mb-3 rounded border border-zinc-200 bg-zinc-50/80 p-3 text-xs dark:border-zinc-700 dark:bg-zinc-800/50">
                   <div className="mb-2 flex items-center justify-between gap-2">
@@ -1110,8 +1111,8 @@ export function DocumentDetailPageClient() {
                         {workflowLoading ? '…' : workflowPrimaryButtonLabel(doc.status)}
                       </button>
                       <p className="mt-1 text-[11px] text-zinc-600 dark:text-zinc-400">
-                        Der Status wird gemäß definiertem Workflow geändert. Reihenfolge: Entwurf →
-                        Freigegeben → Beschluss → Veröffentlicht.
+                        Der Status wird gemäß definiertem Workflow geändert. Reihenfolge:{' '}
+                        {workflowOrderDescriptionDe()}.
                       </p>
                     </>
                   ) : (

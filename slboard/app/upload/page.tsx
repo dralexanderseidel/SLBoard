@@ -8,6 +8,7 @@ import { LONG_RUNNING_EXPECTATION_HINT } from '@/lib/longRunningExpectationHint'
 import { CONTEXT_HELP } from '@/lib/contextHelpUrls';
 import { ContextHelpLink } from '@/components/ContextHelpLink';
 import { APP_PAGE_MAX_OUTER_CLASS } from '@/lib/appPageLayout';
+import { WORKFLOW_STATUS_ORDER, statusLabelDe } from '@/lib/documentWorkflow';
 
 type Status = 'ENTWURF' | 'FREIGEGEBEN' | 'BESCHLUSS' | 'VEROEFFENTLICHT';
 type ReachScope = 'intern' | 'extern';
@@ -289,10 +290,11 @@ export default function UploadPage() {
                 onChange={(e) => setStatus(e.target.value as Status)}
                 className="h-8 rounded border border-zinc-300 bg-white px-2 text-xs text-zinc-800 shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
               >
-                <option value="ENTWURF">Entwurf</option>
-                <option value="FREIGEGEBEN">Freigegeben</option>
-                <option value="BESCHLUSS">Beschluss</option>
-                <option value="VEROEFFENTLICHT">Veröffentlicht</option>
+                {WORKFLOW_STATUS_ORDER.map((s) => (
+                  <option key={s} value={s}>
+                    {statusLabelDe(s)}
+                  </option>
+                ))}
               </select>
             </div>
 

@@ -2,14 +2,13 @@
 
 import React from 'react';
 import { SCHULENTWICKLUNG_FIELDS, schulentwicklungFieldLabelDe } from '@/lib/steeringAnalysisV2';
+import { WORKFLOW_STATUS_ORDER, statusLabelDe } from '@/lib/documentWorkflow';
 import type { UseDocumentFiltersResult } from '../hooks/useDocumentFilters';
 
-const STATUS_CHIPS = [
-  { value: 'ENTWURF', label: 'Entwurf' },
-  { value: 'FREIGEGEBEN', label: 'Freigegeben' },
-  { value: 'BESCHLUSS', label: 'Beschluss' },
-  { value: 'VEROEFFENTLICHT', label: 'Veröffentlicht' },
-];
+const STATUS_CHIPS = WORKFLOW_STATUS_ORDER.map((value) => ({
+  value,
+  label: statusLabelDe(value),
+}));
 
 const PARTICIPATION_SUGGESTIONS = [
   'Schulkonferenz', 'Lehrerkonferenz', 'Fachkonferenz',

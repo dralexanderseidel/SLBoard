@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { LONG_RUNNING_EXPECTATION_HINT } from '@/lib/longRunningExpectationHint';
+import { statusLabelDe } from '@/lib/documentWorkflow';
 import type { BulkActionsResult } from '../hooks/useBulkActions';
 
 type Props = Pick<
@@ -128,7 +129,7 @@ export function BulkActionsBar({
                 disabled={btnDisabled}
                 className={btnClass}
               >
-                {bulkUpdating ? '…' : { ENTWURF: 'Entwurf', FREIGEGEBEN: 'Freigegeben', BESCHLUSS: 'Beschluss', VEROEFFENTLICHT: 'Veröffentlicht' }[s]}
+                {bulkUpdating ? '…' : statusLabelDe(s)}
               </button>
             ))}
           </div>

@@ -49,7 +49,7 @@
 
 ### 4.1 `documents` (Auszug)
 
-- **`status`:** `ENTWURF` → **`FREIGEGEBEN`** → **`BESCHLUSS`** → **`VEROEFFENTLICHT`** (ein Schritt; `lib/documentWorkflow.ts`, Validierung in **`app/api/documents/[id]/route.ts`**).
+- **`status`:** `ENTWURF` → **`FREIGEGEBEN`** (UI: „In Abstimmung“) → **`BESCHLUSS`** → **`VEROEFFENTLICHT`** (ein Schritt; `lib/documentWorkflow.ts`, Validierung in **`app/api/documents/[id]/route.ts`**).
 - **`archived_at`:** Archiv-Liste / eingeschränkte Nutzung (`20260407_documents_archive_ai_queries_cleanup.sql`).
 - **`participation_groups`**, **`reach_scope`** (`intern`|`extern`), **`gremium`**, **`review_date`**.
 - **`steering_analysis`**, **`steering_analysis_updated_at`**, **`steering_analysis_version_id`**, **`steering_todos`** — KI/Persistenz.
