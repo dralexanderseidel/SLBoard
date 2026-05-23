@@ -14,6 +14,10 @@ import { getSchoolProfileText } from '../../../../../lib/schoolProfile';
 import { appendAiDebugEvent, isAiQueryDebugEnabledEffective } from '../../../../../lib/aiQueryDebugLog';
 import { apiError } from '../../../../../lib/apiError';
 import { getDraftDocTypeConfig } from '../../../../../lib/draftDocTypes';
+import {
+  buildDraftAssistantSystemPrompt,
+  buildDraftFormatInstructions,
+} from '../../../../../lib/draftSteeringPrompt';
 import { checkAiQuota } from '../../../../../lib/quotaCheck';
 import {
   loadSchoolFeatureFlags,
@@ -105,7 +109,10 @@ export async function POST(req: NextRequest) {
     const typeSystemRole     = hardcodedConfig.systemRole    || typeLabel;
     const typeTone           = dbDocType?.draft_tone         || hardcodedConfig.tone;
     const typeDefaultAudience = dbDocType?.draft_audience    || hardcodedConfig.defaultAudience;
-    const typeFormatHint     = dbDocType?.draft_format_hint  || hardcodedConfig.formatInstructions;
+    const typeFormatHint = buildDraftFormatInstructions(
+      typeCode,
+      dbDocType?.draft_format_hint || hardcodedConfig.formatInstructions,
+    );
     const schoolProfile = await getSchoolProfileText(access.schoolNumber);
     const debugEnabled = isAiQueryDebugEnabledEffective(aiSettings.debug_log_enabled);
 
@@ -175,9 +182,11 @@ export async function POST(req: NextRequest) {
             .join('\n\n')
         : `Es stehen keine Vorlagen zur Verfügung. Erstelle einen allgemeinen Entwurf.`;
 
-    const systemPrompt = `Du bist ein deutscher Assistent für schulische ${typeSystemRole}.
-Erstelle Entwürfe in ${typeTone} Ton, auf Deutsch.
-Antworte NUR mit dem geforderten Format, ohne zusätzliche Erklärungen.`;
+    const systemPrompt = buildDraftAssistantSystemPrompt(
+      typeSystemRole,
+      typeTone,
+      typeCode,
+    );
 
     const schoolContextBlock = schoolProfile ? `Schul-Steckbrief:\n${schoolProfile}\n\n` : '';
     const audienceValue = targetAudience?.trim() || typeDefaultAudience;

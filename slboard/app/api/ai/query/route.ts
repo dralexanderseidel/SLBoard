@@ -22,6 +22,11 @@ import {
   isAiQueryDebugEnabledEffective,
   type AiQueryDebugDocEntry,
 } from '../../../../lib/aiQueryDebugLog';
+import {
+  emptyWorkflowAuditPromptSection,
+  fetchDocumentAuditLogsForAiQuery,
+  formatWorkflowAuditSectionsByDocument,
+} from '../../../../lib/aiQueryAuditContext';
 import { getAiSettingsForSchool } from '../../../../lib/aiSettings';
 import { getSchoolProfileText } from '../../../../lib/schoolProfile';
 import { apiError } from '../../../../lib/apiError';
@@ -96,6 +101,7 @@ export async function POST(req: NextRequest) {
       id: string;
       title: string;
       metadataBlock: string;
+      auditBlock: string;
       promptSnippet: string;
       /** Fragebezogener Textbeleg für die UI (Keyword-Chunk, sonst Summary/Rechtsgrundlage). */
       sourceEvidenceExcerpt: string;
@@ -109,15 +115,23 @@ export async function POST(req: NextRequest) {
       maxChunks: MAX_CHUNKS_PER_DOC,
     };
 
-    // Alle Dokument-Texte parallel laden (statt sequentiell im Loop)
-    const docTextMap = new Map<string, string>(
-      await Promise.all(
+    // Dokument-Texte + Workflow-Audit (Statuswechsel) parallel laden
+    const [docTextMapEntries, auditRows] = await Promise.all([
+      Promise.all(
         docList.map(async (doc) => [doc.id, ((await getDocumentText(doc.id)) ?? '').trim()] as const)
-      )
-    );
+      ),
+      fetchDocumentAuditLogsForAiQuery(supabase, {
+        documentIds: docList.map((d) => d.id),
+        schoolNumber: access.schoolNumber ?? null,
+      }),
+    ]);
+    const docTextMap = new Map<string, string>(docTextMapEntries);
+    const workflowAuditByDocId = formatWorkflowAuditSectionsByDocument(auditRows);
 
     for (const doc of docList) {
       const metadataBlock = buildDocumentMetadataPromptSection(doc as DocRow);
+      const auditBlock =
+        workflowAuditByDocId.get(doc.id) ?? emptyWorkflowAuditPromptSection();
 
       // Antwortqualität: zuerst Volltext chunken; KI-Zusammenfassung nur bei fehlendem/kurzem Extrakt.
       const fullText = docTextMap.get(doc.id) ?? '';
@@ -162,6 +176,7 @@ export async function POST(req: NextRequest) {
         id: doc.id,
         title: doc.title,
         metadataBlock,
+        auditBlock,
         promptSnippet,
         sourceEvidenceExcerpt: resolveSourceEvidenceExcerpt({
           textForChunking: text,
@@ -191,7 +206,7 @@ export async function POST(req: NextRequest) {
         ? sourceTexts
             .map(
               (s) =>
-                `--- ${s.title} ---\n${s.metadataBlock}\n\nDokumentinhalt (Auszug):\n${s.promptSnippet}`,
+                `--- ${s.title} ---\n${s.metadataBlock}\n\n${s.auditBlock}\n\nDokumentinhalt (Auszug):\n${s.promptSnippet}`,
             )
             .join('\n\n')
         : 'Es wurden keine passenden Dokumente gefunden.';

@@ -183,7 +183,7 @@ export function buildDocumentMetadataPromptSection(doc: DocRow): string {
     );
   }
   lines.push(
-    '- Hinweis: Konkrete Zeitpunkte einzelner Workflow-Schritte (z. B. wie lange „Entwurf“ dauerte) sind in diesen Metadaten nicht als Historie gespeichert; sichtbar sind Erstellungsdatum und aktueller Status. Für Zeitverläufe ggf. Versions- oder Änderungsverlauf prüfen.',
+    '- Für Zeitpunkt und Reihenfolge von Workflow-Statusänderungen (z. B. Beschluss, Veröffentlichung) verwende den im gleichen Dokumentblock folgenden Abschnitt „Änderungsverlauf (Workflow-Status, aus Protokoll)“, soweit das System dort Einträge führt.',
   );
   return lines.join('\n');
 }

@@ -436,6 +436,30 @@ export function DocumentsPageClient() {
                 Filter zurücksetzen
               </button>
             </div>
+          ) : archiveView ? (
+            /* Archiv leer – keine archivierten Dokumente */
+            <div className="flex flex-col items-center gap-4 rounded-lg border border-zinc-200 bg-white px-6 py-12 text-center shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 dark:bg-amber-950/40">
+                <svg className="h-6 w-6 text-amber-700 dark:text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m20.25 7.5-.625 10.632a2.25 2.25 0 0 1-2.247 2.118H6.622a2.25 2.25 0 0 1-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125Z" />
+                </svg>
+              </span>
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  Keine archivierten Dokumente
+                </h2>
+                <p className="mt-1 max-w-sm text-xs text-zinc-500 dark:text-zinc-400">
+                  Im Archiv erscheinen Dokumente, die Sie aus der aktiven Liste archiviert haben. Sie bleiben
+                  gespeichert und können hier wiederhergestellt oder endgültig gelöscht werden.
+                </p>
+              </div>
+              <Link
+                href="/documents"
+                className="rounded-md border border-zinc-300 bg-white px-4 py-2 text-xs font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+              >
+                Zur aktiven Dokumentenliste
+              </Link>
+            </div>
           ) : (
             /* Neue Schule – noch keine Dokumente vorhanden */
             <div className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
