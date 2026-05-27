@@ -54,6 +54,33 @@ function stringifyDetails(raw: string): string {
   }
 }
 
+/**
+ * Google-URL robust aufbauen:
+ * - nutzt immer das konfigurierte Modell aus LLM_MODEL
+ * - ersetzt ggf. veraltete /models/<...> Segmente in LLM_API_URL
+ * - ergänzt :generateContent falls nötig
+ * - hängt den API-Key als Query an
+ */
+function buildGoogleFetchUrl(baseUrl: string, apiKey: string, model: string): string {
+  const trimmedBase = baseUrl.trim();
+  const trimmedModel = model.trim();
+  const hasModelPath = /\/models\/[^/?#:]+/.test(trimmedBase);
+  let normalized = trimmedBase;
+
+  if (hasModelPath) {
+    normalized = trimmedBase.replace(/\/models\/[^/?#:]+/, `/models/${encodeURIComponent(trimmedModel)}`);
+  } else {
+    const withoutTrailingSlash = trimmedBase.replace(/\/+$/, '');
+    normalized = `${withoutTrailingSlash}/models/${encodeURIComponent(trimmedModel)}:generateContent`;
+  }
+
+  if (!/:generateContent\b/.test(normalized)) {
+    normalized = `${normalized.replace(/\?[^#]*$/, '')}:generateContent${normalized.includes('?') ? normalized.slice(normalized.indexOf('?')) : ''}`;
+  }
+
+  return `${normalized}${normalized.includes('?') ? '&' : '?'}key=${encodeURIComponent(apiKey)}`;
+}
+
 export async function callLlm(
   systemPrompt: string,
   userPrompt: string,
@@ -71,7 +98,7 @@ export async function callLlm(
 
   const isGoogleApi = url.includes('generativelanguage.googleapis.com');
   const fetchUrl = isGoogleApi
-    ? `${url}${url.includes('?') ? '&' : '?'}key=${encodeURIComponent(key)}`
+    ? buildGoogleFetchUrl(url, key, model)
     : url;
 
   const baseFetchOptions: RequestInit = {
