@@ -239,6 +239,8 @@ export function DocumentDetailPageClient() {
   // ── Workflow ────────────────────────────────────────────────────────────────
   const [workflowLoading, setWorkflowLoading] = useState(false);
   const [workflowError, setWorkflowError] = useState<string | null>(null);
+  const [cockpitExcludeLoading, setCockpitExcludeLoading] = useState(false);
+  const [cockpitExcludeError, setCockpitExcludeError] = useState<string | null>(null);
 
   // ── Audit-Filter ────────────────────────────────────────────────────────────
   const [auditImportantOnly, setAuditImportantOnly] = useState(false);
@@ -302,6 +304,29 @@ export function DocumentDetailPageClient() {
       });
       setIsEditing(true);
       setSaveError(null);
+    }
+  };
+
+  const handleSteeringCockpitExclusion = async (excluded: boolean) => {
+    if (!params?.id || doc?.archived_at) return;
+    setCockpitExcludeError(null);
+    setCockpitExcludeLoading(true);
+    try {
+      const res = await fetch(`/api/documents/${params.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exclude_from_steering_cockpit: excluded }),
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Einstellung konnte nicht gespeichert werden.');
+      setDoc((prev) =>
+        prev ? { ...prev, exclude_from_steering_cockpit: excluded } : null,
+      );
+      reload();
+    } catch (e) {
+      setCockpitExcludeError(e instanceof Error ? e.message : 'Fehler beim Speichern.');
+    } finally {
+      setCockpitExcludeLoading(false);
     }
   };
 
@@ -907,6 +932,32 @@ export function DocumentDetailPageClient() {
                       zu erzeugen.
                     </p>
                   ) : null}
+
+                  <div className="mt-3 rounded border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950">
+                    <label className="flex cursor-pointer items-start gap-2">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={Boolean(doc.exclude_from_steering_cockpit)}
+                        disabled={cockpitExcludeLoading || Boolean(doc.archived_at)}
+                        onChange={(e) => void handleSteeringCockpitExclusion(e.target.checked)}
+                      />
+                      <span className="text-[11px] text-zinc-700 dark:text-zinc-200">
+                        <span className="font-semibold">Nicht im Steuerungs-Cockpit einbeziehen</span>
+                        <span className="mt-0.5 block text-[10px] font-normal text-zinc-500 dark:text-zinc-400">
+                          Die Steuerungsanalyse bleibt an diesem Dokument sichtbar; sie fließt nicht in Matrix und
+                          schulweite Kennzahlen ein (z.&nbsp;B. bei untypischen Dokumenten oder vorübergehenden Entwürfen).
+                        </span>
+                      </span>
+                    </label>
+                    {cockpitExcludeError ? (
+                      <ApiErrorCallout
+                        error={{ userMessage: cockpitExcludeError, detail: null }}
+                        className="mt-2 text-xs"
+                      />
+                    ) : null}
+                  </div>
+
                   <div className="mt-2 flex flex-wrap items-start gap-2">
                     <button
                       type="button"

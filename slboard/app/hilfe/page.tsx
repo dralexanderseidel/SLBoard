@@ -213,8 +213,10 @@ export default function HilfePage() {
             </a>{' '}
             (Navigation in der Kopfzeile bzw. in der Seitenleiste) sehen Sie eine <strong>schulweite Auswertung</strong>{' '}
             gespeicherter <strong>Steuerungsanalysen</strong> (Format „Matrix&nbsp;V2“). Eingeschlossen sind nur{' '}
-            <strong>nicht archivierte</strong> Dokumente, für die bereits eine gültige Analyse vorliegt und die Ihren
-            Berechtigungen entsprechend berücksichtigt werden können.
+            <strong>nicht archivierte</strong> Dokumente mit gültiger Analyse, die{' '}
+            <strong>nicht manuell vom Cockpit ausgeschlossen</strong> wurden, und die Ihren Berechtigungen entsprechend
+            berücksichtigt werden können. Der Ausschluss erfolgt pro Dokument unter{' '}
+            <strong>KI-Aktionen → Steuerungsanalyse</strong> („Nicht im Steuerungs-Cockpit einbeziehen“).
           </p>
           <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Kennzahlen und Matrix</h3>
           <p>

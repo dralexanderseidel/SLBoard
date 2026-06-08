@@ -8,7 +8,8 @@ import { buildSeCockpitPayload } from '../../../lib/seCockpitAggregates';
 const MAX_DOCS = 3000;
 
 /**
- * GET: Aggregierte Steuerungsdaten für das Steuerungs-Cockpit (Schule, nicht archivierte Dokumente mit gültiger V2-Analyse).
+ * GET: Aggregierte Steuerungsdaten für das Steuerungs-Cockpit
+ * (Schule, nicht archiviert, nicht manuell ausgeschlossen, gültige V2-Analyse).
  */
 export async function GET() {
   try {
@@ -41,6 +42,7 @@ export async function GET() {
       .select('id, title, steering_analysis')
       .eq('school_number', schoolNumber)
       .is('archived_at', null)
+      .eq('exclude_from_steering_cockpit', false)
       .not('steering_analysis', 'is', null)
       .limit(MAX_DOCS);
 

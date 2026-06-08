@@ -55,6 +55,7 @@ export const AUDIT_METADATA_LABEL_DE: Record<string, string> = {
   title: 'Titel',
   status: 'Status',
   archived_at: 'Archiv',
+  exclude_from_steering_cockpit: 'Steuerungs-Cockpit',
 };
 
 const TRUNC = 120;
@@ -105,6 +106,9 @@ export function formatAuditScalarDe(fieldKey: string, value: unknown): string {
   }
   if (fieldKey === 'archived_at') {
     return formatIsoDateTime(value);
+  }
+  if (fieldKey === 'exclude_from_steering_cockpit') {
+    return value === true || value === 'true' ? 'nicht einbezogen' : 'einbezogen';
   }
   if (fieldKey === 'legal_reference' || fieldKey === 'summary' || fieldKey === 'gremium' || fieldKey === 'title') {
     return truncate(String(value));

@@ -32,7 +32,7 @@ export async function GET(
     const { data: doc, error: docError } = await supabase
       .from('documents')
       .select(
-        'id, title, document_type_code, created_at, archived_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, legal_reference, summary, summary_updated_at, review_date, current_version_id, steering_analysis, steering_analysis_updated_at, steering_todos, steering_todos_updated_at, school_number, schulentwicklung_primary_field, schulentwicklung_fields',
+        'id, title, document_type_code, created_at, archived_at, status, protection_class_id, reach_scope, gremium, responsible_unit, participation_groups, legal_reference, summary, summary_updated_at, review_date, current_version_id, steering_analysis, steering_analysis_updated_at, steering_todos, steering_todos_updated_at, school_number, schulentwicklung_primary_field, schulentwicklung_fields, exclude_from_steering_cockpit',
       )
       .eq('id', documentId)
       .single();
@@ -199,6 +199,9 @@ export async function PATCH(
     }
     if (typeof body.archived === 'boolean') {
       updates.archived_at = body.archived ? new Date().toISOString() : null;
+    }
+    if (typeof body.exclude_from_steering_cockpit === 'boolean') {
+      updates.exclude_from_steering_cockpit = body.exclude_from_steering_cockpit;
     }
 
     if (Object.keys(updates).length === 0) {

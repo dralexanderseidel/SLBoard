@@ -21,6 +21,8 @@ export type DocumentDetail = {
   steering_analysis_updated_at?: string | null;
   schulentwicklung_primary_field?: string | null;
   schulentwicklung_fields?: string[] | null;
+  /** Wenn true: Analyse bleibt am Dokument, fließt nicht ins Steuerungs-Cockpit ein. */
+  exclude_from_steering_cockpit?: boolean;
   steering_todos?: SteeringTodosResult | null;
   steering_todos_updated_at?: string | null;
   current_version_id?: string | null;
