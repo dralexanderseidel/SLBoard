@@ -18,6 +18,7 @@ export function PromptPanel({ open, onToggle }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [templates, setTemplates] = useState<PromptTemplateConfig[]>([]);
+  const [schoolProfileText, setSchoolProfileText] = useState('');
   const [activeUseCase, setActiveUseCase] = useState<PromptUseCase>('steering');
   const [previewMode, setPreviewMode] = useState<'prompt_only' | 'llm_test' | null>(null);
   const [previewResult, setPreviewResult] = useState<string | null>(null);
@@ -44,6 +45,7 @@ export function PromptPanel({ open, onToggle }: Props) {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? 'KI-Prompts konnten nicht geladen werden.');
         setTemplates((data.templates ?? []) as PromptTemplateConfig[]);
+        setSchoolProfileText((data.school_profile_text as string | undefined) ?? '');
       } catch (e) {
         setError(e instanceof Error ? e.message : 'KI-Prompts konnten nicht geladen werden.');
       } finally {
@@ -59,6 +61,7 @@ export function PromptPanel({ open, onToggle }: Props) {
     setMessage(null);
     try {
       const payload = {
+        school_profile_text: schoolProfileText,
         templates: templates.map((t) => ({
           use_case: t.use_case,
           system_editable: t.system_editable,
@@ -73,6 +76,9 @@ export function PromptPanel({ open, onToggle }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'KI-Prompts konnten nicht gespeichert werden.');
       setTemplates((data.templates ?? []) as PromptTemplateConfig[]);
+      if (typeof data.school_profile_text === 'string') {
+        setSchoolProfileText(data.school_profile_text);
+      }
       setMessage('KI-Prompts gespeichert.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'KI-Prompts konnten nicht gespeichert werden.');
@@ -163,11 +169,27 @@ export function PromptPanel({ open, onToggle }: Props) {
   return (
     <CollapsibleSection
       title="KI-Prompts"
-      description="Bausteine für Q&A, Zusammenfassung, Steuerungsanalyse und ToDos — nicht für den typbezogenen Dokumenten-Entwurf."
+      description="Schul-Steckbrief und Bausteine für Q&A, Zusammenfassung, Steuerungsanalyse und ToDos — nicht für den typbezogenen Dokumenten-Entwurf."
       open={open}
       onToggle={onToggle}
     >
-      <p className="text-[11px] text-zinc-600 dark:text-zinc-400">
+      <div className="flex flex-col gap-1">
+        <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">Schul-Steckbrief</label>
+        <textarea
+          value={schoolProfileText}
+          onChange={(e) => setSchoolProfileText(e.target.value)}
+          rows={4}
+          placeholder="z. B. Schule mit 80 Lehrkräften, gebundener Ganztag, hoher Förderbedarf im Sek-I-Bereich."
+          className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+        />
+        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+          Optionaler Schulkontext für KI-Antworten. Wird in den Prompts als{' '}
+          <code className="rounded bg-zinc-100 px-1 font-mono text-[10px] dark:bg-zinc-800">{'{{school_profile_block}}'}</code>{' '}
+          eingefügt (Q&amp;A, Zusammenfassung, Steuerungsanalyse, ToDos).
+        </p>
+      </div>
+
+      <p className="mt-4 text-[11px] text-zinc-600 dark:text-zinc-400">
         Bearbeitbar sind nur die Zusatzbausteine. Das Antwortformat (z. B. JSON fuer Steuerungsanalyse)
         bleibt im gesperrten Block unveraendert.
       </p>

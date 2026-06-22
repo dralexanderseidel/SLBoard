@@ -256,7 +256,7 @@ export default function HilfePage() {
             </a>{' '}
             sehen Sie alle Dokumente, die Sie nach Ihren <strong>Berechtigungen</strong> und{' '}
             <strong>Schutzstufen</strong> einsehen dürfen. Die Liste kann viele Einträge enthalten – nutzen Sie Suche
-            und Filter, um schnell fundig zu werden.
+            und Filter, um schnell fündig zu werden.
           </p>
           <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Ansichten</h3>
           <p>
@@ -480,8 +480,10 @@ export default function HilfePage() {
               Admin
             </a>{' '}
             Verwaltungsfunktionen. Sinnvolle Reihenfolge: zuerst <strong>Nutzer &amp; Rollen</strong>, dann{' '}
-            <strong>Metadaten</strong> (Dokumenttypen, Verantwortlich), anschließend <strong>KI-Einstellungen</strong> und{' '}
-            <strong>Prompt-Vorlagen</strong>, wenn die KI genutzt werden soll; <strong>Statistik</strong> liefert Kennzahlen.
+            <strong>Metadaten</strong> (Dokumenttypen, Verantwortlich), anschließend{' '}
+            <strong>KI-Prompts</strong> (Schul-Steckbrief und Prompt-Bausteine) sowie{' '}
+            <strong>KI-Einstellungen</strong> (technische Parameter), wenn die KI genutzt werden soll;{' '}
+            <strong>Statistik</strong> liefert Kennzahlen.
           </p>
           <h3 className="text-base font-medium text-zinc-800 dark:text-zinc-100">Nutzer &amp; Rollen</h3>
           <ul className="list-disc space-y-1 pl-5">
@@ -514,7 +516,11 @@ export default function HilfePage() {
               Auswahllisten beim Hochladen
             </li>
             <li>
-              <strong>KI-Einstellungen</strong> und <strong>Prompt-Bausteine</strong> für die konfigurierten KI-Nutzungen
+              <strong>KI-Prompts:</strong> Schul-Steckbrief (optionaler Schulkontext) und editierbare Prompt-Bausteine
+              für Q&amp;A, Zusammenfassung, Steuerungsanalyse und ToDos
+            </li>
+            <li>
+              <strong>KI-Einstellungen:</strong> technische Parameter (Chunk-Größen, Timeouts, Debug-Logging)
             </li>
             <li>
               <strong>Statistik</strong> zu Nutzern, Dokumenten und KI-Aufrufen (Schulbezug)

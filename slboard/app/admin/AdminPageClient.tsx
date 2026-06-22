@@ -140,10 +140,11 @@ export function AdminPageClient() {
               Metadaten
             </strong>{' '}
             (Dokumenttypen, Verantwortlich) — sie speisen Auswahllisten beim Upload und sollten zu den Org.-Einheiten der
-            Nutzer passen. Anschließend <strong className="font-medium text-zinc-800 dark:text-zinc-200">
-              KI-Einstellungen
+            Nutzer passen.             Anschließend <strong className="font-medium text-zinc-800 dark:text-zinc-200">
+              KI-Prompts
             </strong>{' '}
-            und <strong className="font-medium text-zinc-800 dark:text-zinc-200">Prompt-Vorlagen</strong>, wenn die
+            (Schul-Steckbrief, Prompt-Bausteine) und{' '}
+            <strong className="font-medium text-zinc-800 dark:text-zinc-200">KI-Einstellungen</strong>, wenn die
             KI-Nutzung starten soll. <strong className="font-medium text-zinc-800 dark:text-zinc-200">Statistik</strong>{' '}
             bietet Kennzahlen; <strong className="font-medium text-zinc-800 dark:text-zinc-200">
               Dokumente reindizieren

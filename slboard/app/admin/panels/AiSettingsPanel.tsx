@@ -10,7 +10,6 @@ type AiForm = {
   max_chunks_per_doc: number;
   llm_timeout_ms: number;
   debug_log_enabled: boolean;
-  school_profile_text: string;
 };
 
 const DEFAULT_FORM: AiForm = {
@@ -20,7 +19,6 @@ const DEFAULT_FORM: AiForm = {
   max_chunks_per_doc: 3,
   llm_timeout_ms: 45000,
   debug_log_enabled: false,
-  school_profile_text: '',
 };
 
 type Props = { open: boolean; onToggle: (next: boolean) => void };
@@ -50,7 +48,6 @@ export function AiSettingsPanel({ open, onToggle }: Props) {
           max_chunks_per_doc: Number(s.max_chunks_per_doc) || 3,
           llm_timeout_ms: Number(s.llm_timeout_ms) || 45000,
           debug_log_enabled: Boolean(s.debug_log_enabled),
-          school_profile_text: (data.school_profile_text as string | undefined) ?? '',
         });
       } catch (e) {
         setError(e instanceof Error ? e.message : 'KI-Einstellungen konnten nicht geladen werden.');
@@ -73,7 +70,7 @@ export function AiSettingsPanel({ open, onToggle }: Props) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'KI-Einstellungen konnten nicht gespeichert werden.');
-      setMessage('KI-Konfiguration gespeichert.');
+      setMessage('KI-Einstellungen gespeichert.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'KI-Einstellungen konnten nicht gespeichert werden.');
     } finally {
@@ -99,7 +96,7 @@ export function AiSettingsPanel({ open, onToggle }: Props) {
   return (
     <CollapsibleSection
       title="KI-Einstellungen"
-      description="Chunk-Größen, Timeouts und Schul-Steckbrief für KI-Prompts."
+      description="Technische Parameter: Chunk-Größen, Timeouts und Debug-Logging."
       open={open}
       onToggle={onToggle}
     >
@@ -120,20 +117,6 @@ export function AiSettingsPanel({ open, onToggle }: Props) {
         {numField('Chunk-Overlap (Zeichen)', 'chunk_overlap_chars')}
         {numField('Max. Chunks pro Dokument', 'max_chunks_per_doc')}
         {numField('LLM-Timeout (ms)', 'llm_timeout_ms')}
-      </div>
-
-      <div className="mt-3 flex flex-col gap-1">
-        <label className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">Schul-Steckbrief (für KI-Kontext)</label>
-        <textarea
-          value={form.school_profile_text}
-          onChange={(e) => setForm((p) => ({ ...p, school_profile_text: e.target.value }))}
-          rows={4}
-          placeholder="z. B. Schule mit 80 Lehrkräften, gebundener Ganztag, hoher Förderbedarf im Sek-I-Bereich."
-          className="w-full rounded border border-zinc-300 px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-        />
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-          Wird optional in KI-Prompts als zusätzlicher Schulkontext verwendet.
-        </p>
       </div>
 
       <label className="mt-3 flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-200">
@@ -161,7 +144,7 @@ export function AiSettingsPanel({ open, onToggle }: Props) {
         disabled={loading}
         className="mt-3 rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"
       >
-        {loading ? 'Speichere…' : 'KI-Konfiguration speichern'}
+        {loading ? 'Speichere…' : 'KI-Einstellungen speichern'}
       </button>
     </CollapsibleSection>
   );

@@ -171,10 +171,10 @@ Details: `docs/Berechtigungen-und-Zugriff.md`.
 | PATCH | `/api/admin/users/[id]/roles` | Rollen setzen |
 | GET | `/api/admin/metadata` | Metadaten-Optionen lesen |
 | PUT | `/api/admin/metadata` | Metadaten-Optionen schreiben |
-| GET | `/api/admin/ai-settings` | KI-Einstellungen / Schulprofil |
+| GET | `/api/admin/ai-settings` | KI-Einstellungen (technische Parameter) |
 | PUT | `/api/admin/ai-settings` | KI-Einstellungen schreiben |
-| GET | `/api/admin/ai-prompts` | Prompt-Vorlagen |
-| PUT | `/api/admin/ai-prompts` | Prompt-Vorlagen speichern |
+| GET | `/api/admin/ai-prompts` | Prompt-Vorlagen und Schul-Steckbrief |
+| PUT | `/api/admin/ai-prompts` | Prompt-Vorlagen und Schul-Steckbrief speichern |
 | DELETE | `/api/admin/ai-prompts` | Prompt-Vorlage löschen |
 | POST | `/api/admin/ai-prompts/preview` | Vorschau gerenderter Prompts |
 | GET | `/api/admin/stats` | Statistiken |

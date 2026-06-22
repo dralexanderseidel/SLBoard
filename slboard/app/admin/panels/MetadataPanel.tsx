@@ -121,8 +121,8 @@ export function MetadataPanel({ open, onToggle }: Props) {
           <p className="mb-2 text-xs font-semibold text-zinc-800 dark:text-zinc-100">Dokumenttypen</p>
           <p className="mb-2 text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-400">
             Über die Schaltfläche „KI“ legen Sie Vorgaben für den typbezogenen Dokumenten-Entwurf fest (Seite
-            Entwürfe). Die schulweiten KI-Prompts unter „KI-Prompts“ steuern Q&amp;A, Zusammenfassung,
-            Steuerungsanalyse und ToDos und gelten dort nicht.
+            Entwürfe). Unter „KI-Prompts“ pflegen Sie den Schul-Steckbrief sowie die schulweiten Bausteine für
+            Q&amp;A, Zusammenfassung, Steuerungsanalyse und ToDos — nicht für den typbezogenen Entwurf.
           </p>
           <div className="space-y-1">
             {docTypeOptions.map((t, idx) => (

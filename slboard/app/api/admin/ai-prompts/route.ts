@@ -21,6 +21,7 @@ type UpdateRow = {
 
 type UpdatePayload = {
   templates?: UpdateRow[];
+  school_profile_text?: string;
 };
 
 type ResetPayload = {
@@ -42,7 +43,13 @@ export async function GET() {
     const access = await resolveUserAccess(user.email, supabase);
     const schoolNumber = access.schoolNumber ?? '000000';
     const templates = await getAllSchoolPromptTemplates(schoolNumber);
-    return NextResponse.json({ templates, schoolNumber });
+    const { data: school } = await supabase
+      .from('schools')
+      .select('profile_text')
+      .eq('school_number', schoolNumber)
+      .maybeSingle();
+    const school_profile_text = ((school as { profile_text?: string | null } | null)?.profile_text ?? '').trim();
+    return NextResponse.json({ templates, schoolNumber, school_profile_text });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return apiError(500, 'INTERNAL_ERROR', msg);
@@ -63,8 +70,8 @@ export async function PUT(req: NextRequest) {
 
     const body = (await req.json().catch(() => ({}))) as UpdatePayload;
     const updates = Array.isArray(body.templates) ? body.templates : [];
-    if (updates.length === 0) {
-      return apiError(400, 'VALIDATION_ERROR', 'Keine Template-Aenderungen uebergeben.');
+    if (updates.length === 0 && typeof body.school_profile_text !== 'string') {
+      return apiError(400, 'VALIDATION_ERROR', 'Keine Aenderungen uebergeben.');
     }
 
     const access = await resolveUserAccess(user.email, supabase);
@@ -78,8 +85,31 @@ export async function PUT(req: NextRequest) {
       });
     }
 
+    let schoolProfileText: string | undefined;
+    if (typeof body.school_profile_text === 'string') {
+      schoolProfileText = body.school_profile_text.trim();
+      const { error: schoolErr } = await supabase
+        .from('schools')
+        .update({ profile_text: schoolProfileText || null })
+        .eq('school_number', schoolNumber);
+      if (schoolErr) {
+        return apiError(500, 'INTERNAL_ERROR', schoolErr.message);
+      }
+    } else {
+      const { data: school } = await supabase
+        .from('schools')
+        .select('profile_text')
+        .eq('school_number', schoolNumber)
+        .maybeSingle();
+      schoolProfileText = ((school as { profile_text?: string | null } | null)?.profile_text ?? '').trim();
+    }
+
     const templates = await getAllSchoolPromptTemplates(schoolNumber);
-    return NextResponse.json({ templates, schoolNumber });
+    return NextResponse.json({
+      templates,
+      schoolNumber,
+      school_profile_text: schoolProfileText,
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unbekannter Fehler.';
     return apiError(500, 'INTERNAL_ERROR', msg);
